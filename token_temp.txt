@@ -1,0 +1,5 @@
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlNGNjMGYzNmI5ODY0NGUwODc1NjY2YTExZWJmZmE4NyIsImlhdCI6MTc1NjM5NDg1MywiZXhwIjoyMDcxNzU0ODUzfQ.myS2r3YbjIDahWY3XLvkUfcF8Ivnpg4uKbNsx4KXjTo
+
+
+
+ws://homeassistant.local:8123/
