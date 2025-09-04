@@ -28,10 +28,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Resources\icons\light_bulb_icon.png">
+      <LogicalName>light_bulb_icon.png</LogicalName>
+    </EmbeddedResource>
     <Reference Include="PluginApi">
       <HintPath>$(PluginApiDir)PluginApi.dll</HintPath>
     </Reference>
   </ItemGroup>
+
+
+
 
   <Target Name="CopyPackage" AfterTargets="PostBuildEvent">
     <Message Text="📦 Copying package files..." Importance="High" />

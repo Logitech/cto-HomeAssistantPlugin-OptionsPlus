@@ -23,6 +23,9 @@ namespace Loupedeck.HomeAssistantPlugin
             String Model
         );
 
+        
+        private BitmapImage _bulbIconImg;
+
 
 
 
@@ -456,10 +459,33 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
 
+        
+
         public HomeAssistantDynamicFolder()
         {
             this.DisplayName = "Home Assistant";
             this.GroupName = "Smart Home";
+
+
+            try
+            {
+
+                //var names = string.Join(", ", typeof(HomeAssistantDynamicFolder).Assembly.GetManifestResourceNames());
+                //PluginLog.Info("[HA RES] " + names);
+
+                // Idempotent; safe even if the plugin already called it
+                PluginResources.Init(typeof(HomeAssistantPlugin).Assembly);
+
+                _bulbIconImg = PluginResources.ReadImage("light_bulb_icon.png");
+                if (_bulbIconImg == null)
+                    PluginLog.Error("[HA] Embedded icon not found: light_bulb_icon.png");
+                else
+                    PluginLog.Info("[HA] Embedded icon loaded OK");
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Error(ex, "[HA] ctor: failed to read embedded icon — continuing without it");
+            }
         }
 
         public override PluginDynamicFolderNavigation GetNavigationArea(DeviceType _) =>
@@ -562,13 +588,7 @@ namespace Loupedeck.HomeAssistantPlugin
             // DEVICE tiles (light bulbs)
             if (actionParameter.StartsWith(PfxDevice, StringComparison.OrdinalIgnoreCase))
             {
-                var entityId = actionParameter.Substring(PfxDevice.Length);
-                var bb = new BitmapBuilder(imageSize);
-                bb.Clear(new BitmapColor(35, 35, 35));
-                bb.DrawText("◎", fontSize: 42, color: new BitmapColor(255, 255, 200));
-
-
-                return bb.ToImage();
+                return _bulbIconImg;
             }
 
             // ACTION tiles
