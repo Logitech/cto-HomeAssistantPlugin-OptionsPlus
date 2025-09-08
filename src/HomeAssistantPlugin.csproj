@@ -31,6 +31,36 @@
     <EmbeddedResource Include="Resources\icons\light_bulb_icon.png">
       <LogicalName>light_bulb_icon.png</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\icons\back_icon.png">
+      <LogicalName>back_icon.png</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\icons\light_on_icon.png">
+      <LogicalName>light_on_icon.png</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\icons\light_off_icon.png">
+      <LogicalName>light_off_icon.png</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\icons\brightness_icon.png">
+      <LogicalName>brightness_icon.png</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\icons\reload_icon.png">
+      <LogicalName>reload_icon.png</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\icons\saturation_icon.png">
+      <LogicalName>saturation_icon.png</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\icons\issue_status_icon.png">
+      <LogicalName>issue_status_icon.png</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\icons\temperature_icon.png">
+      <LogicalName>temperature_icon.png</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\icons\online_status_icon.png">
+      <LogicalName>online_status_icon.png</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\icons\hue_icon.png">
+      <LogicalName>hue_icon.png</LogicalName>
+    </EmbeddedResource>
     <Reference Include="PluginApi">
       <HintPath>$(PluginApiDir)PluginApi.dll</HintPath>
     </Reference>
