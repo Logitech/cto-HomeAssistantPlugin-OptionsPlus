@@ -54,6 +54,20 @@ namespace Loupedeck.HomeAssistantPlugin
         private readonly Dictionary<String, (Double H, Double S, Int32 B)> _hsbByEntity
             = new Dictionary<String, (Double H, Double S, Int32 B)>(StringComparer.OrdinalIgnoreCase);
 
+            // --- Capability model per light ---
+private record LightCaps(bool OnOff, bool Brightness, bool ColorTemp, bool ColorHs);
+
+private readonly Dictionary<string, LightCaps> _capsByEntity =
+    new(StringComparer.OrdinalIgnoreCase);
+
+private LightCaps GetCaps(string eid) =>
+    _capsByEntity.TryGetValue(eid, out var c)
+        ? c
+        : new LightCaps(true, true, false, false); // safe default: on/off + brightness
+
+
+            
+
         // view state
         private Boolean _inDeviceView = false;
 
@@ -471,6 +485,7 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                 {
+                    if (!GetCaps(this._currentEntityId).ColorHs) return;
                     var eid = this._currentEntityId;
 
                     // Current HS from cache (fallbacks)
@@ -498,6 +513,7 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                 {
+                    if (!GetCaps(this._currentEntityId).ColorHs) return;
                     var eid = this._currentEntityId;
 
                     // Current HS from cache (fallbacks)
@@ -526,6 +542,7 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                 {
+                    if (!GetCaps(this._currentEntityId).ColorTemp) return;
                     var eid = this._currentEntityId;
 
                     var (minM, maxM, curM) = _tempMiredByEntity.TryGetValue(eid, out var t)
@@ -656,28 +673,35 @@ namespace Loupedeck.HomeAssistantPlugin
             yield return this.CreateCommandName(CmdStatus);           // keep Status always
 
             if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
-            {
-                // Device view: show actions for the selected entity
-                yield return this.CreateCommandName($"{PfxActOn}{this._currentEntityId}");
-                yield return this.CreateCommandName($"{PfxActOff}{this._currentEntityId}");
-                yield return this.CreateAdjustmentName(AdjWheel);
-                yield return this.CreateAdjustmentName(AdjTemp);
-                yield return this.CreateAdjustmentName(AdjHue);
-                yield return this.CreateAdjustmentName(AdjSat);
+{
+    var caps = GetCaps(this._currentEntityId);
 
+    // Device actions
+    yield return this.CreateCommandName($"{PfxActOn}{this._currentEntityId}");
+    yield return this.CreateCommandName($"{PfxActOff}{this._currentEntityId}");
 
-            }
-            else
-            {
-                // Root view: one button per light entity
-                foreach (var kv in this._lightsByEntity)
-                {
-                    yield return this.CreateCommandName($"{PfxDevice}{kv.Key}");
-                }
+    // Only show controls the device actually supports
+    if (caps.Brightness)
+        yield return this.CreateAdjustmentName(AdjWheel);
 
-                // Keep Retry last
-                yield return this.CreateCommandName(CmdRetry);
-            }
+    if (caps.ColorTemp)
+        yield return this.CreateAdjustmentName(AdjTemp);
+
+    if (caps.ColorHs)
+    {
+        yield return this.CreateAdjustmentName(AdjHue);
+        yield return this.CreateAdjustmentName(AdjSat);
+    }
+}
+else
+{
+    // Root view unchanged...
+    foreach (var kv in this._lightsByEntity)
+        yield return this.CreateCommandName($"{PfxDevice}{kv.Key}");
+
+    yield return this.CreateCommandName(CmdRetry);
+}
+
         }
 
 
@@ -881,11 +905,21 @@ namespace Loupedeck.HomeAssistantPlugin
                     this._currentEntityId = entityId;
                     this._wheelCounter = 0; // avoids showing previous ticks anywhere
 
-                    // ensure we have a cache entry for the new entity (like brightness did)
-                    if (!this._hsbByEntity.ContainsKey(entityId))
-                        this._hsbByEntity[entityId] = (0, 0, 0);
-                    if (!this._tempMiredByEntity.ContainsKey(entityId))
-                        this._tempMiredByEntity[entityId] = (DefaultMinMireds, DefaultMaxMireds, DefaultWarmMired);
+                    // Brightness cache always OK
+if (!this._hsbByEntity.ContainsKey(entityId))
+    this._hsbByEntity[entityId] = (0, 0, 0);
+
+// Only keep/seed temp cache if device supports it
+var caps = GetCaps(entityId);
+if (!caps.ColorTemp)
+{
+    _tempMiredByEntity.Remove(entityId);
+}
+else if (!_tempMiredByEntity.ContainsKey(entityId))
+{
+    _tempMiredByEntity[entityId] = (DefaultMinMireds, DefaultMaxMireds, DefaultWarmMired);
+}
+
 
                     this.ButtonActionNamesChanged();       // swap to device actions
 
@@ -1060,7 +1094,7 @@ namespace Loupedeck.HomeAssistantPlugin
             try
             {
                 var (ok, msg) = this._client
-                    .ConnectAndAuthenticateAsync(baseUrl, token, TimeSpan.FromSeconds(8), this._cts.Token)
+                    .ConnectAndAuthenticateAsync(baseUrl, token, TimeSpan.FromSeconds(60), this._cts.Token)
                     .GetAwaiter().GetResult();
 
                 if (ok)
@@ -1234,6 +1268,45 @@ namespace Loupedeck.HomeAssistantPlugin
                                    : entityId;
 
                     String deviceId = null, deviceName = "", mf = "", model = "";
+                    // --- Capabilities from supported_color_modes (preferred) or heuristics fallback ---
+bool onoff = false, briCap = false, ctemp = false, color = false;
+
+if (attrs.ValueKind == JsonValueKind.Object &&
+    attrs.TryGetProperty("supported_color_modes", out var scm) &&
+    scm.ValueKind == JsonValueKind.Array)
+{
+    var modes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var m in scm.EnumerateArray())
+    {
+        if (m.ValueKind == JsonValueKind.String)
+            modes.Add(m.GetString() ?? "");
+    }
+
+    onoff = modes.Contains("onoff");
+    ctemp = modes.Contains("color_temp");
+    color = modes.Contains("hs") || modes.Contains("rgb") || modes.Contains("xy");
+    // Brightness is implied by many color modes; be liberal here:
+    briCap = modes.Contains("brightness") || color || ctemp || !onoff;
+}
+else
+{
+    // Heuristic fallback when supported_color_modes is missing
+    briCap = attrs.ValueKind == JsonValueKind.Object && attrs.TryGetProperty("brightness", out _);
+    ctemp  = attrs.ValueKind == JsonValueKind.Object && (
+                attrs.TryGetProperty("min_mireds", out _) ||
+                attrs.TryGetProperty("max_mireds", out _) ||
+                attrs.TryGetProperty("color_temp", out _) ||
+                attrs.TryGetProperty("color_temp_kelvin", out _));
+    color  = attrs.ValueKind == JsonValueKind.Object && (
+                attrs.TryGetProperty("hs_color", out _) ||
+                attrs.TryGetProperty("rgb_color", out _) ||
+                attrs.TryGetProperty("xy_color", out _));
+    onoff  = !briCap && !ctemp && !color;
+}
+
+_capsByEntity[entityId] = new LightCaps(onoff, briCap, ctemp, color);
+PluginLog.Info($"[Caps] {entityId} caps: onoff={onoff} bri={briCap} ctemp={ctemp} color={color}");
+
 
                     if (entityDevice.TryGetValue(entityId, out var map) && !String.IsNullOrEmpty(map.deviceId))
                     {
@@ -1297,7 +1370,13 @@ namespace Loupedeck.HomeAssistantPlugin
                         }
                     }
                     this._hsbByEntity[entityId] = (h, sat, bri); // 👈 ALWAYS set B now
-                    _tempMiredByEntity[entityId] = (minM, maxM, curM);
+                    //_tempMiredByEntity[entityId] = (minM, maxM, curM);
+                    // Only keep a temp cache if the light supports color temperature
+if (ctemp)
+    _tempMiredByEntity[entityId] = (minM, maxM, curM);
+else
+    _tempMiredByEntity.Remove(entityId);
+
 
                     var li = new LightItem(entityId, friendly, state, deviceId ?? "", deviceName, mf, model);
                     this._lightsByEntity[entityId] = li;
