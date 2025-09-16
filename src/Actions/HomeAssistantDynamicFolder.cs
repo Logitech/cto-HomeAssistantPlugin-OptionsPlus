@@ -143,7 +143,7 @@ private LightCaps GetCaps(string eid) =>
         private readonly Object _sendGate = new Object();
 
         // Tune these if you want
-        private const Int32 SendDebounceMs = 100; // how long to wait after the last tick before sending
+        private const Int32 SendDebounceMs = 30; // how long to wait after the last tick before sending
         private const Int32 ReconcileIdleMs = 500; // idle pause before doing a single get_states as truth
         private const Int32 MaxPctPerEvent = 10;  // cap huge coalesced diffs to keep UI sane
 
