@@ -4,10 +4,11 @@ namespace Loupedeck.HomeAssistantPlugin
     using System.Collections.Generic;
     using System.Text.Json;
     using System.Threading;
+    using System.Threading.Tasks; // for async lambda in DebouncedSender
+
+
 
     using Loupedeck; // ensure this is present
-
-
 
     public class HomeAssistantDynamicFolder : PluginDynamicFolder
     {
@@ -23,7 +24,7 @@ namespace Loupedeck.HomeAssistantPlugin
             String Model
         );
 
-        
+
         private BitmapImage _bulbIconImg;
         private BitmapImage _BackIconImg;
         private BitmapImage _bulbOnImg;
@@ -54,19 +55,19 @@ namespace Loupedeck.HomeAssistantPlugin
         private readonly Dictionary<String, (Double H, Double S, Int32 B)> _hsbByEntity
             = new Dictionary<String, (Double H, Double S, Int32 B)>(StringComparer.OrdinalIgnoreCase);
 
-            // --- Capability model per light ---
-private record LightCaps(bool OnOff, bool Brightness, bool ColorTemp, bool ColorHs);
+        // --- Capability model per light ---
+        private record LightCaps(bool OnOff, bool Brightness, bool ColorTemp, bool ColorHs);
 
-private readonly Dictionary<string, LightCaps> _capsByEntity =
-    new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, LightCaps> _capsByEntity =
+            new(StringComparer.OrdinalIgnoreCase);
 
-private LightCaps GetCaps(string eid) =>
-    _capsByEntity.TryGetValue(eid, out var c)
-        ? c
-        : new LightCaps(true, true, false, false); // safe default: on/off + brightness
+        private LightCaps GetCaps(string eid) =>
+            _capsByEntity.TryGetValue(eid, out var c)
+                ? c
+                : new LightCaps(true, true, false, false); // safe default: on/off + brightness
 
 
-            
+
 
         // view state
         private Boolean _inDeviceView = false;
@@ -82,6 +83,8 @@ private LightCaps GetCaps(string eid) =>
         private const String AdjWheel = "adj:wheel";     // a single wheel entry
         private Int32 _wheelCounter = 0;                 // just for display/log when not in device view
         private const Int32 WheelStepPercent = 1;        // 1% per tick
+
+        private readonly DebouncedSender<string, int> _brightnessSender;
 
         // ---- COLOR TEMP state (mirrors brightness pattern) ----
         private const String AdjTemp = "adj:ha-temp";   // wheel id
@@ -128,13 +131,6 @@ private LightCaps GetCaps(string eid) =>
         private readonly Dictionary<String, System.Timers.Timer> _reconcileTempTimers =
             new(StringComparer.OrdinalIgnoreCase);
 
-        // Conversions
-        private static Int32 MiredToKelvin(Int32 m) => (Int32)Math.Round(1_000_000.0 / Math.Max(1, m));
-        private static Int32 KelvinToMired(Int32 k) => (Int32)Math.Round(1_000_000.0 / Math.Max(1, k));
-        private static Int32 Clamp(Int32 v, Int32 lo, Int32 hi) => Math.Min(Math.Max(v, lo), hi);
-
-
-
         // Debounced, target-based brightness sending
         private readonly Dictionary<String, Int32> _briTarget = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<String, Int32> _briLastSent = new(StringComparer.OrdinalIgnoreCase);
@@ -172,7 +168,7 @@ private LightCaps GetCaps(string eid) =>
             }
 
             if (actionParameter == AdjTemp)
-                return (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId)) ? "Color Temp" : "Color Temp";
+                return "Color Temp";
             if (actionParameter == AdjHue)
                 return "Hue";
             if (actionParameter == AdjSat)
@@ -231,7 +227,7 @@ private LightCaps GetCaps(string eid) =>
                 {
                     if (this._tempMiredByEntity.TryGetValue(this._currentEntityId, out var t))
                     {
-                        var k = MiredToKelvin(t.Cur);
+                        var k = ColorTemp.MiredToKelvin(t.Cur);
                         return $"{k}K";
                     }
                     return "— K"; // no cache yet → neutral placeholder
@@ -300,129 +296,129 @@ private LightCaps GetCaps(string eid) =>
 
 
             if (actionParameter == AdjSat)
-{
-    double H = 0, S = 100;
-    int B = 128;
+            {
+                double H = 0, S = 100;
+                int B = 128;
 
-    if (this._inDeviceView &&
-        !String.IsNullOrEmpty(this._currentEntityId) &&
-        this._hsbByEntity.TryGetValue(this._currentEntityId, out var hsb))
-    {
-        H = hsb.H;
-        S = Math.Max(0, hsb.S);
-        B = hsb.B;
-    }
+                if (this._inDeviceView &&
+                    !String.IsNullOrEmpty(this._currentEntityId) &&
+                    this._hsbByEntity.TryGetValue(this._currentEntityId, out var hsb))
+                {
+                    H = hsb.H;
+                    S = Math.Max(0, hsb.S);
+                    B = hsb.B;
+                }
 
-    var (r, g, b) = HSBHelper.HsbToRgb(HSBHelper.Wrap360(H), S, 100.0 * B / 255.0);
+                var (r, g, b) = HSBHelper.HsbToRgb(HSBHelper.Wrap360(H), S, 100.0 * B / 255.0);
 
-    using (var bb = new BitmapBuilder(imageSize))
-    {
-        bb.Clear(new BitmapColor(r, g, b));
+                using (var bb = new BitmapBuilder(imageSize))
+                {
+                    bb.Clear(new BitmapColor(r, g, b));
 
-        if (this._saturationImg != null)
-        {
-            // Centered icon with a little padding; scales to fit
-            var pad  = (int)Math.Round(Math.Min(bb.Width, bb.Height) * 0.08);
-            var side = Math.Min(bb.Width, bb.Height) - (pad * 2);
-            var x = (bb.Width  - side) / 2;
-            var y = (bb.Height - side) / 2;
+                    if (this._saturationImg != null)
+                    {
+                        // Centered icon with a little padding; scales to fit
+                        var pad = (int)Math.Round(Math.Min(bb.Width, bb.Height) * 0.08);
+                        var side = Math.Min(bb.Width, bb.Height) - (pad * 2);
+                        var x = (bb.Width - side) / 2;
+                        var y = (bb.Height - side) / 2;
 
-            bb.DrawImage(this._saturationImg, x, y, side, side);
-        }
-        else
-        {
-            // Fallback glyph if icon not available
-            bb.DrawText("S", fontSize: 56, color: new BitmapColor(255, 255, 255));
-        }
+                        bb.DrawImage(this._saturationImg, x, y, side, side);
+                    }
+                    else
+                    {
+                        // Fallback glyph if icon not available
+                        bb.DrawText("S", fontSize: 56, color: new BitmapColor(255, 255, 255));
+                    }
 
-        return bb.ToImage();
-    }
-}
+                    return bb.ToImage();
+                }
+            }
 
             if (actionParameter == AdjTemp)
-{
-    // Current temperature in Kelvin (default 3000K)
-    Int32 k = 3000;
-    if (this._inDeviceView &&
-        !String.IsNullOrEmpty(this._currentEntityId) &&
-        TryGetCachedTempMired(this._currentEntityId, out var t))
-    {
-        k = MiredToKelvin(t.Cur);
-    }
+            {
+                // Current temperature in Kelvin (default 3000K)
+                Int32 k = 3000;
+                if (this._inDeviceView &&
+                    !String.IsNullOrEmpty(this._currentEntityId) &&
+                    TryGetCachedTempMired(this._currentEntityId, out var t))
+                {
+                    k = ColorTemp.MiredToKelvin(t.Cur);
+                }
 
-    // Clamp to a sane range (2000K..6500K) before mapping
-    k = Math.Max(2000, Math.Min(6500, k));
+                // Clamp to a sane range (2000K..6500K) before mapping
+                k = Math.Max(2000, Math.Min(6500, k));
 
-    // Map 2000K..6500K to a warmness scale (0..100)
-    // higher warmness => warmer background
-    var warmness = Math.Clamp((6500 - k) / 45, 0, 100); // same idea as your code
+                // Map 2000K..6500K to a warmness scale (0..100)
+                // higher warmness => warmer background
+                var warmness = HSBHelper.Clamp((6500 - k) / 45, 0, 100); // same idea as your code
 
-    // Background tint based on warmness (keep your style)
-    Int32 r = Math.Min(35 + warmness * 2, 255);
-    Int32 g = Math.Min(35 + (100 - warmness), 255);
-    Int32 b = Math.Min(35 + (100 - warmness) / 2, 255);
+                // Background tint based on warmness (keep your style)
+                Int32 r = Math.Min(35 + warmness * 2, 255);
+                Int32 g = Math.Min(35 + (100 - warmness), 255);
+                Int32 b = Math.Min(35 + (100 - warmness) / 2, 255);
 
-    using (var bb = new BitmapBuilder(imageSize))
-    {
-        bb.Clear(new BitmapColor(r, g, b));
+                using (var bb = new BitmapBuilder(imageSize))
+                {
+                    bb.Clear(new BitmapColor(r, g, b));
 
-        if (this._temperatureImg != null)
-        {
-            // Center and scale icon with ~10% padding
-            var pad  = (int)Math.Round(Math.Min(bb.Width, bb.Height) * 0.10);
-            var side = Math.Min(bb.Width, bb.Height) - (pad * 2);
-            var x = (bb.Width  - side) / 2;
-            var y = (bb.Height - side) / 2;
+                    if (this._temperatureImg != null)
+                    {
+                        // Center and scale icon with ~10% padding
+                        var pad = (int)Math.Round(Math.Min(bb.Width, bb.Height) * 0.10);
+                        var side = Math.Min(bb.Width, bb.Height) - (pad * 2);
+                        var x = (bb.Width - side) / 2;
+                        var y = (bb.Height - side) / 2;
 
-            bb.DrawImage(this._temperatureImg, x, y, side, side);
-        }
-        else
-        {
-            // Fallback glyph if icon is missing
-            bb.DrawText("⟷", fontSize: 58, color: new BitmapColor(255, 240, 180));
-        }
+                        bb.DrawImage(this._temperatureImg, x, y, side, side);
+                    }
+                    else
+                    {
+                        // Fallback glyph if icon is missing
+                        bb.DrawText("⟷", fontSize: 58, color: new BitmapColor(255, 240, 180));
+                    }
 
-        return bb.ToImage();
-    }
-}
+                    return bb.ToImage();
+                }
+            }
 
 
             if (actionParameter == AdjHue)
-{
-    double H = 0, S = 100;
-    int B = 128;
+            {
+                double H = 0, S = 100;
+                int B = 128;
 
-    if (this._inDeviceView &&
-        !String.IsNullOrEmpty(this._currentEntityId) &&
-        this._hsbByEntity.TryGetValue(this._currentEntityId, out var hsb))
-    {
-        H = hsb.H;
-        S = Math.Max(40, hsb.S); // ensure some saturation for preview
-        B = hsb.B;
-    }
+                if (this._inDeviceView &&
+                    !String.IsNullOrEmpty(this._currentEntityId) &&
+                    this._hsbByEntity.TryGetValue(this._currentEntityId, out var hsb))
+                {
+                    H = hsb.H;
+                    S = Math.Max(40, hsb.S); // ensure some saturation for preview
+                    B = hsb.B;
+                }
 
-    var (r, g, b) = HSBHelper.HsbToRgb(HSBHelper.Wrap360(H), S, 100.0 * B / 255.0);
+                var (r, g, b) = HSBHelper.HsbToRgb(HSBHelper.Wrap360(H), S, 100.0 * B / 255.0);
 
-    var bb = new BitmapBuilder(imageSize);
-    bb.Clear(new BitmapColor(r, g, b));
+                var bb = new BitmapBuilder(imageSize);
+                bb.Clear(new BitmapColor(r, g, b));
 
-    if (this._hueImg != null)
-    {
-        // Draw icon centered with a little padding; scales to fit square
-        var pad  = (int)Math.Round(Math.Min(bb.Width, bb.Height) * 0.08); // ~8% padding
-        var side = Math.Min(bb.Width, bb.Height) - (pad * 2);
-        var x = (bb.Width  - side) / 2;
-        var y = (bb.Height - side) / 2;
-        bb.DrawImage(this._hueImg, x, y, side, side);
-    }
-    else
-    {
-        // Fallback glyph
-        bb.DrawText("H", fontSize: 56, color: new BitmapColor(255, 255, 255));
-    }
+                if (this._hueImg != null)
+                {
+                    // Draw icon centered with a little padding; scales to fit square
+                    var pad = (int)Math.Round(Math.Min(bb.Width, bb.Height) * 0.08); // ~8% padding
+                    var side = Math.Min(bb.Width, bb.Height) - (pad * 2);
+                    var x = (bb.Width - side) / 2;
+                    var y = (bb.Height - side) / 2;
+                    bb.DrawImage(this._hueImg, x, y, side, side);
+                }
+                else
+                {
+                    // Fallback glyph
+                    bb.DrawText("H", fontSize: 56, color: new BitmapColor(255, 255, 255));
+                }
 
-    return bb.ToImage();
-}
+                return bb.ToImage();
+            }
 
 
 
@@ -461,8 +457,8 @@ private LightCaps GetCaps(string eid) =>
                         _briTarget[entityId] = targetB;
                         this.AdjustmentValueChanged(actionParameter);
 
-                        // schedule one send for the latest target (debounced)
-                        ScheduleSend(entityId, SendDebounceMs);
+                        _briTarget[entityId] = targetB;       // keep for ClearEntityTargets()
+                        _brightnessSender.Set(entityId, targetB);
 
 
                     }
@@ -485,7 +481,8 @@ private LightCaps GetCaps(string eid) =>
             {
                 if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                 {
-                    if (!GetCaps(this._currentEntityId).ColorHs) return;
+                    if (!GetCaps(this._currentEntityId).ColorHs)
+                        return;
                     var eid = this._currentEntityId;
 
                     // Current HS from cache (fallbacks)
@@ -502,7 +499,7 @@ private LightCaps GetCaps(string eid) =>
                     _sTargetPct[eid] = newS;
                     this.AdjustmentValueChanged(AdjSat);
                     this.AdjustmentValueChanged(AdjHue);
-                    
+
 
                     // Debounced send — reuse the same sender as Hue
                     ScheduleHueSend(eid, SendDebounceMs); // <- intentionally reusing Hue's scheduling/sender
@@ -513,7 +510,8 @@ private LightCaps GetCaps(string eid) =>
             {
                 if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                 {
-                    if (!GetCaps(this._currentEntityId).ColorHs) return;
+                    if (!GetCaps(this._currentEntityId).ColorHs)
+                        return;
                     var eid = this._currentEntityId;
 
                     // Current HS from cache (fallbacks)
@@ -542,7 +540,8 @@ private LightCaps GetCaps(string eid) =>
             {
                 if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                 {
-                    if (!GetCaps(this._currentEntityId).ColorTemp) return;
+                    if (!GetCaps(this._currentEntityId).ColorTemp)
+                        return;
                     var eid = this._currentEntityId;
 
                     var (minM, maxM, curM) = _tempMiredByEntity.TryGetValue(eid, out var t)
@@ -552,7 +551,7 @@ private LightCaps GetCaps(string eid) =>
                     var step = diff * TempStepMireds;
                     step = Math.Sign(step) * Math.Min(Math.Abs(step), MaxMiredsPerEvent);
 
-                    var targetM = Clamp(curM + step, minM, maxM);
+                    var targetM = HSBHelper.Clamp(curM + step, minM, maxM);
 
                     // Optimistic UI
                     SetCachedTempMired(eid, null, null, targetM);
@@ -573,7 +572,7 @@ private LightCaps GetCaps(string eid) =>
 
 
 
-        
+
 
         public HomeAssistantDynamicFolder()
         {
@@ -650,8 +649,8 @@ private LightCaps GetCaps(string eid) =>
                     PluginLog.Error("[HA] Embedded icon not found: online_status_icon.png");
                 else
                     PluginLog.Info("[HA] Embedded icon loaded OK");
-                    
-                    _hueImg = PluginResources.ReadImage("hue_icon.png");
+
+                _hueImg = PluginResources.ReadImage("hue_icon.png");
                 if (_hueImg == null)
                     PluginLog.Error("[HA] Embedded icon not found: hue_icon.png");
                 else
@@ -661,6 +660,42 @@ private LightCaps GetCaps(string eid) =>
             {
                 PluginLog.Error(ex, "[HA] ctor: failed to read embedded icon — continuing without it");
             }
+
+
+            _brightnessSender = new DebouncedSender<string, int>(SendDebounceMs, async (entityId, target) =>
+    {
+        try
+        {
+            if (!this._client.IsAuthenticated)
+            {
+                HealthBus.Error("Connection lost");
+                return;
+            }
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+            var data = System.Text.Json.JsonSerializer.SerializeToElement(new { brightness = target });
+
+            var (ok, err) = await this._client.CallServiceAsync("light", "turn_on", entityId, data, cts.Token)
+                                           .ConfigureAwait(false);
+
+            if (ok)
+            {
+                lock (_sendGate)
+                { _briLastSent[entityId] = target; }
+                PluginLog.Info($"[wheel/send] brightness={target} -> {entityId} OK");
+            }
+            else
+            {
+                PluginLog.Warning($"[wheel/send] failed: {err}");
+                HealthBus.Error(err ?? "Brightness change failed");
+            }
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Warning(ex, "[wheel] brightness send exception");
+        }
+    });
+
         }
 
         public override PluginDynamicFolderNavigation GetNavigationArea(DeviceType _) =>
@@ -673,34 +708,34 @@ private LightCaps GetCaps(string eid) =>
             yield return this.CreateCommandName(CmdStatus);           // keep Status always
 
             if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
-{
-    var caps = GetCaps(this._currentEntityId);
+            {
+                var caps = GetCaps(this._currentEntityId);
 
-    // Device actions
-    yield return this.CreateCommandName($"{PfxActOn}{this._currentEntityId}");
-    yield return this.CreateCommandName($"{PfxActOff}{this._currentEntityId}");
+                // Device actions
+                yield return this.CreateCommandName($"{PfxActOn}{this._currentEntityId}");
+                yield return this.CreateCommandName($"{PfxActOff}{this._currentEntityId}");
 
-    // Only show controls the device actually supports
-    if (caps.Brightness)
-        yield return this.CreateAdjustmentName(AdjWheel);
+                // Only show controls the device actually supports
+                if (caps.Brightness)
+                    yield return this.CreateAdjustmentName(AdjWheel);
 
-    if (caps.ColorTemp)
-        yield return this.CreateAdjustmentName(AdjTemp);
+                if (caps.ColorTemp)
+                    yield return this.CreateAdjustmentName(AdjTemp);
 
-    if (caps.ColorHs)
-    {
-        yield return this.CreateAdjustmentName(AdjHue);
-        yield return this.CreateAdjustmentName(AdjSat);
-    }
-}
-else
-{
-    // Root view unchanged...
-    foreach (var kv in this._lightsByEntity)
-        yield return this.CreateCommandName($"{PfxDevice}{kv.Key}");
+                if (caps.ColorHs)
+                {
+                    yield return this.CreateAdjustmentName(AdjHue);
+                    yield return this.CreateAdjustmentName(AdjSat);
+                }
+            }
+            else
+            {
+                // Root view unchanged...
+                foreach (var kv in this._lightsByEntity)
+                    yield return this.CreateCommandName($"{PfxDevice}{kv.Key}");
 
-    yield return this.CreateCommandName(CmdRetry);
-}
+                yield return this.CreateCommandName(CmdRetry);
+            }
 
         }
 
@@ -760,33 +795,33 @@ else
 
             // STATUS (unchanged)
             if (actionParameter == CmdStatus)
-{
-    var ok = HealthBus.State == HealthState.Ok;
+            {
+                var ok = HealthBus.State == HealthState.Ok;
 
-    using (var bb = new BitmapBuilder(imageSize))
-    {
-        // Use the corresponding status image as background, or fallback to solid color
-        if (ok)
-        {
-            if (this._onlineStatusImg != null)
-                bb.SetBackgroundImage(this._onlineStatusImg);
-            else
-                bb.Clear(new BitmapColor(0, 160, 60)); // fallback green
-        }
-        else
-        {
-            if (this._issueStatusImg != null)
-                bb.SetBackgroundImage(this._issueStatusImg);
-            else
-                bb.Clear(new BitmapColor(200, 30, 30)); // fallback red
-        }
+                using (var bb = new BitmapBuilder(imageSize))
+                {
+                    // Use the corresponding status image as background, or fallback to solid color
+                    if (ok)
+                    {
+                        if (this._onlineStatusImg != null)
+                            bb.SetBackgroundImage(this._onlineStatusImg);
+                        else
+                            bb.Clear(new BitmapColor(0, 160, 60)); // fallback green
+                    }
+                    else
+                    {
+                        if (this._issueStatusImg != null)
+                            bb.SetBackgroundImage(this._issueStatusImg);
+                        else
+                            bb.Clear(new BitmapColor(200, 30, 30)); // fallback red
+                    }
 
-        // Keep the label on top
-        bb.DrawText(ok ? "ONLINE" : "ISSUE", fontSize: 22, color: new BitmapColor(255, 255, 255));
+                    // Keep the label on top
+                    bb.DrawText(ok ? "ONLINE" : "ISSUE", fontSize: 22, color: new BitmapColor(255, 255, 255));
 
-        return bb.ToImage();
-    }
-}
+                    return bb.ToImage();
+                }
+            }
 
 
             // DEVICE tiles (light bulbs)
@@ -852,26 +887,26 @@ else
 
 
             if (actionParameter == CmdBack)
-{
-    if (this._inDeviceView)
-    {
-        // 🔸 brightness-style cleanup for the current entity
-        CancelEntityTimers(this._currentEntityId);
-        ClearEntityTargets(this._currentEntityId);
+            {
+                if (this._inDeviceView)
+                {
+                    // 🔸 brightness-style cleanup for the current entity
+                    CancelEntityTimers(this._currentEntityId);
+                    ClearEntityTargets(this._currentEntityId);
 
-        PluginLog.Info("LEAVE device view -> root");
-        this._inDeviceView = false;
-        this._currentEntityId = null;
+                    PluginLog.Info("LEAVE device view -> root");
+                    this._inDeviceView = false;
+                    this._currentEntityId = null;
 
-        this.ButtonActionNamesChanged();
-        this.EncoderActionNamesChanged();
-    }
-    else
-    {
-        this.Close();
-    }
-    return;
-}
+                    this.ButtonActionNamesChanged();
+                    this.EncoderActionNamesChanged();
+                }
+                else
+                {
+                    this.Close();
+                }
+                return;
+            }
 
             if (actionParameter == CmdRetry)
             {
@@ -906,19 +941,19 @@ else
                     this._wheelCounter = 0; // avoids showing previous ticks anywhere
 
                     // Brightness cache always OK
-if (!this._hsbByEntity.ContainsKey(entityId))
-    this._hsbByEntity[entityId] = (0, 0, 0);
+                    if (!this._hsbByEntity.ContainsKey(entityId))
+                        this._hsbByEntity[entityId] = (0, 0, 0);
 
-// Only keep/seed temp cache if device supports it
-var caps = GetCaps(entityId);
-if (!caps.ColorTemp)
-{
-    _tempMiredByEntity.Remove(entityId);
-}
-else if (!_tempMiredByEntity.ContainsKey(entityId))
-{
-    _tempMiredByEntity[entityId] = (DefaultMinMireds, DefaultMaxMireds, DefaultWarmMired);
-}
+                    // Only keep/seed temp cache if device supports it
+                    var caps = GetCaps(entityId);
+                    if (!caps.ColorTemp)
+                    {
+                        _tempMiredByEntity.Remove(entityId);
+                    }
+                    else if (!_tempMiredByEntity.ContainsKey(entityId))
+                    {
+                        _tempMiredByEntity[entityId] = (DefaultMinMireds, DefaultMaxMireds, DefaultWarmMired);
+                    }
 
 
                     this.ButtonActionNamesChanged();       // swap to device actions
@@ -1024,12 +1059,39 @@ else if (!_tempMiredByEntity.ContainsKey(entityId))
         public override Boolean Unload()
         {
             PluginLog.Info("DynamicFolder.Unload()");
+
+
             lock (_sendGate)
             {
+                // Old brightness timers (if any still exist)
                 foreach (var t in _sendTimers.Values)
-                    try
-                    { t.Stop(); t.Dispose(); }
-                    catch { }
+                { try { t.Stop(); t.Dispose(); } catch { } }
+                _sendTimers.Clear();
+
+                // New debounced sender
+                _brightnessSender?.Dispose();
+
+                // Also clean up other timer maps to avoid leaks
+                foreach (var t in _sendHueTimers.Values)
+                { try { t.Stop(); t.Dispose(); } catch { } }
+                _sendHueTimers.Clear();
+
+                foreach (var t in _sendTempTimers.Values)
+                { try { t.Stop(); t.Dispose(); } catch { } }
+                _sendTempTimers.Clear();
+
+                if (_reconcileTimers != null)
+                {
+                    foreach (var t in _reconcileTimers.Values)
+                    { try { t.Stop(); t.Dispose(); } catch { } }
+                    _reconcileTimers.Clear();
+                }
+                if (_reconcileTempTimers != null)
+                {
+                    foreach (var t in _reconcileTempTimers.Values)
+                    { try { t.Stop(); t.Dispose(); } catch { } }
+                    _reconcileTempTimers.Clear();
+                }
             }
 
             HealthBus.HealthChanged -= this.OnHealthChanged;
@@ -1269,43 +1331,43 @@ else if (!_tempMiredByEntity.ContainsKey(entityId))
 
                     String deviceId = null, deviceName = "", mf = "", model = "";
                     // --- Capabilities from supported_color_modes (preferred) or heuristics fallback ---
-bool onoff = false, briCap = false, ctemp = false, color = false;
+                    bool onoff = false, briCap = false, ctemp = false, color = false;
 
-if (attrs.ValueKind == JsonValueKind.Object &&
-    attrs.TryGetProperty("supported_color_modes", out var scm) &&
-    scm.ValueKind == JsonValueKind.Array)
-{
-    var modes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-    foreach (var m in scm.EnumerateArray())
-    {
-        if (m.ValueKind == JsonValueKind.String)
-            modes.Add(m.GetString() ?? "");
-    }
+                    if (attrs.ValueKind == JsonValueKind.Object &&
+                        attrs.TryGetProperty("supported_color_modes", out var scm) &&
+                        scm.ValueKind == JsonValueKind.Array)
+                    {
+                        var modes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        foreach (var m in scm.EnumerateArray())
+                        {
+                            if (m.ValueKind == JsonValueKind.String)
+                                modes.Add(m.GetString() ?? "");
+                        }
 
-    onoff = modes.Contains("onoff");
-    ctemp = modes.Contains("color_temp");
-    color = modes.Contains("hs") || modes.Contains("rgb") || modes.Contains("xy");
-    // Brightness is implied by many color modes; be liberal here:
-    briCap = modes.Contains("brightness") || color || ctemp || !onoff;
-}
-else
-{
-    // Heuristic fallback when supported_color_modes is missing
-    briCap = attrs.ValueKind == JsonValueKind.Object && attrs.TryGetProperty("brightness", out _);
-    ctemp  = attrs.ValueKind == JsonValueKind.Object && (
-                attrs.TryGetProperty("min_mireds", out _) ||
-                attrs.TryGetProperty("max_mireds", out _) ||
-                attrs.TryGetProperty("color_temp", out _) ||
-                attrs.TryGetProperty("color_temp_kelvin", out _));
-    color  = attrs.ValueKind == JsonValueKind.Object && (
-                attrs.TryGetProperty("hs_color", out _) ||
-                attrs.TryGetProperty("rgb_color", out _) ||
-                attrs.TryGetProperty("xy_color", out _));
-    onoff  = !briCap && !ctemp && !color;
-}
+                        onoff = modes.Contains("onoff");
+                        ctemp = modes.Contains("color_temp");
+                        color = modes.Contains("hs") || modes.Contains("rgb") || modes.Contains("xy");
+                        // Brightness is implied by many color modes; be liberal here:
+                        briCap = modes.Contains("brightness") || color || ctemp || !onoff;
+                    }
+                    else
+                    {
+                        // Heuristic fallback when supported_color_modes is missing
+                        briCap = attrs.ValueKind == JsonValueKind.Object && attrs.TryGetProperty("brightness", out _);
+                        ctemp = attrs.ValueKind == JsonValueKind.Object && (
+                                    attrs.TryGetProperty("min_mireds", out _) ||
+                                    attrs.TryGetProperty("max_mireds", out _) ||
+                                    attrs.TryGetProperty("color_temp", out _) ||
+                                    attrs.TryGetProperty("color_temp_kelvin", out _));
+                        color = attrs.ValueKind == JsonValueKind.Object && (
+                                    attrs.TryGetProperty("hs_color", out _) ||
+                                    attrs.TryGetProperty("rgb_color", out _) ||
+                                    attrs.TryGetProperty("xy_color", out _));
+                        onoff = !briCap && !ctemp && !color;
+                    }
 
-_capsByEntity[entityId] = new LightCaps(onoff, briCap, ctemp, color);
-PluginLog.Info($"[Caps] {entityId} caps: onoff={onoff} bri={briCap} ctemp={ctemp} color={color}");
+                    _capsByEntity[entityId] = new LightCaps(onoff, briCap, ctemp, color);
+                    PluginLog.Info($"[Caps] {entityId} caps: onoff={onoff} bri={briCap} ctemp={ctemp} color={color}");
 
 
                     if (entityDevice.TryGetValue(entityId, out var map) && !String.IsNullOrEmpty(map.deviceId))
@@ -1345,9 +1407,9 @@ PluginLog.Info($"[Caps] {entityId} caps: onoff={onoff} bri={briCap} ctemp={ctemp
                             maxM = v2.GetInt32();
 
                         if (attrs.TryGetProperty("color_temp", out var v3) && v3.ValueKind == JsonValueKind.Number)
-                            curM = Clamp(v3.GetInt32(), minM, maxM);
+                            curM = HSBHelper.Clamp(v3.GetInt32(), minM, maxM);
                         else if (attrs.TryGetProperty("color_temp_kelvin", out var v4) && v4.ValueKind == JsonValueKind.Number)
-                            curM = Clamp(KelvinToMired(v4.GetInt32()), minM, maxM);
+                            curM = HSBHelper.Clamp(ColorTemp.KelvinToMired(v4.GetInt32()), minM, maxM);
                         else if (String.Equals(state, "off", StringComparison.OrdinalIgnoreCase))
                             curM = DefaultWarmMired;
 
@@ -1370,12 +1432,12 @@ PluginLog.Info($"[Caps] {entityId} caps: onoff={onoff} bri={briCap} ctemp={ctemp
                         }
                     }
                     this._hsbByEntity[entityId] = (h, sat, bri); // 👈 ALWAYS set B now
-                    //_tempMiredByEntity[entityId] = (minM, maxM, curM);
-                    // Only keep a temp cache if the light supports color temperature
-if (ctemp)
-    _tempMiredByEntity[entityId] = (minM, maxM, curM);
-else
-    _tempMiredByEntity.Remove(entityId);
+                                                                 //_tempMiredByEntity[entityId] = (minM, maxM, curM);
+                                                                 // Only keep a temp cache if the light supports color temperature
+                    if (ctemp)
+                        _tempMiredByEntity[entityId] = (minM, maxM, curM);
+                    else
+                        _tempMiredByEntity.Remove(entityId);
 
 
                     var li = new LightItem(entityId, friendly, state, deviceId ?? "", deviceName, mf, model);
@@ -1576,21 +1638,6 @@ else
 
 
 
-        private void ScheduleSend(String entityId, Int32 delayMs)
-        {
-            lock (_sendGate)
-            {
-                if (!_sendTimers.TryGetValue(entityId, out var t))
-                {
-                    t = new System.Timers.Timer { AutoReset = false };
-                    t.Elapsed += (s, e) => SafeFireSend(entityId);
-                    _sendTimers[entityId] = t;
-                }
-                t.Interval = delayMs;
-                t.Stop();
-                t.Start();
-            }
-        }
 
         private void ScheduleTempSend(String entityId, Int32 delayMs)
         {
@@ -1633,7 +1680,7 @@ else
             }
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
-            var targetK = MiredToKelvin(targetM);
+            var targetK = ColorTemp.MiredToKelvin(targetM);
             var data = JsonSerializer.SerializeToElement(new { color_temp_kelvin = targetK });
 
             var (ok, err) = await this._client.CallServiceAsync("light", "turn_on", entityId, data, cts.Token);
@@ -1651,47 +1698,7 @@ else
         }
 
 
-        private void SafeFireSend(String entityId)
-        {
-            try
-            { SendLatestBrightnessAsync(entityId).GetAwaiter().GetResult(); }
-            catch (Exception ex) { PluginLog.Warning(ex, $"[wheel] send timer for {entityId}"); }
-        }
 
-        private async System.Threading.Tasks.Task SendLatestBrightnessAsync(String entityId)
-        {
-            Int32 target;
-            lock (_sendGate)
-            {
-                if (!_briTarget.TryGetValue(entityId, out target))
-                    return;
-                if (_briLastSent.TryGetValue(entityId, out var last) && last == target)
-                    return; // nothing to send
-            }
-
-            if (!this._client.IsAuthenticated)
-            {
-                HealthBus.Error("Connection lost");
-                return;
-            }
-
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
-            var data = System.Text.Json.JsonSerializer.SerializeToElement(new { brightness = target });
-
-            var (ok, err) = await this._client.CallServiceAsync("light", "turn_on", entityId, data, cts.Token);
-            if (ok)
-            {
-                lock (_sendGate)
-                { _briLastSent[entityId] = target; }
-                PluginLog.Info($"[wheel/send] brightness={target} -> {entityId} OK");
-                // Optional: if you want buttery ramping, you can also include transition: 0 in service_data
-            }
-            else
-            {
-                PluginLog.Warning($"[wheel/send] failed: {err}");
-                HealthBus.Error(err ?? "Brightness change failed");
-            }
-        }
 
 
 
@@ -1740,7 +1747,7 @@ else
             if (mired.HasValue)
                 cur = mired.Value;
             else if (kelvin.HasValue)
-                cur = KelvinToMired(kelvin.Value);
+                cur = ColorTemp.KelvinToMired(kelvin.Value);
 
             // Update cache (carry forward bounds unless provided)
             SetCachedTempMired(entityId, minM, maxM, cur);
@@ -1751,29 +1758,29 @@ else
         }
 
         private void OnHaHsColorChanged(string entityId, double? h, double? s)
-{
-    if (!entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
-        return;
+        {
+            if (!entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
+                return;
 
-    // Update HS in cache
-    if (this._hsbByEntity.TryGetValue(entityId, out var hsb))
-    {
-        var H = h.HasValue ? HSBHelper.Wrap360(h.Value) : hsb.H;
-        var S = s.HasValue ? HSBHelper.Clamp(s.Value, 0, 100) : hsb.S;
-        this._hsbByEntity[entityId] = (H, S, hsb.B);
-    }
-    else
-    {
-        this._hsbByEntity[entityId] = (HSBHelper.Wrap360(h ?? 0), HSBHelper.Clamp(s ?? 100, 0, 100), 128);
-    }
+            // Update HS in cache
+            if (this._hsbByEntity.TryGetValue(entityId, out var hsb))
+            {
+                var H = h.HasValue ? HSBHelper.Wrap360(h.Value) : hsb.H;
+                var S = s.HasValue ? HSBHelper.Clamp(s.Value, 0, 100) : hsb.S;
+                this._hsbByEntity[entityId] = (H, S, hsb.B);
+            }
+            else
+            {
+                this._hsbByEntity[entityId] = (HSBHelper.Wrap360(h ?? 0), HSBHelper.Clamp(s ?? 100, 0, 100), 128);
+            }
 
-    if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
-    {
-        // 🔸 brightness-style: refresh all related wheels
-        this.AdjustmentValueChanged(AdjHue);
-        this.AdjustmentValueChanged(AdjSat);
-    }
-}
+            if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
+            {
+                // 🔸 brightness-style: refresh all related wheels
+                this.AdjustmentValueChanged(AdjHue);
+                this.AdjustmentValueChanged(AdjSat);
+            }
+        }
 
 
 
@@ -1781,6 +1788,9 @@ else
 
         private void CancelEntityTimers(String entityId)
         {
+
+            _brightnessSender?.Cancel(entityId);
+
             if (String.IsNullOrEmpty(entityId))
                 return;
             lock (_sendGate)
@@ -1808,29 +1818,30 @@ else
         {
             var min = minM ?? (_tempMiredByEntity.TryGetValue(entityId, out var old) ? old.Min : DefaultMinMireds);
             var max = maxM ?? (_tempMiredByEntity.TryGetValue(entityId, out var old2) ? old2.Max : DefaultMaxMireds);
-            var cur = Clamp(curMired, min, max);
+            var cur = HSBHelper.Clamp(curMired, min, max);
             _tempMiredByEntity[entityId] = (min, max, cur);
         }
 
         private void ClearEntityTargets(String entityId)
-{
-    if (String.IsNullOrEmpty(entityId)) return;
-    lock (_sendGate)
-    {
-        // Brightness
-        _briTarget?.Remove(entityId);
-        _briLastSent?.Remove(entityId);
+        {
+            if (String.IsNullOrEmpty(entityId))
+                return;
+            lock (_sendGate)
+            {
+                // Brightness
+                _briTarget?.Remove(entityId);
+                _briLastSent?.Remove(entityId);
 
-        // Temperature
-        _tempTargetMired?.Remove(entityId);
-        _tempLastSentMired?.Remove(entityId);
+                // Temperature
+                _tempTargetMired?.Remove(entityId);
+                _tempLastSentMired?.Remove(entityId);
 
-        // Hue/Saturation
-        _hTargetDeg?.Remove(entityId);
-        _sTargetPct?.Remove(entityId);
-        _hsLastSent?.Remove(entityId);
-    }
-}
+                // Hue/Saturation
+                _hTargetDeg?.Remove(entityId);
+                _sTargetPct?.Remove(entityId);
+                _hsLastSent?.Remove(entityId);
+            }
+        }
 
 
 
