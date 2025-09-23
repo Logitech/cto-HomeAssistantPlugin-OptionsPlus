@@ -22,33 +22,42 @@ namespace Loupedeck.HomeAssistantPlugin
             // Hue
             Double h;
             if (d == 0)
+            {
                 h = 0;
+            }
             else if (max == R)
-                h = 60 * (((G - B) / d) % 6);
+            {
+                h = 60 * ((G - B) / d % 6);
+            }
             else if (max == G)
-                h = 60 * (((B - R) / d) + 2);
+            {
+                h = 60 * ((B - R) / d + 2);
+            }
             else
-                h = 60 * (((R - G) / d) + 4);
+            {
+                h = 60 * ((R - G) / d + 4);
+            }
+
             h = Wrap360(h);
 
             // Saturation (relative to value)
-            var s = (max == 0) ? 0 : (d / max) * 100.0;
+            var s = (max == 0) ? 0 : d / max * 100.0;
 
             return (h, s);
         }
 
-        public static (int R, int G, int B) HsbToRgb(double hDeg, double sPct, double bPct)
+        public static (Int32 R, Int32 G, Int32 B) HsbToRgb(Double hDeg, Double sPct, Double bPct)
         {
             // Expect: h in 0..360, s in 0..100, b in 0..100
-            double H = ((hDeg % 360) + 360) % 360; // wrap
-            double S = Math.Max(0.0, Math.Min(100.0, sPct)) / 100.0;
-            double V = Math.Max(0.0, Math.Min(100.0, bPct)) / 100.0; // “B” (brightness) == HSV “V”
+            var H = (hDeg % 360 + 360) % 360; // wrap
+            var S = Math.Max(0.0, Math.Min(100.0, sPct)) / 100.0;
+            var V = Math.Max(0.0, Math.Min(100.0, bPct)) / 100.0; // “B” (brightness) == HSV “V”
 
-            double C = V * S;
-            double X = C * (1 - Math.Abs(((H / 60.0) % 2) - 1));
-            double m = V - C;
+            var C = V * S;
+            var X = C * (1 - Math.Abs(H / 60.0 % 2 - 1));
+            var m = V - C;
 
-            double r1, g1, b1;
+            Double r1, g1, b1;
             if (H < 60)
             { r1 = C; g1 = X; b1 = 0; }
             else if (H < 120)
@@ -62,9 +71,9 @@ namespace Loupedeck.HomeAssistantPlugin
             else
             { r1 = C; g1 = 0; b1 = X; }
 
-            int R = (int)Math.Round((r1 + m) * 255.0);
-            int G = (int)Math.Round((g1 + m) * 255.0);
-            int B = (int)Math.Round((b1 + m) * 255.0);
+            var R = (Int32)Math.Round((r1 + m) * 255.0);
+            var G = (Int32)Math.Round((g1 + m) * 255.0);
+            var B = (Int32)Math.Round((b1 + m) * 255.0);
 
             // clamp
             R = Math.Min(255, Math.Max(0, R));
@@ -74,8 +83,8 @@ namespace Loupedeck.HomeAssistantPlugin
             return (R, G, B);
         }
 
-public static (int R, int G, int B) HsbToRgb255(double hDeg, double sPct, int b0to255)
-    => HsbToRgb(hDeg, sPct, (b0to255 * 100.0) / 255.0);
+public static (Int32 R, Int32 G, Int32 B) HsbToRgb255(Double hDeg, Double sPct, Int32 b0to255)
+    => HsbToRgb(hDeg, sPct, b0to255 * 100.0 / 255.0);
 
 
     }

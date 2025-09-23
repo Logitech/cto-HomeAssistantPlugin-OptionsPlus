@@ -1,13 +1,14 @@
-using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using Loupedeck;
-
 namespace Loupedeck.HomeAssistantPlugin
 {
+    using System;
+    using System.Collections.Concurrent;
+    using System.Collections.Generic;
+    using System.Text.Json;
+    using System.Threading;
+    using System.Threading.Tasks;
+
+    using Loupedeck;
+
     public sealed class RunScriptAction : ActionEditorCommand
     {
         private const String LogPrefix = "[RunScript]";
@@ -15,12 +16,12 @@ namespace Loupedeck.HomeAssistantPlugin
         private HaWebSocketClient _client;
         private HaEventListener   _events;
 
-        private const string ControlScript    = "ha_script";
-        private const string ControlVarsJson  = "ha_vars_json";
-        private const string ControlUseToggle = "ha_use_toggle";
+        private const String ControlScript    = "ha_script";
+        private const String ControlVarsJson  = "ha_vars_json";
+        private const String ControlUseToggle = "ha_use_toggle";
 
         // Cache "running" state of scripts (kept updated by HaEventListener)
-        private static readonly ConcurrentDictionary<string, bool> _isRunningCache =
+        private static readonly ConcurrentDictionary<String, Boolean> _isRunningCache =
             new(StringComparer.OrdinalIgnoreCase);
 
         // Gate to avoid concurrent connect races
@@ -46,17 +47,17 @@ namespace Loupedeck.HomeAssistantPlugin
             this.ActionEditor.ListboxItemsRequested += this.OnListboxItemsRequested;
         }
 
-        protected override bool OnLoad()
+        protected override Boolean OnLoad()
         {
             PluginLog.Info($"{LogPrefix} OnLoad()");
             if (this.Plugin is HomeAssistantPlugin p)
             {
-                _client = p.HaClient;
-                _events = p.HaEvents;
+                this._client = p.HaClient;
+                this._events = p.HaEvents;
 
-                if (_events != null)
+                if (this._events != null)
                 {
-                    _events.ScriptRunningChanged += (entityId, isRunning) =>
+                    this._events.ScriptRunningChanged += (entityId, isRunning) =>
                     {
                         PluginLog.Info($"{LogPrefix} Event: ScriptRunningChanged entity='{entityId}' running={isRunning}");
                         _isRunningCache[entityId] = isRunning;
@@ -71,9 +72,9 @@ namespace Loupedeck.HomeAssistantPlugin
         }
 
         // Ensure we have an authenticated WS and events subscription
-        private async Task<bool> EnsureHaReadyAsync()
+        private async Task<Boolean> EnsureHaReadyAsync()
         {
-            if (_client?.IsAuthenticated == true)
+            if (this._client?.IsAuthenticated == true)
             {
                 // Keep logs chatty but not noisy
                 PluginLog.Info($"{LogPrefix} EnsureHaReady: already authenticated");
@@ -98,14 +99,14 @@ namespace Loupedeck.HomeAssistantPlugin
             await _haConnectGate.WaitAsync().ConfigureAwait(false);
             try
             {
-                if (_client.IsAuthenticated)
+                if (this._client.IsAuthenticated)
                 {
                     PluginLog.Info($"{LogPrefix} EnsureHaReady: authenticated after gate");
                     return true;
                 }
 
                 PluginLog.Info($"{LogPrefix} Connecting to HA… url='{baseUrl}'");
-                var (ok, msg) = await _client.ConnectAndAuthenticateAsync(
+                var (ok, msg) = await this._client.ConnectAndAuthenticateAsync(
                     baseUrl, token, TimeSpan.FromSeconds(8), CancellationToken.None
                 ).ConfigureAwait(false);
 
@@ -119,7 +120,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 // Subscribe to events (script running updates, etc.)
                 try
                 {
-                    var subOk = await _events.ConnectAndSubscribeAsync(baseUrl, token, CancellationToken.None)
+                    var subOk = await this._events.ConnectAndSubscribeAsync(baseUrl, token, CancellationToken.None)
                                              .ConfigureAwait(false);
                     PluginLog.Info($"{LogPrefix} Event subscription success={subOk}");
                 }
@@ -141,14 +142,14 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
-        protected override bool RunCommand(ActionEditorActionParameters ps)
+        protected override Boolean RunCommand(ActionEditorActionParameters ps)
         {
             try
             {
                 PluginLog.Info($"{LogPrefix} RunCommand START");
 
                 // Make sure we’re online before doing anything
-                if (!EnsureHaReadyAsync().GetAwaiter().GetResult())
+                if (!this.EnsureHaReadyAsync().GetAwaiter().GetResult())
                 {
                     PluginLog.Warning($"{LogPrefix} RunCommand: EnsureHaReady failed");
                     return false;
@@ -174,7 +175,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 // Toggle path (no variables)
                 if (preferToggle)
                 {
-                    var (ok, err) = _client.CallServiceAsync("script", "toggle", entityId, data: null, CancellationToken.None)
+                    var (ok, err) = this._client.CallServiceAsync("script", "toggle", entityId, data: null, CancellationToken.None)
                                            .GetAwaiter().GetResult();
                     PluginLog.Info($"{LogPrefix} call_service script.toggle '{entityId}' -> ok={ok} err='{err}'");
                     return ok;
@@ -186,7 +187,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 if (isRunning)
                 {
-                    var (ok, err) = _client.CallServiceAsync("script", "turn_off", entityId, data: null, CancellationToken.None)
+                    var (ok, err) = this._client.CallServiceAsync("script", "turn_off", entityId, data: null, CancellationToken.None)
                                            .GetAwaiter().GetResult();
                     PluginLog.Info($"{LogPrefix} call_service script.turn_off '{entityId}' -> ok={ok} err='{err}'");
                     return ok;
@@ -199,7 +200,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     try
                     {
                         using var varsDoc = JsonDocument.Parse(rawVars);
-                        var wrapper = new Dictionary<string, object> { ["variables"] = varsDoc.RootElement };
+                        var wrapper = new Dictionary<String, Object> { ["variables"] = varsDoc.RootElement };
                         var wrapperJson = JsonSerializer.Serialize(wrapper);
                         using var wrapperDoc = JsonDocument.Parse(wrapperJson);
                         serviceData = wrapperDoc.RootElement.Clone();
@@ -213,7 +214,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     }
                 }
 
-                var (ok2, err2) = _client.CallServiceAsync("script", "turn_on", entityId, serviceData, CancellationToken.None)
+                var (ok2, err2) = this._client.CallServiceAsync("script", "turn_on", entityId, serviceData, CancellationToken.None)
                                          .GetAwaiter().GetResult();
                 PluginLog.Info($"{LogPrefix} call_service script.turn_on '{entityId}' data={SafeJson(serviceData)} -> ok={ok2} err='{err2}'");
                 return ok2;
@@ -229,16 +230,18 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
-        private void OnListboxItemsRequested(object sender, ActionEditorListboxItemsRequestedEventArgs e)
+        private void OnListboxItemsRequested(Object sender, ActionEditorListboxItemsRequestedEventArgs e)
         {
             if (!e.ControlName.EqualsNoCase(ControlScript))
+            {
                 return;
+            }
 
             PluginLog.Info($"{LogPrefix} ListboxItemsRequested({e.ControlName})");
             try
             {
                 // Ensure we’re connected before asking HA for states
-                if (!EnsureHaReadyAsync().GetAwaiter().GetResult())
+                if (!this.EnsureHaReadyAsync().GetAwaiter().GetResult())
                 {
                     PluginLog.Warning($"{LogPrefix} List: EnsureHaReady failed (not connected/authenticated)");
                     if (!this.Plugin.TryGetPluginSetting(HomeAssistantPlugin.SettingBaseUrl, out var _) ||
@@ -253,9 +256,9 @@ namespace Loupedeck.HomeAssistantPlugin
                     return;
                 }
 
-                var (ok, json, error) = _client.RequestAsync("get_states", CancellationToken.None)
+                var (ok, json, error) = this._client.RequestAsync("get_states", CancellationToken.None)
                                               .GetAwaiter().GetResult();
-                PluginLog.Info($"{LogPrefix} get_states ok={ok} error='{error}' bytes={(json?.Length ?? 0)}");
+                PluginLog.Info($"{LogPrefix} get_states ok={ok} error='{error}' bytes={json?.Length ?? 0}");
 
                 if (!ok || String.IsNullOrEmpty(json))
                 {
@@ -267,10 +270,16 @@ namespace Loupedeck.HomeAssistantPlugin
                 using var doc = JsonDocument.Parse(json);
                 foreach (var el in doc.RootElement.EnumerateArray())
                 {
-                    if (!el.TryGetProperty("entity_id", out var idProp)) continue;
+                    if (!el.TryGetProperty("entity_id", out var idProp))
+                    {
+                        continue;
+                    }
+
                     var id = idProp.GetString();
                     if (String.IsNullOrEmpty(id) || !id.StartsWith("script.", StringComparison.OrdinalIgnoreCase))
+                    {
                         continue;
+                    }
 
                     var display = id;
                     if (el.TryGetProperty("attributes", out var attrs) &&
@@ -288,7 +297,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 PluginLog.Info($"{LogPrefix} List populated with {count} script(s)");
 
                 // keep current selection
-                var current = e.ActionEditorState?.GetControlValue(ControlScript) as string;
+                var current = e.ActionEditorState?.GetControlValue(ControlScript) as String;
                 if (!String.IsNullOrEmpty(current))
                 {
                     PluginLog.Info($"{LogPrefix} Keeping current selection: '{current}'");
@@ -308,7 +317,9 @@ namespace Loupedeck.HomeAssistantPlugin
             try
             {
                 if (elem.HasValue)
+                {
                     return JsonSerializer.Serialize(elem.Value);
+                }
             }
             catch { }
             return "null";

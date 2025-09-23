@@ -110,7 +110,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     _ = client.SafeCloseAsync();
 
                     this.Plugin.OnPluginStatusChanged(ok ? PluginStatus.Normal : PluginStatus.Error,
-                        ok ? "HA auth OK." : msg ?? "Auth failed."); // 2-arg overload is valid. :contentReference[oaicite:1]{index=1}
+                        ok ? "HA auth OK." : msg ?? "Auth failed.");
                 }
             }
             catch (Exception ex)

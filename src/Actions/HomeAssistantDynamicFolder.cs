@@ -25,17 +25,17 @@ namespace Loupedeck.HomeAssistantPlugin
         );
 
 
-        private BitmapImage _bulbIconImg;
-        private BitmapImage _BackIconImg;
-        private BitmapImage _bulbOnImg;
-        private BitmapImage _bulbOffImg;
-        private BitmapImage _brightnessImg;
-        private BitmapImage _retryImg;
-        private BitmapImage _saturationImg;
-        private BitmapImage _issueStatusImg;
-        private BitmapImage _temperatureImg;
-        private BitmapImage _onlineStatusImg;
-        private BitmapImage _hueImg;
+        private readonly BitmapImage _bulbIconImg;
+        private readonly BitmapImage _BackIconImg;
+        private readonly BitmapImage _bulbOnImg;
+        private readonly BitmapImage _bulbOffImg;
+        private readonly BitmapImage _brightnessImg;
+        private readonly BitmapImage _retryImg;
+        private readonly BitmapImage _saturationImg;
+        private readonly BitmapImage _issueStatusImg;
+        private readonly BitmapImage _temperatureImg;
+        private readonly BitmapImage _onlineStatusImg;
+        private readonly BitmapImage _hueImg;
 
 
 
@@ -49,20 +49,20 @@ namespace Loupedeck.HomeAssistantPlugin
 
         private CancellationTokenSource _cts;
 
-        private Dictionary<String, LightItem> _lightsByEntity = new();
-        private Dictionary<String, JsonElement> _lightServices = new(); // serviceName -> fields/target/response
+        private readonly Dictionary<String, LightItem> _lightsByEntity = new();
+        private readonly Dictionary<String, JsonElement> _lightServices = new(); // serviceName -> fields/target/response
                                                                         // HSB cache per entity (Hue 0–360, Sat 0–100, Bri 0–255)
         private readonly Dictionary<String, (Double H, Double S, Int32 B)> _hsbByEntity
             = new Dictionary<String, (Double H, Double S, Int32 B)>(StringComparer.OrdinalIgnoreCase);
 
         // --- Capability model per light ---
-        private record LightCaps(bool OnOff, bool Brightness, bool ColorTemp, bool ColorHs);
+        private record LightCaps(Boolean OnOff, Boolean Brightness, Boolean ColorTemp, Boolean ColorHs);
 
-        private readonly Dictionary<string, LightCaps> _capsByEntity =
+        private readonly Dictionary<String, LightCaps> _capsByEntity =
             new(StringComparer.OrdinalIgnoreCase);
 
-        private LightCaps GetCaps(string eid) =>
-            _capsByEntity.TryGetValue(eid, out var c)
+        private LightCaps GetCaps(String eid) =>
+            this._capsByEntity.TryGetValue(eid, out var c)
                 ? c
                 : new LightCaps(true, true, false, false); // safe default: on/off + brightness
 
@@ -93,20 +93,20 @@ namespace Loupedeck.HomeAssistantPlugin
         private const Int32 DefaultWarmMired = 370;     // ~2700K (UI fallback)
 
         // ===== HUE control (rotation-only) =====
-        private const string AdjHue = "adj:ha-hue";   // wheel id
+        private const String AdjHue = "adj:ha-hue";   // wheel id
 
-        private const int HueStepDegPerTick = 1;      // 1° per tick feels smooth
-        private const int MaxHueDegPerEvent = 30;     // cap coalesced bursts
+        private const Int32 HueStepDegPerTick = 1;      // 1° per tick feels smooth
+        private const Int32 MaxHueDegPerEvent = 30;     // cap coalesced bursts
 
         // ===== SATURATION control =====
-        private const string AdjSat = "adj:ha-sat";
+        private const String AdjSat = "adj:ha-sat";
 
-        private const int SatStepPctPerTick = 1;   // feels smooth
-        private const int MaxSatPctPerEvent = 15;  // cap burst coalesce
+        private const Int32 SatStepPctPerTick = 1;   // feels smooth
+        private const Int32 MaxSatPctPerEvent = 15;  // cap burst coalesce
 
 
         // Target saturation (per-entity) to support debounced sending
-        private readonly Dictionary<string, double> _sTargetPct =
+        private readonly Dictionary<String, Double> _sTargetPct =
             new(StringComparer.OrdinalIgnoreCase);
 
 
@@ -147,23 +147,20 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
         {
             if (actionParameter == AdjWheel)
             {
-                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
-                {
-                    return "Brightness";
-                }
-
-                return "Test Wheel";
+                return this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId) ? "Brightness" : "Test Wheel";
             }
 
             if (actionParameter == AdjTemp)
+            {
                 return "Color Temp";
+            }
+
             if (actionParameter == AdjHue)
+            {
                 return "Hue";
-            if (actionParameter == AdjSat)
-                return "Saturation";
+            }
 
-
-            return base.GetAdjustmentDisplayName(actionParameter, _);
+            return actionParameter == AdjSat ? "Saturation" : base.GetAdjustmentDisplayName(actionParameter, _);
         }
 
 
@@ -189,23 +186,19 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
             }
             if (actionParameter == AdjSat)
             {
-                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId) &&
-                    this._hsbByEntity.TryGetValue(this._currentEntityId, out var hsb))
-                {
-                    return $"{(Int32)Math.Round(HSBHelper.Clamp(hsb.S, 0, 100))}%";
-                }
-                return "—%";
+                return this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId) &&
+                    this._hsbByEntity.TryGetValue(this._currentEntityId, out var hsb)
+                    ? $"{(Int32)Math.Round(HSBHelper.Clamp(hsb.S, 0, 100))}%"
+                    : "—%";
             }
 
 
             if (actionParameter == AdjHue)
             {
-                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId) &&
-                    this._hsbByEntity.TryGetValue(this._currentEntityId, out var hsb))
-                {
-                    return $"{(Int32)Math.Round(HSBHelper.Wrap360(hsb.H))}°";
-                }
-                return "—°";
+                return this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId) &&
+                    this._hsbByEntity.TryGetValue(this._currentEntityId, out var hsb)
+                    ? $"{(Int32)Math.Round(HSBHelper.Wrap360(hsb.H))}°"
+                    : "—°";
             }
 
             // Color Temperature wheel
@@ -234,7 +227,7 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
         {
             if (actionParameter == AdjWheel)
             {
-                Int32 bri = 128;
+                var bri = 128;
 
                 if (this._inDeviceView &&
                     !String.IsNullOrEmpty(this._currentEntityId) &&
@@ -254,8 +247,8 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                 else
                 {
                     // Same “warmer/brighter” mapping as before
-                    r = Math.Min(30 + (pct * 2), 255);
-                    g = Math.Min(30 + (pct), 220);
+                    r = Math.Min(30 + pct * 2, 255);
+                    g = Math.Min(30 + pct, 220);
                     b = 30;
                 }
 
@@ -265,8 +258,8 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
 
                     if (this._brightnessImg != null)
                     {
-                        var pad = (int)Math.Round(Math.Min(bb.Width, bb.Height) * 0.10); // 10% padding
-                        var side = Math.Min(bb.Width, bb.Height) - (pad * 2);
+                        var pad = (Int32)Math.Round(Math.Min(bb.Width, bb.Height) * 0.10); // 10% padding
+                        var side = Math.Min(bb.Width, bb.Height) - pad * 2;
                         var x = (bb.Width - side) / 2;
                         var y = (bb.Height - side) / 2;
 
@@ -285,8 +278,8 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
 
             if (actionParameter == AdjSat)
             {
-                double H = 0, S = 100;
-                int B = 128;
+                Double H = 0, S = 100;
+                var B = 128;
 
                 if (this._inDeviceView &&
                     !String.IsNullOrEmpty(this._currentEntityId) &&
@@ -306,8 +299,8 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                     if (this._saturationImg != null)
                     {
                         // Centered icon with a little padding; scales to fit
-                        var pad = (int)Math.Round(Math.Min(bb.Width, bb.Height) * 0.08);
-                        var side = Math.Min(bb.Width, bb.Height) - (pad * 2);
+                        var pad = (Int32)Math.Round(Math.Min(bb.Width, bb.Height) * 0.08);
+                        var side = Math.Min(bb.Width, bb.Height) - pad * 2;
                         var x = (bb.Width - side) / 2;
                         var y = (bb.Height - side) / 2;
 
@@ -326,10 +319,10 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
             if (actionParameter == AdjTemp)
             {
                 // Current temperature in Kelvin (default 3000K)
-                Int32 k = 3000;
+                var k = 3000;
                 if (this._inDeviceView &&
                     !String.IsNullOrEmpty(this._currentEntityId) &&
-                    TryGetCachedTempMired(this._currentEntityId, out var t))
+                    this.TryGetCachedTempMired(this._currentEntityId, out var t))
                 {
                     k = ColorTemp.MiredToKelvin(t.Cur);
                 }
@@ -342,9 +335,9 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                 var warmness = HSBHelper.Clamp((6500 - k) / 45, 0, 100); // same idea as your code
 
                 // Background tint based on warmness (keep your style)
-                Int32 r = Math.Min(35 + warmness * 2, 255);
-                Int32 g = Math.Min(35 + (100 - warmness), 255);
-                Int32 b = Math.Min(35 + (100 - warmness) / 2, 255);
+                var r = Math.Min(35 + warmness * 2, 255);
+                var g = Math.Min(35 + (100 - warmness), 255);
+                var b = Math.Min(35 + (100 - warmness) / 2, 255);
 
                 using (var bb = new BitmapBuilder(imageSize))
                 {
@@ -353,8 +346,8 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                     if (this._temperatureImg != null)
                     {
                         // Center and scale icon with ~10% padding
-                        var pad = (int)Math.Round(Math.Min(bb.Width, bb.Height) * 0.10);
-                        var side = Math.Min(bb.Width, bb.Height) - (pad * 2);
+                        var pad = (Int32)Math.Round(Math.Min(bb.Width, bb.Height) * 0.10);
+                        var side = Math.Min(bb.Width, bb.Height) - pad * 2;
                         var x = (bb.Width - side) / 2;
                         var y = (bb.Height - side) / 2;
 
@@ -373,8 +366,8 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
 
             if (actionParameter == AdjHue)
             {
-                double H = 0, S = 100;
-                int B = 128;
+                Double H = 0, S = 100;
+                var B = 128;
 
                 if (this._inDeviceView &&
                     !String.IsNullOrEmpty(this._currentEntityId) &&
@@ -393,8 +386,8 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                 if (this._hueImg != null)
                 {
                     // Draw icon centered with a little padding; scales to fit square
-                    var pad = (int)Math.Round(Math.Min(bb.Width, bb.Height) * 0.08); // ~8% padding
-                    var side = Math.Min(bb.Width, bb.Height) - (pad * 2);
+                    var pad = (Int32)Math.Round(Math.Min(bb.Width, bb.Height) * 0.08); // ~8% padding
+                    var side = Math.Min(bb.Width, bb.Height) - pad * 2;
                     var x = (bb.Width - side) / 2;
                     var y = (bb.Height - side) / 2;
                     bb.DrawImage(this._hueImg, x, y, side, side);
@@ -441,11 +434,11 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                         var targetB = HSBHelper.Clamp(curB + deltaB, 0, 255);
 
                         // optimistic UI: update cache immediately → live value/image
-                        SetCachedBrightness(entityId, targetB);
+                        this.SetCachedBrightness(entityId, targetB);
                         this.AdjustmentValueChanged(actionParameter);
 
-                        _briTarget[entityId] = targetB;       // keep for ClearEntityTargets()
-                        _lightSvc.SetBrightness(entityId, targetB);
+                        this._briTarget[entityId] = targetB;       // keep for ClearEntityTargets()
+                        this._lightSvc.SetBrightness(entityId, targetB);
 
                     }
                     else
@@ -467,13 +460,18 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
             {
                 if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                 {
-                    if (!GetCaps(this._currentEntityId).ColorHs)
+                    if (!this.GetCaps(this._currentEntityId).ColorHs)
+                    {
                         return;
+                    }
+
                     var eid = this._currentEntityId;
 
                     // Current HS from cache (fallbacks)
                     if (!this._hsbByEntity.TryGetValue(eid, out var hsb))
+                    {
                         hsb = (0, 100, 128);
+                    }
 
                     // Compute step with cap and clamp 0..100
                     var step = diff * SatStepPctPerTick;
@@ -486,7 +484,7 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                     this.AdjustmentValueChanged(AdjHue);
 
                     var curH = this._hsbByEntity.TryGetValue(eid, out var hsb3) ? hsb3.H : 0;
-                    _lightSvc.SetHueSat(eid, curH, newS);
+                    this._lightSvc.SetHueSat(eid, curH, newS);
 
 
                 }
@@ -495,13 +493,18 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
             {
                 if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                 {
-                    if (!GetCaps(this._currentEntityId).ColorHs)
+                    if (!this.GetCaps(this._currentEntityId).ColorHs)
+                    {
                         return;
+                    }
+
                     var eid = this._currentEntityId;
 
                     // Current HS from cache (fallbacks)
                     if (!this._hsbByEntity.TryGetValue(eid, out var hsb))
+                    {
                         hsb = (0, 100, 128); // default to vivid color, mid brightness
+                    }
 
                     // Compute step with cap; wrap 0..360
                     var step = diff * HueStepDegPerTick;
@@ -514,7 +517,7 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                     this.AdjustmentValueChanged(AdjSat);
 
                     var curS = this._hsbByEntity.TryGetValue(eid, out var hsb2) ? hsb2.S : 100;
-                    _lightSvc.SetHueSat(eid, newH, curS);
+                    this._lightSvc.SetHueSat(eid, newH, curS);
 
                 }
 
@@ -525,11 +528,14 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
             {
                 if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                 {
-                    if (!GetCaps(this._currentEntityId).ColorTemp)
+                    if (!this.GetCaps(this._currentEntityId).ColorTemp)
+                    {
                         return;
+                    }
+
                     var eid = this._currentEntityId;
 
-                    var (minM, maxM, curM) = _tempMiredByEntity.TryGetValue(eid, out var t)
+                    var (minM, maxM, curM) = this._tempMiredByEntity.TryGetValue(eid, out var t)
                         ? t
                         : (DefaultMinMireds, DefaultMaxMireds, DefaultWarmMired);
 
@@ -539,9 +545,9 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                     var targetM = HSBHelper.Clamp(curM + step, minM, maxM);
 
                     // Optimistic UI
-                    SetCachedTempMired(eid, null, null, targetM);
+                    this.SetCachedTempMired(eid, null, null, targetM);
                     this.AdjustmentValueChanged(AdjTemp);
-                    _lightSvc.SetTempMired(eid, targetM);
+                    this._lightSvc.SetTempMired(eid, targetM);
                 }
             }
 
@@ -556,7 +562,7 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
 
 
 
-        private BitmapImage LoadIcon(string resourceName, out bool ok)
+        private BitmapImage LoadIcon(String resourceName, out Boolean ok)
         {
             var img = PluginResources.ReadImage(resourceName);
             if (img == null)
@@ -585,18 +591,18 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                 // Idempotent; safe even if the plugin already called it
                 PluginResources.Init(typeof(HomeAssistantPlugin).Assembly);
 
-                bool _;
-                _bulbIconImg      = LoadIcon("light_bulb_icon.png", out _);
-                _BackIconImg      = LoadIcon("back_icon.png", out _);
-                _bulbOnImg        = LoadIcon("light_on_icon.png", out _);
-                _bulbOffImg       = LoadIcon("light_off_icon.png", out _);
-                _brightnessImg    = LoadIcon("brightness_icon.png", out _);
-                _retryImg         = LoadIcon("reload_icon.png", out _);
-                _saturationImg    = LoadIcon("saturation_icon.png", out _);
-                _issueStatusImg   = LoadIcon("issue_status_icon.png", out _);
-                _temperatureImg   = LoadIcon("temperature_icon.png", out _);
-                _onlineStatusImg  = LoadIcon("online_status_icon.png", out _);
-                _hueImg           = LoadIcon("hue_icon.png", out _);
+                Boolean _;
+                this._bulbIconImg      = this.LoadIcon("light_bulb_icon.png", out _);
+                this._BackIconImg      = this.LoadIcon("back_icon.png", out _);
+                this._bulbOnImg        = this.LoadIcon("light_on_icon.png", out _);
+                this._bulbOffImg       = this.LoadIcon("light_off_icon.png", out _);
+                this._brightnessImg    = this.LoadIcon("brightness_icon.png", out _);
+                this._retryImg         = this.LoadIcon("reload_icon.png", out _);
+                this._saturationImg    = this.LoadIcon("saturation_icon.png", out _);
+                this._issueStatusImg   = this.LoadIcon("issue_status_icon.png", out _);
+                this._temperatureImg   = this.LoadIcon("temperature_icon.png", out _);
+                this._onlineStatusImg  = this.LoadIcon("online_status_icon.png", out _);
+                this._hueImg           = this.LoadIcon("hue_icon.png", out _);
             }
             catch (Exception ex)
             {
@@ -604,15 +610,15 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
             }
 
             // Wrap the raw client so the service can be unit-tested / mocked later
-            _ha = new HaClientAdapter(_client);
+            this._ha = new HaClientAdapter(this._client);
 
             // If you want separate debounce timings per channel, split these constants.
-            const int BrightnessDebounceMs = SendDebounceMs;
-            const int HueSatDebounceMs = SendDebounceMs;
-            const int TempDebounceMs = SendDebounceMs;
+            const Int32 BrightnessDebounceMs = SendDebounceMs;
+            const Int32 HueSatDebounceMs = SendDebounceMs;
+            const Int32 TempDebounceMs = SendDebounceMs;
 
-            _lightSvc = new LightControlService(
-                _ha,
+            this._lightSvc = new LightControlService(
+                this._ha,
                 BrightnessDebounceMs,
                 HueSatDebounceMs,
                 TempDebounceMs
@@ -633,7 +639,7 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
 
             if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
             {
-                var caps = GetCaps(this._currentEntityId);
+                var caps = this.GetCaps(this._currentEntityId);
 
                 // Device actions
                 yield return this.CreateCommandName($"{PfxActOn}{this._currentEntityId}");
@@ -641,10 +647,14 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
 
                 // Only show controls the device actually supports
                 if (caps.Brightness)
+                {
                     yield return this.CreateAdjustmentName(AdjWheel);
+                }
 
                 if (caps.ColorTemp)
+                {
                     yield return this.CreateAdjustmentName(AdjTemp);
+                }
 
                 if (caps.ColorHs)
                 {
@@ -656,7 +666,9 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
             {
                 // Root view unchanged...
                 foreach (var kv in this._lightsByEntity)
+                {
                     yield return this.CreateCommandName($"{PfxDevice}{kv.Key}");
+                }
 
                 yield return this.CreateCommandName(CmdRetry);
             }
@@ -693,12 +705,7 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                 return "On";
             }
 
-            if (actionParameter.StartsWith(PfxActOff, StringComparison.OrdinalIgnoreCase))
-            {
-                return "Off";
-            }
-
-            return null;
+            return actionParameter.StartsWith(PfxActOff, StringComparison.OrdinalIgnoreCase) ? "Off" : null;
         }
 
         // Paint the tile: green when OK, red on error
@@ -710,11 +717,11 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
 
             if (actionParameter == CmdBack)
             {
-                return _BackIconImg;
+                return this._BackIconImg;
             }
             if (actionParameter == CmdRetry)
             {
-                return _retryImg;
+                return this._retryImg;
             }
 
             // STATUS (unchanged)
@@ -728,16 +735,24 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                     if (ok)
                     {
                         if (this._onlineStatusImg != null)
+                        {
                             bb.SetBackgroundImage(this._onlineStatusImg);
+                        }
                         else
+                        {
                             bb.Clear(new BitmapColor(0, 160, 60)); // fallback green
+                        }
                     }
                     else
                     {
                         if (this._issueStatusImg != null)
+                        {
                             bb.SetBackgroundImage(this._issueStatusImg);
+                        }
                         else
+                        {
                             bb.Clear(new BitmapColor(200, 30, 30)); // fallback red
+                        }
                     }
 
                     // Keep the label on top
@@ -751,17 +766,17 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
             // DEVICE tiles (light bulbs)
             if (actionParameter.StartsWith(PfxDevice, StringComparison.OrdinalIgnoreCase))
             {
-                return _bulbIconImg;
+                return this._bulbIconImg;
             }
 
             // ACTION tiles
             if (actionParameter.StartsWith(PfxActOn, StringComparison.OrdinalIgnoreCase))
             {
-                return _bulbOnImg;
+                return this._bulbOnImg;
             }
             if (actionParameter.StartsWith(PfxActOff, StringComparison.OrdinalIgnoreCase))
             {
-                return _bulbOffImg;
+                return this._bulbOffImg;
             }
 
             // Retry: no custom image
@@ -783,10 +798,10 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                 if (this._inDeviceView)
                 {
                     // 🔸 brightness-style cleanup for the current entity
-                    CancelEntityTimers(this._currentEntityId);
-                    ClearEntityTargets(this._currentEntityId);
+                    this.CancelEntityTimers(this._currentEntityId);
+                    this.ClearEntityTargets(this._currentEntityId);
 
-                    _lightSvc.CancelPending(this._currentEntityId);
+                    this._lightSvc.CancelPending(this._currentEntityId);
 
 
                     PluginLog.Info("LEAVE device view -> root");
@@ -827,10 +842,10 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                 {
                     // stop any pending debounced sends for the previous device
                     var prev = this._currentEntityId;
-                    CancelEntityTimers(prev);
+                    this.CancelEntityTimers(prev);
 
                     // 🔸 brightness-style fix: clear ALL targets/last-sent for the previous entity
-                    ClearEntityTargets(prev);
+                    this.ClearEntityTargets(prev);
 
                     this._inDeviceView = true;
                     this._currentEntityId = entityId;
@@ -838,17 +853,19 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
 
                     // Brightness cache always OK
                     if (!this._hsbByEntity.ContainsKey(entityId))
+                    {
                         this._hsbByEntity[entityId] = (0, 0, 0);
+                    }
 
                     // Only keep/seed temp cache if device supports it
-                    var caps = GetCaps(entityId);
+                    var caps = this.GetCaps(entityId);
                     if (!caps.ColorTemp)
                     {
-                        _tempMiredByEntity.Remove(entityId);
+                        this._tempMiredByEntity.Remove(entityId);
                     }
-                    else if (!_tempMiredByEntity.ContainsKey(entityId))
+                    else if (!this._tempMiredByEntity.ContainsKey(entityId))
                     {
-                        _tempMiredByEntity[entityId] = (DefaultMinMireds, DefaultMaxMireds, DefaultWarmMired);
+                        this._tempMiredByEntity[entityId] = (DefaultMinMireds, DefaultMaxMireds, DefaultWarmMired);
                     }
 
 
@@ -870,13 +887,13 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
             if (actionParameter.StartsWith(PfxActOn, StringComparison.OrdinalIgnoreCase))
             {
                 var entityId = actionParameter.Substring(PfxActOn.Length);
-                _lightSvc.TurnOnAsync(entityId);
+                this._lightSvc.TurnOnAsync(entityId);
                 return;
             }
             if (actionParameter.StartsWith(PfxActOff, StringComparison.OrdinalIgnoreCase))
             {
                 var entityId = actionParameter.Substring(PfxActOff.Length);
-                _lightSvc.TurnOffAsync(entityId);
+                this._lightSvc.TurnOffAsync(entityId);
                 return;
             }
         }
@@ -906,15 +923,15 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
             PluginLog.Info("DynamicFolder.Unload()");
 
 
-            lock (_sendGate)
+            lock (this._sendGate)
             {
                 // Old brightness timers (if any still exist)
-                foreach (var t in _sendTimers.Values)
+                foreach (var t in this._sendTimers.Values)
                 { try { t.Stop(); t.Dispose(); } catch { } }
-                _sendTimers.Clear();
+                this._sendTimers.Clear();
 
                 // New debounced sender
-                _lightSvc?.Dispose();
+                this._lightSvc?.Dispose();
             }
 
             HealthBus.HealthChanged -= this.OnHealthChanged;
@@ -924,7 +941,7 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
         public override Boolean Activate()
         {
             PluginLog.Info("DynamicFolder.Activate() -> authenticate");
-            bool ret = AuthenticateSync();
+            var ret = this.AuthenticateSync();
             this.EncoderActionNamesChanged();
             return ret; // now returns bool (see below)
         }
@@ -934,7 +951,7 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
             PluginLog.Info("DynamicFolder.Deactivate() -> close WS");
             this._cts?.Cancel();
             this._client.SafeCloseAsync().GetAwaiter().GetResult();
-            _ = _events.SafeCloseAsync();
+            _ = this._events.SafeCloseAsync();
             //this.Plugin.OnPluginStatusChanged(PluginStatus.Warning, "Folder closed.", null);
             return true;
         }
@@ -990,16 +1007,16 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                     try
                     {
                         var ctsEv = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                        _events.BrightnessChanged -= OnHaBrightnessChanged; // avoid dup
-                        _events.BrightnessChanged += OnHaBrightnessChanged;
+                        this._events.BrightnessChanged -= this.OnHaBrightnessChanged; // avoid dup
+                        this._events.BrightnessChanged += this.OnHaBrightnessChanged;
 
-                        _events.ColorTempChanged -= this.OnHaColorTempChanged;
-                        _events.ColorTempChanged += this.OnHaColorTempChanged;
+                        this._events.ColorTempChanged -= this.OnHaColorTempChanged;
+                        this._events.ColorTempChanged += this.OnHaColorTempChanged;
 
-                        _events.HsColorChanged -= this.OnHaHsColorChanged;
-                        _events.HsColorChanged += this.OnHaHsColorChanged;
+                        this._events.HsColorChanged -= this.OnHaHsColorChanged;
+                        this._events.HsColorChanged += this.OnHaHsColorChanged;
 
-                        _ = _events.ConnectAndSubscribeAsync(baseUrl, token, ctsEv.Token); // fire-and-forget
+                        _ = this._events.ConnectAndSubscribeAsync(baseUrl, token, ctsEv.Token); // fire-and-forget
                         PluginLog.Info("[events] subscribed to state_changed");
                     }
                     catch (Exception ex)
@@ -1144,7 +1161,9 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                 {
                     var entityId = st.GetPropertyOrDefault("entity_id");
                     if (String.IsNullOrEmpty(entityId) || !entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
+                    {
                         continue;
+                    }
 
                     var state = st.TryGetProperty("state", out var s) ? s.GetString() ?? "" : "";
                     var attrs = st.TryGetProperty("attributes", out var a) ? a : default;
@@ -1154,17 +1173,19 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
 
                     String deviceId = null, deviceName = "", mf = "", model = "";
                     // --- Capabilities from supported_color_modes (preferred) or heuristics fallback ---
-                    bool onoff = false, briCap = false, ctemp = false, color = false;
+                    Boolean onoff = false, briCap = false, ctemp = false, color = false;
 
                     if (attrs.ValueKind == JsonValueKind.Object &&
                         attrs.TryGetProperty("supported_color_modes", out var scm) &&
                         scm.ValueKind == JsonValueKind.Array)
                     {
-                        var modes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        var modes = new HashSet<String>(StringComparer.OrdinalIgnoreCase);
                         foreach (var m in scm.EnumerateArray())
                         {
                             if (m.ValueKind == JsonValueKind.String)
+                            {
                                 modes.Add(m.GetString() ?? "");
+                            }
                         }
 
                         onoff = modes.Contains("onoff");
@@ -1189,7 +1210,7 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                         onoff = !briCap && !ctemp && !color;
                     }
 
-                    _capsByEntity[entityId] = new LightCaps(onoff, briCap, ctemp, color);
+                    this._capsByEntity[entityId] = new LightCaps(onoff, briCap, ctemp, color);
                     PluginLog.Info($"[Caps] {entityId} caps: onoff={onoff} bri={briCap} ctemp={ctemp} color={color}");
 
 
@@ -1205,7 +1226,7 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                     }
 
                     // --- Brightness: seed for ALL lights, not just color-capable ---
-                    Int32 bri = 0;
+                    var bri = 0;
                     if (attrs.ValueKind == JsonValueKind.Object &&
                         attrs.TryGetProperty("brightness", out var br) &&
                         br.ValueKind == JsonValueKind.Number)
@@ -1225,16 +1246,27 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                     {
 
                         if (attrs.TryGetProperty("min_mireds", out var v1) && v1.ValueKind == JsonValueKind.Number)
+                        {
                             minM = v1.GetInt32();
+                        }
+
                         if (attrs.TryGetProperty("max_mireds", out var v2) && v2.ValueKind == JsonValueKind.Number)
+                        {
                             maxM = v2.GetInt32();
+                        }
 
                         if (attrs.TryGetProperty("color_temp", out var v3) && v3.ValueKind == JsonValueKind.Number)
+                        {
                             curM = HSBHelper.Clamp(v3.GetInt32(), minM, maxM);
+                        }
                         else if (attrs.TryGetProperty("color_temp_kelvin", out var v4) && v4.ValueKind == JsonValueKind.Number)
+                        {
                             curM = HSBHelper.Clamp(ColorTemp.KelvinToMired(v4.GetInt32()), minM, maxM);
+                        }
                         else if (String.Equals(state, "off", StringComparison.OrdinalIgnoreCase))
+                        {
                             curM = DefaultWarmMired;
+                        }
 
                         if (attrs.TryGetProperty("hs_color", out var hs) &&
                             hs.ValueKind == JsonValueKind.Array && hs.GetArrayLength() >= 2 &&
@@ -1258,10 +1290,13 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                                                                  //_tempMiredByEntity[entityId] = (minM, maxM, curM);
                                                                  // Only keep a temp cache if the light supports color temperature
                     if (ctemp)
-                        _tempMiredByEntity[entityId] = (minM, maxM, curM);
+                    {
+                        this._tempMiredByEntity[entityId] = (minM, maxM, curM);
+                    }
                     else
-                        _tempMiredByEntity.Remove(entityId);
-
+                    {
+                        this._tempMiredByEntity.Remove(entityId);
+                    }
 
                     var li = new LightItem(entityId, friendly, state, deviceId ?? "", deviceName, mf, model);
                     this._lightsByEntity[entityId] = li;
@@ -1312,56 +1347,74 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
             }
         }
 
-        private void SetCachedBrightness(string entityId, int bri)
+        private void SetCachedBrightness(String entityId, Int32 bri)
         {
             if (this._hsbByEntity.TryGetValue(entityId, out var hsb))
+            {
                 this._hsbByEntity[entityId] = (hsb.H, hsb.S, HSBHelper.Clamp(bri, 0, 255));
+            }
             else
+            {
                 this._hsbByEntity[entityId] = (0, 0, HSBHelper.Clamp(bri, 0, 255));
+            }
         }
 
 
-        private void OnHaBrightnessChanged(string entityId, int? bri)
+        private void OnHaBrightnessChanged(String entityId, Int32? bri)
         {
             // We only care about lights we know
             if (!entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
+            {
                 return;
+            }
 
             // Update cache
             if (bri.HasValue)
-                SetCachedBrightness(entityId, HSBHelper.Clamp(bri.Value, 0, 255));
+            {
+                this.SetCachedBrightness(entityId, HSBHelper.Clamp(bri.Value, 0, 255));
+            }
 
             // If this is the active device, redraw the wheel value & image
-            if (_inDeviceView && string.Equals(_currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
+            if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
             {
                 this.AdjustmentValueChanged(AdjWheel);
             }
         }
 
-        private void OnHaColorTempChanged(string entityId, int? mired, int? kelvin, int? minM, int? maxM)
+        private void OnHaColorTempChanged(String entityId, Int32? mired, Int32? kelvin, Int32? minM, Int32? maxM)
         {
             if (!entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
+            {
                 return;
+            }
 
             // Figure out current mired
-            Int32 cur = _tempMiredByEntity.TryGetValue(entityId, out var t) ? t.Cur : DefaultWarmMired;
+            var cur = this._tempMiredByEntity.TryGetValue(entityId, out var t) ? t.Cur : DefaultWarmMired;
             if (mired.HasValue)
+            {
                 cur = mired.Value;
+            }
             else if (kelvin.HasValue)
+            {
                 cur = ColorTemp.KelvinToMired(kelvin.Value);
+            }
 
             // Update cache (carry forward bounds unless provided)
-            SetCachedTempMired(entityId, minM, maxM, cur);
+            this.SetCachedTempMired(entityId, minM, maxM, cur);
 
             // If current device, refresh dial value/image
-            if (_inDeviceView && String.Equals(_currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
+            if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
+            {
                 this.AdjustmentValueChanged(AdjTemp);
+            }
         }
 
-        private void OnHaHsColorChanged(string entityId, double? h, double? s)
+        private void OnHaHsColorChanged(String entityId, Double? h, Double? s)
         {
             if (!entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
+            {
                 return;
+            }
 
             // Update HS in cache
             if (this._hsbByEntity.TryGetValue(entityId, out var hsb))
@@ -1390,16 +1443,17 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
         private void CancelEntityTimers(String entityId)
         {
             if (String.IsNullOrEmpty(entityId))
-                return;
-
-
-            _lightSvc.CancelPending(this._currentEntityId);
-
-            lock (_sendGate)
             {
-                if (_sendTimers.TryGetValue(entityId, out var t))
+                return;
+            }
+
+            this._lightSvc.CancelPending(this._currentEntityId);
+
+            lock (this._sendGate)
+            {
+                if (this._sendTimers.TryGetValue(entityId, out var t))
                 { try { t.Stop(); } catch { } }
-                if (_reconcileTimers != null && _reconcileTimers.TryGetValue(entityId, out var r))
+                if (this._reconcileTimers != null && this._reconcileTimers.TryGetValue(entityId, out var r))
                 { try { r.Stop(); } catch { } }
             }
         }
@@ -1408,28 +1462,31 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
 
 
         private Boolean TryGetCachedTempMired(String entityId, out (Int32 Min, Int32 Max, Int32 Cur) t)
-            => _tempMiredByEntity.TryGetValue(entityId, out t);
+            => this._tempMiredByEntity.TryGetValue(entityId, out t);
 
         private void SetCachedTempMired(String entityId, Int32? minM, Int32? maxM, Int32 curMired)
         {
-            var min = minM ?? (_tempMiredByEntity.TryGetValue(entityId, out var old) ? old.Min : DefaultMinMireds);
-            var max = maxM ?? (_tempMiredByEntity.TryGetValue(entityId, out var old2) ? old2.Max : DefaultMaxMireds);
+            var min = minM ?? (this._tempMiredByEntity.TryGetValue(entityId, out var old) ? old.Min : DefaultMinMireds);
+            var max = maxM ?? (this._tempMiredByEntity.TryGetValue(entityId, out var old2) ? old2.Max : DefaultMaxMireds);
             var cur = HSBHelper.Clamp(curMired, min, max);
-            _tempMiredByEntity[entityId] = (min, max, cur);
+            this._tempMiredByEntity[entityId] = (min, max, cur);
         }
 
         private void ClearEntityTargets(String entityId)
         {
             if (String.IsNullOrEmpty(entityId))
+            {
                 return;
-            lock (_sendGate)
+            }
+
+            lock (this._sendGate)
             {
                 // Brightness
-                _briTarget?.Remove(entityId);
-                _briLastSent?.Remove(entityId);
+                this._briTarget?.Remove(entityId);
+                this._briLastSent?.Remove(entityId);
 
                 // Hue/Saturation
-                _sTargetPct?.Remove(entityId);
+                this._sTargetPct?.Remove(entityId);
             }
         }
     }
