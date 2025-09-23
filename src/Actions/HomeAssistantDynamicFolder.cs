@@ -50,8 +50,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private CancellationTokenSource _cts;
 
         private readonly Dictionary<String, LightItem> _lightsByEntity = new();
-        private readonly Dictionary<String, JsonElement> _lightServices = new(); // serviceName -> fields/target/response
-                                                                        // HSB cache per entity (Hue 0–360, Sat 0–100, Bri 0–255)
+
         private readonly Dictionary<String, (Double H, Double S, Int32 B)> _hsbByEntity
             = new Dictionary<String, (Double H, Double S, Int32 B)>(StringComparer.OrdinalIgnoreCase);
 
@@ -80,7 +79,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private const String PfxActOff = "act:off:"; // act:off:<entity_id>
 
         // --- WHEEL: constants & state
-        private const String AdjWheel = "adj:wheel";     // a single wheel entry
+        private const String AdjBri = "adj:bri";     // brightness wheel
         private Int32 _wheelCounter = 0;                 // just for display/log when not in device view
         private const Int32 WheelStepPercent = 1;        // 1% per tick
 
@@ -105,24 +104,10 @@ namespace Loupedeck.HomeAssistantPlugin
         private const Int32 MaxSatPctPerEvent = 15;  // cap burst coalesce
 
 
-        // Target saturation (per-entity) to support debounced sending
-        private readonly Dictionary<String, Double> _sTargetPct =
-            new(StringComparer.OrdinalIgnoreCase);
-
-
 
         // Per-entity cache: (Min, Max, Current) in Mireds
         private readonly Dictionary<String, (Int32 Min, Int32 Max, Int32 Cur)> _tempMiredByEntity =
             new(StringComparer.OrdinalIgnoreCase);
-
-
-    
-        // Debounced, target-based brightness sending
-        private readonly Dictionary<String, Int32> _briTarget = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<String, Int32> _briLastSent = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<String, System.Timers.Timer> _sendTimers = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<String, System.Timers.Timer> _reconcileTimers = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Object _sendGate = new Object();
 
         // Tune these if you want
         private const Int32 SendDebounceMs = 10; // how long to wait after the last tick before sending
@@ -135,8 +120,8 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
 
-private readonly LightControlService _lightSvc;
-private readonly IHaClient _ha; // adapter over HaWebSocketClient
+        private readonly LightControlService _lightSvc;
+        private readonly IHaClient _ha; // adapter over HaWebSocketClient
 
 
 
@@ -145,7 +130,7 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
         // --- WHEEL: label shown next to the dial
         public override String GetAdjustmentDisplayName(String actionParameter, PluginImageSize _)
         {
-            if (actionParameter == AdjWheel)
+            if (actionParameter == AdjBri)
             {
                 return this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId) ? "Brightness" : "Test Wheel";
             }
@@ -169,7 +154,7 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
         public override String GetAdjustmentValue(String actionParameter)
         {
             // Brightness wheel
-            if (actionParameter == AdjWheel)
+            if (actionParameter == AdjBri)
             {
                 if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                 {
@@ -225,7 +210,7 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
 
         public override BitmapImage GetAdjustmentImage(String actionParameter, PluginImageSize imageSize)
         {
-            if (actionParameter == AdjWheel)
+            if (actionParameter == AdjBri)
             {
                 var bri = 128;
 
@@ -412,7 +397,7 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
         // --- WHEEL: rotation handler (like your CounterAdjustment.ApplyAdjustment)
         public override void ApplyAdjustment(String actionParameter, Int32 diff)
         {
-            if (actionParameter == AdjWheel && diff != 0)
+            if (actionParameter == AdjBri && diff != 0)
             {
 
 
@@ -437,7 +422,6 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                         this.SetCachedBrightness(entityId, targetB);
                         this.AdjustmentValueChanged(actionParameter);
 
-                        this._briTarget[entityId] = targetB;       // keep for ClearEntityTargets()
                         this._lightSvc.SetBrightness(entityId, targetB);
 
                     }
@@ -648,7 +632,7 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                 // Only show controls the device actually supports
                 if (caps.Brightness)
                 {
-                    yield return this.CreateAdjustmentName(AdjWheel);
+                    yield return this.CreateAdjustmentName(AdjBri);
                 }
 
                 if (caps.ColorTemp)
@@ -798,8 +782,7 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                 if (this._inDeviceView)
                 {
                     // 🔸 brightness-style cleanup for the current entity
-                    this.CancelEntityTimers(this._currentEntityId);
-                    this.ClearEntityTargets(this._currentEntityId);
+                    this._lightSvc.CancelPending(this._currentEntityId);
 
                     this._lightSvc.CancelPending(this._currentEntityId);
 
@@ -840,12 +823,7 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                 var entityId = actionParameter.Substring(PfxDevice.Length);
                 if (this._lightsByEntity.ContainsKey(entityId))
                 {
-                    // stop any pending debounced sends for the previous device
-                    var prev = this._currentEntityId;
-                    this.CancelEntityTimers(prev);
-
-                    // 🔸 brightness-style fix: clear ALL targets/last-sent for the previous entity
-                    this.ClearEntityTargets(prev);
+                    
 
                     this._inDeviceView = true;
                     this._currentEntityId = entityId;
@@ -872,7 +850,7 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                     this.ButtonActionNamesChanged();       // swap to device actions
 
                     // 🔸 brightness-style UI refresh: force all wheels to redraw immediately
-                    this.AdjustmentValueChanged(AdjWheel);
+                    this.AdjustmentValueChanged(AdjBri);
                     this.AdjustmentValueChanged(AdjTemp);
                     this.AdjustmentValueChanged(AdjHue);
                     this.AdjustmentValueChanged(AdjSat);
@@ -923,16 +901,9 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
             PluginLog.Info("DynamicFolder.Unload()");
 
 
-            lock (this._sendGate)
-            {
-                // Old brightness timers (if any still exist)
-                foreach (var t in this._sendTimers.Values)
-                { try { t.Stop(); t.Dispose(); } catch { } }
-                this._sendTimers.Clear();
 
-                // New debounced sender
-                this._lightSvc?.Dispose();
-            }
+            // New debounced sender
+            this._lightSvc?.Dispose();
 
             HealthBus.HealthChanged -= this.OnHealthChanged;
             return true;
@@ -1271,8 +1242,6 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                 }
 
 
-                // Extract only LIGHT domain services and store
-                this._lightServices.Clear();
                 if (servicesDoc.RootElement.ValueKind == JsonValueKind.Object &&
                     servicesDoc.RootElement.TryGetProperty("light", out var lightDomain) &&
                     lightDomain.ValueKind == JsonValueKind.Object)
@@ -1281,7 +1250,6 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                     {
                         var svcName = svc.Name;             // e.g., turn_on, turn_off, toggle
                         var svcDef = svc.Value;            // contains fields/target/response
-                        this._lightServices[svcName] = svcDef;
                         // Log a compact summary of fields
                         var fields = "";
                         if (svcDef.ValueKind == JsonValueKind.Object && svcDef.TryGetProperty("fields", out var f) && f.ValueKind == JsonValueKind.Object)
@@ -1343,7 +1311,7 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
             // If this is the active device, redraw the wheel value & image
             if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
             {
-                this.AdjustmentValueChanged(AdjWheel);
+                this.AdjustmentValueChanged(AdjBri);
             }
         }
 
@@ -1405,28 +1373,6 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
 
 
 
-
-        private void CancelEntityTimers(String entityId)
-        {
-            if (String.IsNullOrEmpty(entityId))
-            {
-                return;
-            }
-
-            this._lightSvc.CancelPending(this._currentEntityId);
-
-            lock (this._sendGate)
-            {
-                if (this._sendTimers.TryGetValue(entityId, out var t))
-                { try { t.Stop(); } catch { } }
-                if (this._reconcileTimers != null && this._reconcileTimers.TryGetValue(entityId, out var r))
-                { try { r.Stop(); } catch { } }
-            }
-        }
-
-
-
-
         private Boolean TryGetCachedTempMired(String entityId, out (Int32 Min, Int32 Max, Int32 Cur) t)
             => this._tempMiredByEntity.TryGetValue(entityId, out t);
 
@@ -1436,24 +1382,6 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
             var max = maxM ?? (this._tempMiredByEntity.TryGetValue(entityId, out var old2) ? old2.Max : DefaultMaxMireds);
             var cur = HSBHelper.Clamp(curMired, min, max);
             this._tempMiredByEntity[entityId] = (min, max, cur);
-        }
-
-        private void ClearEntityTargets(String entityId)
-        {
-            if (String.IsNullOrEmpty(entityId))
-            {
-                return;
-            }
-
-            lock (this._sendGate)
-            {
-                // Brightness
-                this._briTarget?.Remove(entityId);
-                this._briLastSent?.Remove(entityId);
-
-                // Hue/Saturation
-                this._sTargetPct?.Remove(entityId);
-            }
         }
     }
 }
