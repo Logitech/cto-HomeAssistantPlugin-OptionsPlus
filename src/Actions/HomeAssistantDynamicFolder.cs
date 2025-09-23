@@ -84,8 +84,6 @@ namespace Loupedeck.HomeAssistantPlugin
         private Int32 _wheelCounter = 0;                 // just for display/log when not in device view
         private const Int32 WheelStepPercent = 1;        // 1% per tick
 
-        private readonly DebouncedSender<string, int> _brightnessSender;
-
         // ---- COLOR TEMP state (mirrors brightness pattern) ----
         private const String AdjTemp = "adj:ha-temp";   // wheel id
         private const Int32 TempStepMireds = 2;        // step per tick (≈smooth)
@@ -93,7 +91,6 @@ namespace Loupedeck.HomeAssistantPlugin
         private const Int32 DefaultMinMireds = 153;     // ~6500K
         private const Int32 DefaultMaxMireds = 500;     // ~2000K
         private const Int32 DefaultWarmMired = 370;     // ~2700K (UI fallback)
-        private readonly DebouncedSender<string, int> _tempSender;
 
         // ===== HUE control (rotation-only) =====
         private const string AdjHue = "adj:ha-hue";   // wheel id
@@ -107,7 +104,6 @@ namespace Loupedeck.HomeAssistantPlugin
         private const int SatStepPctPerTick = 1;   // feels smooth
         private const int MaxSatPctPerEvent = 15;  // cap burst coalesce
 
-        private readonly DebouncedSender<string, Hs>  _hsSender; // for both Hue and Sat
 
         // Target saturation (per-entity) to support debounced sending
         private readonly Dictionary<string, double> _sTargetPct =
@@ -139,6 +135,8 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
 
+private readonly LightControlService _lightSvc;
+private readonly IHaClient _ha; // adapter over HaWebSocketClient
 
 
 
@@ -444,12 +442,10 @@ namespace Loupedeck.HomeAssistantPlugin
 
                         // optimistic UI: update cache immediately → live value/image
                         SetCachedBrightness(entityId, targetB);
-                        _briTarget[entityId] = targetB;
                         this.AdjustmentValueChanged(actionParameter);
 
                         _briTarget[entityId] = targetB;       // keep for ClearEntityTargets()
-                        _brightnessSender.Set(entityId, targetB);
-
+                        _lightSvc.SetBrightness(entityId, targetB);
 
                     }
                     else
@@ -490,7 +486,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     this.AdjustmentValueChanged(AdjHue);
 
                     var curH = this._hsbByEntity.TryGetValue(eid, out var hsb3) ? hsb3.H : 0;
-                    _hsSender.Set(eid, new Hs(curH, newS));
+                    _lightSvc.SetHueSat(eid, curH, newS);
 
 
                 }
@@ -518,7 +514,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     this.AdjustmentValueChanged(AdjSat);
 
                     var curS = this._hsbByEntity.TryGetValue(eid, out var hsb2) ? hsb2.S : 100;
-                    _hsSender.Set(eid, new Hs(newH, curS));
+                    _lightSvc.SetHueSat(eid, newH, curS);
 
                 }
 
@@ -545,7 +541,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     // Optimistic UI
                     SetCachedTempMired(eid, null, null, targetM);
                     this.AdjustmentValueChanged(AdjTemp);
-                    _tempSender.Set(eid, targetM); // debounce + send as kelvin
+                    _lightSvc.SetTempMired(eid, targetM);
                 }
             }
 
@@ -647,100 +643,21 @@ namespace Loupedeck.HomeAssistantPlugin
                 PluginLog.Error(ex, "[HA] ctor: failed to read embedded icon — continuing without it");
             }
 
+            // Wrap the raw client so the service can be unit-tested / mocked later
+            _ha = new HaClientAdapter(_client);
 
-            _brightnessSender = new DebouncedSender<string, int>(SendDebounceMs, async (entityId, target) =>
-                {
-                try
-                {
-                    if (!this._client.IsAuthenticated)
-                    {
-                        HealthBus.Error("Connection lost");
-                        return;
-                    }
+            // If you want separate debounce timings per channel, split these constants.
+            const int BrightnessDebounceMs = SendDebounceMs;
+            const int HueSatDebounceMs = SendDebounceMs;
+            const int TempDebounceMs = SendDebounceMs;
 
-                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
-                    var data = System.Text.Json.JsonSerializer.SerializeToElement(new { brightness = target });
+            _lightSvc = new LightControlService(
+                _ha,
+                BrightnessDebounceMs,
+                HueSatDebounceMs,
+                TempDebounceMs
+            );
 
-                    var (ok, err) = await this._client.CallServiceAsync("light", "turn_on", entityId, data, cts.Token)
-                                                .ConfigureAwait(false);
-
-                    if (ok)
-                    {
-                        lock (_sendGate)
-                        { _briLastSent[entityId] = target; }
-                        PluginLog.Info($"[wheel/send] brightness={target} -> {entityId} OK");
-                    }
-                    else
-                    {
-                        PluginLog.Warning($"[wheel/send] failed: {err}");
-                        HealthBus.Error(err ?? "Brightness change failed");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    PluginLog.Warning(ex, "[wheel] brightness send exception");
-                }
-            });
-
-
-            _tempSender = new DebouncedSender<string, int>(SendDebounceMs, async (entityId, targetMired) =>
-                {
-                    try
-                    {
-                        if (!this._client.IsAuthenticated)
-                        { HealthBus.Error("Connection lost"); return; }
-                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
-
-                        var kelvin = ColorTemp.MiredToKelvin(targetMired);
-                        var data = System.Text.Json.JsonSerializer.SerializeToElement(new { color_temp_kelvin = kelvin });
-
-                        var (ok, err) = await this._client.CallServiceAsync("light", "turn_on", entityId, data, cts.Token)
-                                                        .ConfigureAwait(false);
-                        if (ok)
-                        {
-                            PluginLog.Info($"[temp/send] {kelvin}K ({targetMired} mired) -> {entityId} OK");
-                        }
-                        else
-                        {
-                            PluginLog.Warning($"[temp/send] failed: {err}");
-                            HealthBus.Error(err ?? "Temp change failed");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        PluginLog.Warning(ex, "[temp] send exception");
-                    }
-                });
-
-            _hsSender = new DebouncedSender<string, Hs>(SendDebounceMs, async (entityId, hs) =>
-            {
-                try
-                {
-                    if (!this._client.IsAuthenticated)
-                    { HealthBus.Error("Connection lost"); return; }
-                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
-
-                    // HA expects hs_color: [H, S]
-                    var data = System.Text.Json.JsonSerializer.SerializeToElement(
-                        new { hs_color = new object[] { HSBHelper.Wrap360(hs.H), HSBHelper.Clamp(hs.S, 0, 100) } });
-
-                    var (ok, err) = await this._client.CallServiceAsync("light", "turn_on", entityId, data, cts.Token)
-                                                      .ConfigureAwait(false);
-                    if (ok)
-                    {
-                        PluginLog.Info($"[color/send] hs=[{hs.H:F0},{hs.S:F0}] -> {entityId} OK");
-                    }
-                    else
-                    {
-                        PluginLog.Warning($"[color/send] failed: {err}");
-                        HealthBus.Error(err ?? "Color change failed");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    PluginLog.Warning(ex, "[color] send exception");
-                }
-            });
 
 
         }
@@ -901,38 +818,6 @@ namespace Loupedeck.HomeAssistantPlugin
             PluginLog.Info($"RunCommand: {actionParameter}");
 
 
-            if (actionParameter == AdjWheel)
-            {
-                try
-                {
-                    if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
-                    {
-                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                        var (ok, err) = this._client.CallServiceAsync("light", "toggle", this._currentEntityId, null, cts.Token)
-                                                    .GetAwaiter().GetResult();
-                        if (ok)
-                        {
-                            PluginLog.Info($"[wheel] toggle -> {_currentEntityId} OK");
-                        }
-                        else
-                        {
-                            PluginLog.Warning($"[wheel] toggle FAILED: {err}");
-                        }
-                    }
-                    else
-                    {
-                        this._wheelCounter = 0;
-                        this.AdjustmentValueChanged(AdjWheel);
-                        PluginLog.Info("[wheel] counter reset");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    PluginLog.Error(ex, "[wheel] RunCommand toggle/reset exception");
-                }
-            }
-
-
             if (actionParameter == CmdBack)
             {
                 if (this._inDeviceView)
@@ -940,6 +825,9 @@ namespace Loupedeck.HomeAssistantPlugin
                     // 🔸 brightness-style cleanup for the current entity
                     CancelEntityTimers(this._currentEntityId);
                     ClearEntityTargets(this._currentEntityId);
+
+                    _lightSvc.CancelPending(this._currentEntityId);
+
 
                     PluginLog.Info("LEAVE device view -> root");
                     this._inDeviceView = false;
@@ -1022,65 +910,14 @@ namespace Loupedeck.HomeAssistantPlugin
             if (actionParameter.StartsWith(PfxActOn, StringComparison.OrdinalIgnoreCase))
             {
                 var entityId = actionParameter.Substring(PfxActOn.Length);
-                this.CallLightService(entityId, "turn_on");
+                _lightSvc.TurnOnAsync(entityId);
                 return;
             }
             if (actionParameter.StartsWith(PfxActOff, StringComparison.OrdinalIgnoreCase))
             {
                 var entityId = actionParameter.Substring(PfxActOff.Length);
-                this.CallLightService(entityId, "turn_off");
+                _lightSvc.TurnOffAsync(entityId);
                 return;
-            }
-        }
-
-
-
-
-        private void CallLightService(String entityId, String service)
-        {
-            try
-            {
-                using var ctsCall = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-
-                // If you added EnsureConnectedAsync, keep it:
-                var ensured = this._client.EnsureConnectedAsync(TimeSpan.FromSeconds(8), ctsCall.Token)
-                                     .GetAwaiter().GetResult();
-                if (!ensured)
-                {
-                    PluginLog.Warning("Connection to Home Assistant lost.");
-                    HealthBus.Error("Connection lost");
-                    //this.ButtonActionNamesChanged();     double redraw
-                    return;
-                }
-
-                var (ok, err) = this._client.CallServiceAsync("light", service, entityId, null, ctsCall.Token)
-                                       .GetAwaiter().GetResult();
-
-                if (ok)
-                {
-                    PluginLog.Info($"[call_service] light.{service} -> {entityId} OK");
-                    HealthBus.Ok($"light.{service}");
-                    //this.ButtonActionNamesChanged();          double redraw
-                }
-                else
-                {
-                    var msg = err?.ToLowerInvariant() switch
-                    {
-                        "timeout" => "Service timeout",
-                        "connection lost" => "Connection lost",
-                        _ when String.IsNullOrEmpty(err) => "Service failed",
-                        _ => err
-                    };
-                    PluginLog.Warning($"[call_service] light.{service} -> {entityId} faileeeeed: {msg}");
-                    HealthBus.Error(msg);
-                    //this.ButtonActionNamesChanged();          double redraw
-                }
-            }
-            catch (Exception ex)
-            {
-                PluginLog.Error(ex, $"[call_service] light.{service} exception");
-                HealthBus.Error("Service error");
-                //this.ButtonActionNamesChanged();               double redraw
             }
         }
 
@@ -1117,9 +954,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 _sendTimers.Clear();
 
                 // New debounced sender
-                _brightnessSender?.Dispose();
-                _tempSender?.Dispose();
-                _hsSender?.Dispose();
+                _lightSvc?.Dispose();
             }
 
             HealthBus.HealthChanged -= this.OnHealthChanged;
@@ -1597,9 +1432,8 @@ namespace Loupedeck.HomeAssistantPlugin
             if (String.IsNullOrEmpty(entityId))
                 return;
 
-            _brightnessSender?.Cancel(entityId);
-            _tempSender?.Cancel(entityId);
-            _hsSender?.Cancel(entityId);
+
+            _lightSvc.CancelPending(this._currentEntityId);
 
             lock (_sendGate)
             {
@@ -1638,13 +1472,5 @@ namespace Loupedeck.HomeAssistantPlugin
                 _sTargetPct?.Remove(entityId);
             }
         }
-
-
-
-
-
-
-
-
     }
 }
