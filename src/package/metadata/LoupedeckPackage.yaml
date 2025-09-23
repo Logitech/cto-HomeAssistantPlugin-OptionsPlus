@@ -12,7 +12,7 @@ name: HomeAssistant
 displayName: HomeAssistant
 
 # Short description of the plugin.
-description: Add a short description of the plugin here.
+description: A plugin to control a smart home through Home Assistant.
 
 # Name of the plugin library file.
 pluginFileName: HomeAssistantPlugin.dll
@@ -21,10 +21,10 @@ pluginFileName: HomeAssistantPlugin.dll
 version: 1.0
 
 # Author of the plugin. The author can be a company or an individual developer.
-author: csafta
+author: Cristian Safta
 
 # Copyright information.
-copyright: Copyright © 2025 csafta. All rights reserved.
+copyright: Copyright © 2025 Cristian Safta. All rights reserved.
 
 
 # ==================================================================================================
