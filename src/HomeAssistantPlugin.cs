@@ -30,15 +30,13 @@ namespace Loupedeck.HomeAssistantPlugin
         public override void Load()
         {
             PluginLog.Info("Plugin.Load()");
-            // Report initial status (we’ll refine at folder activation)
-            this.OnPluginStatusChanged(Loupedeck.PluginStatus.Warning, "Open the HA folder to authenticate.");
         }
 
         public override void Unload()
         {
             PluginLog.Info("Plugin.Unload()");
-            _ = HaEvents.SafeCloseAsync();
-            _ = HaClient.SafeCloseAsync();
+            _ = this.HaEvents.SafeCloseAsync();
+            _ = this.HaClient.SafeCloseAsync();
         
         }
 

@@ -15,8 +15,8 @@ namespace Loupedeck.HomeAssistantPlugin
         {
             this.Name        = "ConfigureHomeAssistant";
             this.DisplayName = "Configure Home Assistant";
-            this.GroupName   = "Smart Home";
-            this.Description = "Set Base URL and Token, then test WebSocket auth.";
+            this.GroupName   = "Home Assistant";
+            this.Description = "Drop into a tile to configure Home assistant before the first use(can remove after saving).";
 
             this.ActionEditor.AddControlEx(
                 new ActionEditorTextbox(CtlBaseUrl, "Base URL:")

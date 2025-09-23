@@ -440,8 +440,8 @@ namespace Loupedeck.HomeAssistantPlugin
 
         public HomeAssistantDynamicFolder()
         {
-            this.DisplayName = "Home Assistant";
-            this.GroupName = "Smart Home";
+            this.DisplayName = "All Light Controls";
+            this.GroupName = "Lights";
 
             _icons = new IconService(new Dictionary<string, string>
             {
