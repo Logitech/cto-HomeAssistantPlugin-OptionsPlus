@@ -556,87 +556,47 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
 
 
 
+        private BitmapImage LoadIcon(string resourceName, out bool ok)
+        {
+            var img = PluginResources.ReadImage(resourceName);
+            if (img == null)
+            {
+                PluginLog.Error($"[HA] Embedded icon not found: {resourceName}");
+                ok = false;
+            }
+            else
+            {
+                PluginLog.Info($"[HA] Embedded icon loaded OK: {resourceName}");
+                ok = true;
+            }
+            return img;
+        }
+
         public HomeAssistantDynamicFolder()
         {
             this.DisplayName = "Home Assistant";
             this.GroupName = "Smart Home";
 
-
             try
             {
-
                 //var names = string.Join(", ", typeof(HomeAssistantDynamicFolder).Assembly.GetManifestResourceNames());
                 //PluginLog.Info("[HA RES] " + names);
 
                 // Idempotent; safe even if the plugin already called it
                 PluginResources.Init(typeof(HomeAssistantPlugin).Assembly);
 
-                _bulbIconImg = PluginResources.ReadImage("light_bulb_icon.png");
-                if (_bulbIconImg == null)
-                    PluginLog.Error("[HA] Embedded icon not found: light_bulb_icon.png");
-                else
-                    PluginLog.Info("[HA] Embedded icon loaded OK");
-
-                _BackIconImg = PluginResources.ReadImage("back_icon.png");
-                if (_BackIconImg == null)
-                    PluginLog.Error("[HA] Embedded icon not found: back_icon.png");
-                else
-                    PluginLog.Info("[HA] Embedded icon loaded OK");
-
-                _bulbOnImg = PluginResources.ReadImage("light_on_icon.png");
-                if (_bulbOnImg == null)
-                    PluginLog.Error("[HA] Embedded icon not found: light_on_icon.png");
-                else
-                    PluginLog.Info("[HA] Embedded icon loaded OK");
-
-                _bulbOffImg = PluginResources.ReadImage("light_off_icon.png");
-                if (_bulbOffImg == null)
-                    PluginLog.Error("[HA] Embedded icon not found: light_off_icon.png");
-                else
-                    PluginLog.Info("[HA] Embedded icon loaded OK");
-
-                _brightnessImg = PluginResources.ReadImage("brightness_icon.png");
-                if (_brightnessImg == null)
-                    PluginLog.Error("[HA] Embedded icon not found: brightness_icon.png");
-                else
-                    PluginLog.Info("[HA] Embedded icon loaded OK");
-
-                _retryImg = PluginResources.ReadImage("reload_icon.png");
-                if (_retryImg == null)
-                    PluginLog.Error("[HA] Embedded icon not found: reload_icon.png");
-                else
-                    PluginLog.Info("[HA] Embedded icon loaded OK");
-
-                _saturationImg = PluginResources.ReadImage("saturation_icon.png");
-                if (_saturationImg == null)
-                    PluginLog.Error("[HA] Embedded icon not found: saturation_icon.png");
-                else
-                    PluginLog.Info("[HA] Embedded icon loaded OK");
-
-
-                _issueStatusImg = PluginResources.ReadImage("issue_status_icon.png");
-                if (_issueStatusImg == null)
-                    PluginLog.Error("[HA] Embedded icon not found: issue_status_icon.png");
-                else
-                    PluginLog.Info("[HA] Embedded icon loaded OK");
-
-                _temperatureImg = PluginResources.ReadImage("temperature_icon.png");
-                if (_temperatureImg == null)
-                    PluginLog.Error("[HA] Embedded icon not found: temperature_icon.png");
-                else
-                    PluginLog.Info("[HA] Embedded icon loaded OK");
-
-                _onlineStatusImg = PluginResources.ReadImage("online_status_icon.png");
-                if (_onlineStatusImg == null)
-                    PluginLog.Error("[HA] Embedded icon not found: online_status_icon.png");
-                else
-                    PluginLog.Info("[HA] Embedded icon loaded OK");
-
-                _hueImg = PluginResources.ReadImage("hue_icon.png");
-                if (_hueImg == null)
-                    PluginLog.Error("[HA] Embedded icon not found: hue_icon.png");
-                else
-                    PluginLog.Info("[HA] Embedded icon loaded OK");
+                bool _;
+                _bulbIconImg      = LoadIcon("light_bulb_icon.png", out _);
+                _BackIconImg      = LoadIcon("back_icon.png", out _);
+                _bulbOnImg        = LoadIcon("light_on_icon.png", out _);
+                _bulbOffImg       = LoadIcon("light_off_icon.png", out _);
+                _brightnessImg    = LoadIcon("brightness_icon.png", out _);
+                _retryImg         = LoadIcon("reload_icon.png", out _);
+                _saturationImg    = LoadIcon("saturation_icon.png", out _);
+                _issueStatusImg   = LoadIcon("issue_status_icon.png", out _);
+                _temperatureImg   = LoadIcon("temperature_icon.png", out _);
+                _onlineStatusImg  = LoadIcon("online_status_icon.png", out _);
+                _hueImg           = LoadIcon("hue_icon.png", out _);
             }
             catch (Exception ex)
             {
