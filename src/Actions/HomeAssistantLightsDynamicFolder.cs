@@ -34,6 +34,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private const String CmdStatus = "status";
         private const String CmdRetry = "retry";
         private const String CmdBack = "back"; // our own back
+        private const String CmdArea = "area";
 
         private readonly HaWebSocketClient _client = new();
 
@@ -60,6 +61,22 @@ namespace Loupedeck.HomeAssistantPlugin
 
         // view state
         private Boolean _inDeviceView = false;
+
+        // Navigation levels
+        private enum ViewLevel { Root, Area, Device }
+        private ViewLevel _level = ViewLevel.Root;
+
+        private string _currentAreaId = null; // when in Area view
+
+        // Area data
+private readonly Dictionary<string, string> _areaIdToName =
+    new(StringComparer.OrdinalIgnoreCase);
+private readonly Dictionary<string, string> _entityToAreaId =
+    new(StringComparer.OrdinalIgnoreCase);
+
+    // Synthetic “no area” bucket
+private const string UnassignedAreaId = "!unassigned";
+private const string UnassignedAreaName = "(No area)";
 
         private String _currentEntityId = null;
 
@@ -481,48 +498,59 @@ namespace Loupedeck.HomeAssistantPlugin
             PluginDynamicFolderNavigation.None;
 
 
-        public override IEnumerable<String> GetButtonPressActionNames(DeviceType _)
+        public override IEnumerable<string> GetButtonPressActionNames(DeviceType _)
         {
-            yield return this.CreateCommandName(CmdBack);   // system Back
-            yield return this.CreateCommandName(CmdStatus);           // keep Status always
+            // Always show Back + Status
+            yield return this.CreateCommandName(CmdBack);
+            yield return this.CreateCommandName(CmdStatus);
 
-            if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
+            if (_level == ViewLevel.Device && !string.IsNullOrEmpty(_currentEntityId))
             {
-                var caps = this.GetCaps(this._currentEntityId);
+                var caps = GetCaps(_currentEntityId);
 
-                // Device actions
                 yield return this.CreateCommandName($"{PfxActOn}{this._currentEntityId}");
                 yield return this.CreateCommandName($"{PfxActOff}{this._currentEntityId}");
 
-                // Only show controls the device actually supports
+
                 if (caps.Brightness)
-                {
                     yield return this.CreateAdjustmentName(AdjBri);
-                }
-
                 if (caps.ColorTemp)
-                {
                     yield return this.CreateAdjustmentName(AdjTemp);
-                }
-
                 if (caps.ColorHs)
-                {
-                    yield return this.CreateAdjustmentName(AdjHue);
-                    yield return this.CreateAdjustmentName(AdjSat);
-                }
+                { yield return this.CreateAdjustmentName(AdjHue); yield return this.CreateAdjustmentName(AdjSat); }
+                yield break;
             }
-            else
+
+            if (_level == ViewLevel.Area && !string.IsNullOrEmpty(_currentAreaId))
             {
-                // Root view unchanged...
-                foreach (var kv in this._lightsByEntity)
+                // Lights for current area
+                foreach (var kv in _lightsByEntity)
                 {
-                    yield return this.CreateCommandName($"{PfxDevice}{kv.Key}");
-                }
+                    if (_entityToAreaId.TryGetValue(kv.Key, out var aid) && string.Equals(aid, _currentAreaId, StringComparison.OrdinalIgnoreCase))
 
-                yield return this.CreateCommandName(CmdRetry);
+                        yield return this.CreateCommandName($"{PfxDevice}{kv.Key}");
+                }
+                yield break;
             }
 
+            // ROOT: list areas that actually have lights
+            // (optional) include Retry at root
+            var areaIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var eid in _lightsByEntity.Keys)
+                if (_entityToAreaId.TryGetValue(eid, out var aid))
+                    areaIds.Add(aid);
+
+            // Order by area name
+            var ordered = areaIds
+                .Select(aid => (aid, name: _areaIdToName.TryGetValue(aid, out var n) ? n : aid))
+                .OrderBy(t => t.name, StringComparer.CurrentCultureIgnoreCase);
+
+            foreach (var (aid, _) in ordered)
+                yield return this.CreateCommandName($"{CmdArea}{aid}");
+
+            yield return this.CreateCommandName(CmdRetry);
         }
+
 
 
 
@@ -552,6 +580,11 @@ namespace Loupedeck.HomeAssistantPlugin
             if (actionParameter.StartsWith(PfxActOn, StringComparison.OrdinalIgnoreCase))
             {
                 return "On";
+            }
+            if(actionParameter.StartsWith(CmdArea, StringComparison.OrdinalIgnoreCase))
+            {
+                var areaId = actionParameter.Substring(CmdArea.Length);
+                return _areaIdToName.TryGetValue(areaId, out var name) ? name : areaId;
             }
 
             return actionParameter.StartsWith(PfxActOff, StringComparison.OrdinalIgnoreCase) ? "Off" : null;
@@ -594,6 +627,11 @@ namespace Loupedeck.HomeAssistantPlugin
                 return _icons.Get(IconId.Bulb);
             }
 
+            if(actionParameter.StartsWith(CmdArea, StringComparison.OrdinalIgnoreCase))
+            {
+                return _icons.Get(IconId.Bulb);
+            }
+
             // ACTION tiles
             if (actionParameter.StartsWith(PfxActOn, StringComparison.OrdinalIgnoreCase))
             {
@@ -620,22 +658,23 @@ namespace Loupedeck.HomeAssistantPlugin
 
             if (actionParameter == CmdBack)
             {
-                if (this._inDeviceView)
+                if (_level == ViewLevel.Device)
                 {
-                    // 🔸 brightness-style cleanup for the current entity
-                    this._lightSvc.CancelPending(this._currentEntityId);
-
-                    this._lightSvc.CancelPending(this._currentEntityId);
-
-
-                    PluginLog.Info("LEAVE device view -> root");
-                    this._inDeviceView = false;
-                    this._currentEntityId = null;
-
-                    this.ButtonActionNamesChanged();
-                    this.EncoderActionNamesChanged();
+                    _lightSvc.CancelPending(_currentEntityId);
+                    _inDeviceView = false;
+                    _currentEntityId = null;
+                    _level = ViewLevel.Area;
+                    ButtonActionNamesChanged();
+                    EncoderActionNamesChanged();
                 }
-                else
+                else if (_level == ViewLevel.Area)
+                {
+                    _currentAreaId = null;
+                    _level = ViewLevel.Root;
+                    ButtonActionNamesChanged();
+                    EncoderActionNamesChanged();
+                }
+                else // Root
                 {
                     this.Close();
                 }
@@ -655,6 +694,22 @@ namespace Loupedeck.HomeAssistantPlugin
                     ok ? "Home Assistant is connected." : HealthBus.LastMessage);
                 return;
             }
+            
+            if (actionParameter.StartsWith(CmdArea, StringComparison.OrdinalIgnoreCase))
+            {
+                var areaId = actionParameter.Substring(CmdArea.Length);
+                if (_areaIdToName.ContainsKey(areaId) || string.Equals(areaId, UnassignedAreaId, StringComparison.OrdinalIgnoreCase))
+                {
+                    _currentAreaId = areaId;
+                    _level = ViewLevel.Area;
+                    _inDeviceView = false;
+                    _currentEntityId = null;
+                    ButtonActionNamesChanged();
+                    EncoderActionNamesChanged();
+                    PluginLog.Info($"ENTER area view: {areaId}");
+                }
+                return;
+            }
 
 
             // Enter device view
@@ -664,9 +719,10 @@ namespace Loupedeck.HomeAssistantPlugin
                 var entityId = actionParameter.Substring(PfxDevice.Length);
                 if (this._lightsByEntity.ContainsKey(entityId))
                 {
-                    
+
 
                     this._inDeviceView = true;
+                    _level = ViewLevel.Device;
                     this._currentEntityId = entityId;
                     this._wheelCounter = 0; // avoids showing previous ticks anywhere
 
@@ -696,7 +752,8 @@ namespace Loupedeck.HomeAssistantPlugin
                     this.AdjustmentValueChanged(AdjHue);
                     this.AdjustmentValueChanged(AdjSat);
 
-                    PluginLog.Info($"ENTER device view: {entityId}");
+                    PluginLog.Info($"ENTER device view: {entityId}  level={_level} inDevice={_inDeviceView}");
+    
                 }
                 return;
             }
@@ -827,6 +884,8 @@ namespace Loupedeck.HomeAssistantPlugin
                     HealthBus.Ok("Auth OK");
                     this.Plugin.OnPluginStatusChanged(PluginStatus.Normal, "Connected to Home Assistant.", null);
 
+                    
+
                     try
                     {
                         var ctsEv = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -856,6 +915,13 @@ namespace Loupedeck.HomeAssistantPlugin
                     }
 
                     this._client.SendPingAsync(this._cts.Token).GetAwaiter().GetResult();
+
+                    _level = ViewLevel.Root;
+                    _currentAreaId = null;
+                    _currentEntityId = null;
+                    _inDeviceView = false;
+
+
                     this.ButtonActionNamesChanged();
                     this.EncoderActionNamesChanged();
                     return true;
@@ -922,6 +988,14 @@ namespace Loupedeck.HomeAssistantPlugin
                     PluginLog.Warning($"device_registry/list failed: {errDev}");
                 }
 
+                var (okArea, areaJson, errArea) = this._client
+            .RequestAsync("config/area_registry/list", this._cts.Token)
+            .GetAwaiter().GetResult();
+                if (!okArea)
+                {
+                    PluginLog.Warning($"area_registry/list failed: {errArea}");
+                }
+
                 // ---- Parse results ----
                 // states: array of { entity_id, state, attributes{friendly_name,...}, ...}
                 using var statesDoc = JsonDocument.Parse(statesJson);
@@ -929,8 +1003,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 using var servicesDoc = JsonDocument.Parse(servicesJson);
 
 
-                JsonElement entArray = default;
-                JsonElement devArray = default;
+                JsonElement entArray = default, devArray = default, areaArray = default;
                 if (okEnt)
                 {
                     entArray = JsonDocument.Parse(entJson).RootElement;
@@ -940,45 +1013,74 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     devArray = JsonDocument.Parse(devJson).RootElement;
                 }
-
-                // Build device lookup by device_id
-                var deviceById = new Dictionary<String, (String name, String mf, String model)>(StringComparer.OrdinalIgnoreCase);
-                if (okDev && devArray.ValueKind == JsonValueKind.Array)
+                if (okArea)
                 {
-                    foreach (var dev in devArray.EnumerateArray())
-                    {
-                        var id = dev.GetPropertyOrDefault("id");
-                        var name = dev.GetPropertyOrDefault("name_by_user") ?? dev.GetPropertyOrDefault("name") ?? "";
-                        var mf = dev.GetPropertyOrDefault("manufacturer") ?? "";
-                        var model = dev.GetPropertyOrDefault("model") ?? "";
-                        if (!String.IsNullOrEmpty(id))
-                        {
-                            deviceById[id] = (name, mf, model);
-                        }
-                    }
+                    areaArray = JsonDocument.Parse(areaJson).RootElement;
                 }
 
-                // Build entity->device_id map (and keep original names)
-                var entityDevice = new Dictionary<String, (String deviceId, String originalName)>(StringComparer.OrdinalIgnoreCase);
-                if (okEnt && entArray.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var ent in entArray.EnumerateArray())
-                    {
-                        var entityId = ent.GetPropertyOrDefault("entity_id");
-                        if (String.IsNullOrEmpty(entityId))
-                        {
-                            continue;
-                        }
+                // Build device lookup by device_id AND device->area_id  <-- UPDATED
+        var deviceById = new Dictionary<string, (string name, string mf, string model)>(StringComparer.OrdinalIgnoreCase);
+        var deviceAreaById = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-                        var deviceId = ent.GetPropertyOrDefault("device_id") ?? "";
-                        var oname = ent.GetPropertyOrDefault("original_name") ?? "";
-                        entityDevice[entityId] = (deviceId, oname);
-                    }
+        if (okDev && devArray.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var dev in devArray.EnumerateArray())
+            {
+                var id    = dev.GetPropertyOrDefault("id");
+                var name  = dev.GetPropertyOrDefault("name_by_user") ?? dev.GetPropertyOrDefault("name") ?? "";
+                var mf    = dev.GetPropertyOrDefault("manufacturer") ?? "";
+                var model = dev.GetPropertyOrDefault("model") ?? "";
+                var area  = dev.GetPropertyOrDefault("area_id"); // may be null
+
+                if (!string.IsNullOrEmpty(id))
+                {
+                    deviceById[id] = (name, mf, model);
+                    if (!string.IsNullOrEmpty(area))
+                        deviceAreaById[id] = area;
                 }
+            }
+        }
+
+                // Build entity->device_id AND entity->area_id (direct from entity registry)  <-- UPDATED
+        var entityDevice = new Dictionary<string, (string deviceId, string originalName)>(StringComparer.OrdinalIgnoreCase);
+        var entityArea   = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (okEnt && entArray.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var ent in entArray.EnumerateArray())
+            {
+                var entityId = ent.GetPropertyOrDefault("entity_id");
+                if (string.IsNullOrEmpty(entityId))
+                    continue;
+
+                var deviceId = ent.GetPropertyOrDefault("device_id") ?? "";
+                var oname    = ent.GetPropertyOrDefault("original_name") ?? "";
+                var areaId   = ent.GetPropertyOrDefault("area_id"); // may be null
+
+                entityDevice[entityId] = (deviceId, oname);
+                if (!string.IsNullOrEmpty(areaId))
+                    entityArea[entityId] = areaId;
+            }
+        }
+
+        // Areas: area_id -> name  <-- NEW
+        _areaIdToName.Clear();
+        if (okArea && areaArray.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var ar in areaArray.EnumerateArray())
+            {
+                // HA uses "area_id" as the stable id; older payloads may also include "id"
+                var id   = ar.GetPropertyOrDefault("area_id") ?? ar.GetPropertyOrDefault("id");
+                var name = ar.GetPropertyOrDefault("name") ?? id ?? "";
+                if (!string.IsNullOrEmpty(id))
+                    _areaIdToName[id] = name;
+            }
+        }
 
                 // Filter lights from states and assemble LightItem
                 this._lightsByEntity.Clear();
                 this._hsbByEntity.Clear();
+                this._entityToAreaId.Clear();
 
                 foreach (var st in statesDoc.RootElement.EnumerateArray())
                 {
@@ -1013,6 +1115,13 @@ namespace Loupedeck.HomeAssistantPlugin
                             model = d.model;
                         }
                     }
+
+                    // --- Area resolution (entity area wins; else device area; else Unassigned)  <-- NEW
+            string areaId = null;
+            if (entityArea.TryGetValue(entityId, out var ea)) areaId = ea;
+            else if (!string.IsNullOrEmpty(deviceId) && deviceAreaById.TryGetValue(deviceId, out var da)) areaId = da;
+            if (string.IsNullOrEmpty(areaId)) areaId = UnassignedAreaId;
+            _entityToAreaId[entityId] = areaId;
 
                     // --- Brightness: seed for ALL lights, not just color-capable ---
                     var bri = 0;
@@ -1090,8 +1199,12 @@ namespace Loupedeck.HomeAssistantPlugin
                     var li = new LightItem(entityId, friendly, state, deviceId ?? "", deviceName, mf, model);
                     this._lightsByEntity[entityId] = li;
 
-                    PluginLog.Info($"[Light] {entityId} | name='{friendly}' | state={state} | dev='{deviceName}' mf='{mf}' model='{model}' bri={bri} tempMired={curM} range=[{minM},{maxM}]");
-                }
+                   PluginLog.Info($"[Light] {entityId} | name='{friendly}' | state={state} | dev='{deviceName}' mf='{mf}' model='{model}' bri={bri} tempMired={curM} range=[{minM},{maxM}] area='{(_areaIdToName.TryGetValue(areaId, out var an) ? an : areaId)}'");
+          }
+
+          // Ensure a bucket exists for unassigned if any light landed there  <-- NEW
+        if (_entityToAreaId.ContainsValue(UnassignedAreaId))
+            _areaIdToName[UnassignedAreaId] = UnassignedAreaName;
 
 
                 if (servicesDoc.RootElement.ValueKind == JsonValueKind.Object &&

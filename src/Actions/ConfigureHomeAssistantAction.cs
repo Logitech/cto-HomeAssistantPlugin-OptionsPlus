@@ -33,6 +33,7 @@ namespace Loupedeck.HomeAssistantPlugin
             this.ActionEditor.Started += this.OnActionEditorStarted;
             this.ActionEditor.ControlValueChanged += this.OnControlValueChanged;
         }
+        
 
         protected override Boolean OnLoad() => true;
 

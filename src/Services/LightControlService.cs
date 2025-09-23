@@ -9,67 +9,71 @@ namespace Loupedeck.HomeAssistantPlugin
     internal sealed class LightControlService : IDisposable
     {
         private readonly IHaClient _ha;
-        private readonly int _brightnessDebounceMs;
-        private readonly int _hsDebounceMs;
-        private readonly int _tempDebounceMs;
+        private readonly Int32 _brightnessDebounceMs;
+        private readonly Int32 _hsDebounceMs;
+        private readonly Int32 _tempDebounceMs;
 
-        private readonly DebouncedSender<string, int> _brightnessSender;
-        private readonly DebouncedSender<string, Hs>  _hsSender;
-        private readonly DebouncedSender<string, int> _tempSender;
+        private readonly DebouncedSender<String, Int32> _brightnessSender;
+        private readonly DebouncedSender<String, Hs>  _hsSender;
+        private readonly DebouncedSender<String, Int32> _tempSender;
 
         // (Optional) last-sent caches if you need them externally later
-        private readonly object _gate = new();
-        private readonly Dictionary<string, int> _lastBri = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Object _gate = new();
+        private readonly Dictionary<String, Int32> _lastBri = new(StringComparer.OrdinalIgnoreCase);
 
         public LightControlService(IHaClient ha,
-            int brightnessDebounceMs, int hsDebounceMs, int tempDebounceMs)
+            Int32 brightnessDebounceMs, Int32 hsDebounceMs, Int32 tempDebounceMs)
         {
-            _ha = ha ?? throw new ArgumentNullException(nameof(ha));
-            _brightnessDebounceMs = brightnessDebounceMs;
-            _hsDebounceMs         = hsDebounceMs;
-            _tempDebounceMs       = tempDebounceMs;
+            this._ha = ha ?? throw new ArgumentNullException(nameof(ha));
+            this._brightnessDebounceMs = brightnessDebounceMs;
+            this._hsDebounceMs         = hsDebounceMs;
+            this._tempDebounceMs       = tempDebounceMs;
 
-            _brightnessSender = new DebouncedSender<string, int>(_brightnessDebounceMs, SendBrightnessAsync);
-            _hsSender         = new DebouncedSender<string, Hs>(_hsDebounceMs, SendHsAsync);
-            _tempSender       = new DebouncedSender<string, int>(_tempDebounceMs, SendTempAsync);
+            this._brightnessSender = new DebouncedSender<String, Int32>(this._brightnessDebounceMs, this.SendBrightnessAsync);
+            this._hsSender         = new DebouncedSender<String, Hs>(this._hsDebounceMs, this.SendHsAsync);
+            this._tempSender       = new DebouncedSender<String, Int32>(this._tempDebounceMs, this.SendTempAsync);
         }
 
-        public void SetBrightness(string entityId, int value)
-            => _brightnessSender.Set(entityId, HSBHelper.Clamp(value, 0, 255));
+        public void SetBrightness(String entityId, Int32 value)
+            => this._brightnessSender.Set(entityId, HSBHelper.Clamp(value, 0, 255));
 
-        public void SetHueSat(string entityId, double h, double s)
-            => _hsSender.Set(entityId, new Hs(HSBHelper.Wrap360(h), HSBHelper.Clamp(s, 0, 100)));
+        public void SetHueSat(String entityId, Double h, Double s)
+            => this._hsSender.Set(entityId, new Hs(HSBHelper.Wrap360(h), HSBHelper.Clamp(s, 0, 100)));
 
-        public void SetTempMired(string entityId, int mired)
-            => _tempSender.Set(entityId, Math.Max(1, mired));
+        public void SetTempMired(String entityId, Int32 mired)
+            => this._tempSender.Set(entityId, Math.Max(1, mired));
 
-        public void CancelPending(string entityId)
+        public void CancelPending(String entityId)
         {
-            _brightnessSender.Cancel(entityId);
-            _hsSender.Cancel(entityId);
-            _tempSender.Cancel(entityId);
+            this._brightnessSender.Cancel(entityId);
+            this._hsSender.Cancel(entityId);
+            this._tempSender.Cancel(entityId);
         }
 
-        public async Task<bool> TurnOnAsync(string entityId, JsonElement? data = null, CancellationToken ct = default)
-            => (await _ha.CallServiceAsync("light", "turn_on", entityId, data, ct).ConfigureAwait(false)).ok;
+        public async Task<Boolean> TurnOnAsync(String entityId, JsonElement? data = null, CancellationToken ct = default)
+            => (await this._ha.CallServiceAsync("light", "turn_on", entityId, data, ct).ConfigureAwait(false)).ok;
 
-        public async Task<bool> TurnOffAsync(string entityId, CancellationToken ct = default)
-            => (await _ha.CallServiceAsync("light", "turn_off", entityId, null, ct).ConfigureAwait(false)).ok;
+        public async Task<Boolean> TurnOffAsync(String entityId, CancellationToken ct = default)
+            => (await this._ha.CallServiceAsync("light", "turn_off", entityId, null, ct).ConfigureAwait(false)).ok;
 
-        public async Task<bool> ToggleAsync(string entityId, CancellationToken ct = default)
-            => (await _ha.CallServiceAsync("light", "toggle", entityId, null, ct).ConfigureAwait(false)).ok;
+        public async Task<Boolean> ToggleAsync(String entityId, CancellationToken ct = default)
+            => (await this._ha.CallServiceAsync("light", "toggle", entityId, null, ct).ConfigureAwait(false)).ok;
 
-        private async Task SendBrightnessAsync(string entityId, int target)
+        private async Task SendBrightnessAsync(String entityId, Int32 target)
         {
             try
             {
-                if (!_ha.IsAuthenticated) { HealthBus.Error("Connection lost"); return; }
+                if (!this._ha.IsAuthenticated) { HealthBus.Error("Connection lost"); return; }
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
                 var data = JsonSerializer.SerializeToElement(new { brightness = target });
-                var (ok, err) = await _ha.CallServiceAsync("light", "turn_on", entityId, data, cts.Token).ConfigureAwait(false);
+                var (ok, err) = await this._ha.CallServiceAsync("light", "turn_on", entityId, data, cts.Token).ConfigureAwait(false);
                 if (ok)
                 {
-                    lock (_gate) _lastBri[entityId] = target;
+                    lock (this._gate)
+                    {
+                        this._lastBri[entityId] = target;
+                    }
+
                     PluginLog.Info($"[light] bri={target} -> {entityId} OK");
                 }
                 else
@@ -84,15 +88,15 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
-        private async Task SendHsAsync(string entityId, Hs hs)
+        private async Task SendHsAsync(String entityId, Hs hs)
         {
             try
             {
-                if (!_ha.IsAuthenticated) { HealthBus.Error("Connection lost"); return; }
+                if (!this._ha.IsAuthenticated) { HealthBus.Error("Connection lost"); return; }
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
 
-                var data = JsonSerializer.SerializeToElement(new { hs_color = new object[] { hs.H, hs.S } });
-                var (ok, err) = await _ha.CallServiceAsync("light", "turn_on", entityId, data, cts.Token).ConfigureAwait(false);
+                var data = JsonSerializer.SerializeToElement(new { hs_color = new Object[] { hs.H, hs.S } });
+                var (ok, err) = await this._ha.CallServiceAsync("light", "turn_on", entityId, data, cts.Token).ConfigureAwait(false);
                 if (ok)
                 {
                     PluginLog.Info($"[light] hs=[{hs.H:F0},{hs.S:F0}] -> {entityId} OK");
@@ -109,17 +113,17 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
-        private async Task SendTempAsync(string entityId, int mired)
+        private async Task SendTempAsync(String entityId, Int32 mired)
         {
             try
             {
-                if (!_ha.IsAuthenticated) { HealthBus.Error("Connection lost"); return; }
+                if (!this._ha.IsAuthenticated) { HealthBus.Error("Connection lost"); return; }
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
 
                 var kelvin = ColorTemp.MiredToKelvin(mired);
                 var data = JsonSerializer.SerializeToElement(new { color_temp_kelvin = kelvin });
 
-                var (ok, err) = await _ha.CallServiceAsync("light", "turn_on", entityId, data, cts.Token).ConfigureAwait(false);
+                var (ok, err) = await this._ha.CallServiceAsync("light", "turn_on", entityId, data, cts.Token).ConfigureAwait(false);
                 if (ok)
                 {
                     PluginLog.Info($"[light] temp={kelvin}K ({mired} mired) -> {entityId} OK");
@@ -138,9 +142,9 @@ namespace Loupedeck.HomeAssistantPlugin
 
         public void Dispose()
         {
-            _brightnessSender?.Dispose();
-            _hsSender?.Dispose();
-            _tempSender?.Dispose();
+            this._brightnessSender?.Dispose();
+            this._hsSender?.Dispose();
+            this._tempSender?.Dispose();
         }
     }
 }
