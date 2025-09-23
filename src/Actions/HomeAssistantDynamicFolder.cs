@@ -1517,25 +1517,6 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
-        // --- WHEEL: tiny helper to build JsonElement payloads safely
-        private static JsonElement ToJsonElement(Object obj)
-        {
-            using var doc = JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(obj));
-            return doc.RootElement.Clone();
-        }
-
-
-        private bool TryGetCachedBrightness(string entityId, out int bri)
-        {
-            if (this._hsbByEntity.TryGetValue(entityId, out var hsb))
-            {
-                bri = hsb.B;
-                return true;
-            }
-            bri = 0;
-            return false;
-        }
-
         private void SetCachedBrightness(string entityId, int bri)
         {
             if (this._hsbByEntity.TryGetValue(entityId, out var hsb))
@@ -1544,52 +1525,6 @@ namespace Loupedeck.HomeAssistantPlugin
                 this._hsbByEntity[entityId] = (0, 0, HSBHelper.Clamp(bri, 0, 255));
         }
 
-        // Quick, synchronous read of a single entity’s brightness via WS get_states
-        private int? GetBrightnessFromHa(string entityId)
-        {
-            try
-            {
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-                var (ok, statesJson, err) = this._client.RequestAsync("get_states", cts.Token)
-                                                        .GetAwaiter().GetResult();
-                if (!ok || statesJson is null)
-                {
-                    PluginLog.Warning($"[wheel] get_states failed: {err}");
-                    return null;
-                }
-
-                using var doc = System.Text.Json.JsonDocument.Parse(statesJson);
-                foreach (var st in doc.RootElement.EnumerateArray())
-                {
-                    var id = st.GetPropertyOrDefault("entity_id");
-                    if (!String.Equals(id, entityId, StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    if (st.TryGetProperty("attributes", out var attrs) &&
-                        attrs.ValueKind == System.Text.Json.JsonValueKind.Object &&
-                        attrs.TryGetProperty("brightness", out var br) &&
-                        br.ValueKind == System.Text.Json.JsonValueKind.Number)
-                    {
-                        var b = HSBHelper.Clamp(br.GetInt32(), 0, 255);
-                        PluginLog.Info($"[wheel] HA reports brightness={b} for {entityId}");
-                        return b;
-                    }
-
-                    // When off, HA often omits brightness entirely → treat as 0
-                    var stateStr = st.TryGetProperty("state", out var s) ? s.GetString() : null;
-                    if (String.Equals(stateStr, "off", StringComparison.OrdinalIgnoreCase))
-                        return 0;
-
-                    return null;
-                }
-                return null;
-            }
-            catch (Exception ex)
-            {
-                PluginLog.Warning(ex, "[wheel] GetBrightnessFromHa exception");
-                return null;
-            }
-        }
 
         private void OnHaBrightnessChanged(string entityId, int? bri)
         {
@@ -1658,22 +1593,22 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
         private void CancelEntityTimers(String entityId)
-{
-    if (String.IsNullOrEmpty(entityId))
-        return;
+        {
+            if (String.IsNullOrEmpty(entityId))
+                return;
 
-    _brightnessSender?.Cancel(entityId);
-    _tempSender?.Cancel(entityId);
-    _hsSender?.Cancel(entityId);
+            _brightnessSender?.Cancel(entityId);
+            _tempSender?.Cancel(entityId);
+            _hsSender?.Cancel(entityId);
 
-    lock (_sendGate)
+            lock (_sendGate)
             {
                 if (_sendTimers.TryGetValue(entityId, out var t))
                 { try { t.Stop(); } catch { } }
                 if (_reconcileTimers != null && _reconcileTimers.TryGetValue(entityId, out var r))
                 { try { r.Stop(); } catch { } }
             }
-}
+        }
 
 
 
