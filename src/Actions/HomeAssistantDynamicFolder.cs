@@ -139,7 +139,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private readonly Object _sendGate = new Object();
 
         // Tune these if you want
-        private const Int32 SendDebounceMs = 30; // how long to wait after the last tick before sending
+        private const Int32 SendDebounceMs = 10; // how long to wait after the last tick before sending
         private const Int32 ReconcileIdleMs = 500; // idle pause before doing a single get_states as truth
         private const Int32 MaxPctPerEvent = 10;  // cap huge coalesced diffs to keep UI sane
 
@@ -926,6 +926,7 @@ namespace Loupedeck.HomeAssistantPlugin
             // Enter device view
             if (actionParameter.StartsWith(PfxDevice, StringComparison.OrdinalIgnoreCase))
             {
+                PluginLog.Info($"Entering Device view");
                 var entityId = actionParameter.Substring(PfxDevice.Length);
                 if (this._lightsByEntity.ContainsKey(entityId))
                 {
@@ -1787,27 +1788,22 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
         private void CancelEntityTimers(String entityId)
-        {
+{
+    if (String.IsNullOrEmpty(entityId))
+        return;
 
-            _brightnessSender?.Cancel(entityId);
+    _brightnessSender?.Cancel(entityId);
 
-            if (String.IsNullOrEmpty(entityId))
-                return;
-            lock (_sendGate)
-            {
-                if (_sendTimers.TryGetValue(entityId, out var t))
-                { try { t.Stop(); } catch { } }
-                if (_reconcileTimers != null && _reconcileTimers.TryGetValue(entityId, out var r))
-                { try { r.Stop(); } catch { } }
-                if (_sendHueTimers.TryGetValue(entityId, out var tH))
-                { try { tH.Stop(); } catch { } }
+    lock (_sendGate)
+    {
+        if (_sendTimers.TryGetValue(entityId, out var t)) { try { t.Stop(); } catch { } }
+        if (_reconcileTimers != null && _reconcileTimers.TryGetValue(entityId, out var r)) { try { r.Stop(); } catch { } }
+        if (_sendHueTimers.TryGetValue(entityId, out var tH)) { try { tH.Stop(); } catch { } }
+        if (_sendTempTimers.TryGetValue(entityId, out var t2)) { try { t2.Stop(); } catch { } }
+        if (_reconcileTempTimers != null && _reconcileTempTimers.TryGetValue(entityId, out var r2)) { try { r2.Stop(); } catch { } }
+    }
+}
 
-                if (_sendTempTimers.TryGetValue(entityId, out var t2))
-                { try { t2.Stop(); } catch { } }
-                if (_reconcileTempTimers != null && _reconcileTempTimers.TryGetValue(entityId, out var r2))
-                { try { r2.Stop(); } catch { } }
-            }
-        }
 
 
 
