@@ -865,7 +865,18 @@ namespace Loupedeck.HomeAssistantPlugin
             if (actionParameter.StartsWith(PfxActOn, StringComparison.OrdinalIgnoreCase))
             {
                 var entityId = actionParameter.Substring(PfxActOn.Length);
-                this._lightSvc.TurnOnAsync(entityId);
+                // Use cached brightness if available and the light supports it.
+                JsonElement? data = null;
+                var caps = GetCaps(entityId);
+
+                if (caps.Brightness && _hsbByEntity.TryGetValue(entityId, out var hsb))
+                {
+                    // HA can treat brightness=0 as effectively off; bump to at least 1 when turning on.
+                    var bri = HSBHelper.Clamp(Math.Max(1, hsb.B), 1, 255);
+                    data = System.Text.Json.JsonSerializer.SerializeToElement(new { brightness = bri });
+                }
+
+                _ = _lightSvc.TurnOnAsync(entityId, data); // fire-and-forget like before
                 return;
             }
             if (actionParameter.StartsWith(PfxActOff, StringComparison.OrdinalIgnoreCase))
