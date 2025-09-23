@@ -55,11 +55,11 @@ namespace Loupedeck.HomeAssistantPlugin
         private readonly Dictionary<String, (Double H, Double S, Int32 B)> _hsbByEntity
             = new Dictionary<String, (Double H, Double S, Int32 B)>(StringComparer.OrdinalIgnoreCase);
 
-        // --- Capability model per light ---
-        private record LightCaps(Boolean OnOff, Boolean Brightness, Boolean ColorTemp, Boolean ColorHs);
-
         private readonly Dictionary<String, LightCaps> _capsByEntity =
             new(StringComparer.OrdinalIgnoreCase);
+
+        private readonly CapabilityService _capSvc = new();
+
 
         private LightCaps GetCaps(String eid) =>
             this._capsByEntity.TryGetValue(eid, out var c)
@@ -1172,46 +1172,12 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                                    : entityId;
 
                     String deviceId = null, deviceName = "", mf = "", model = "";
-                    // --- Capabilities from supported_color_modes (preferred) or heuristics fallback ---
-                    Boolean onoff = false, briCap = false, ctemp = false, color = false;
+                    // --- Capabilities (centralized) ---
+                    var caps = this._capSvc.ForLight(attrs);
+                    this._capsByEntity[entityId] = caps;
 
-                    if (attrs.ValueKind == JsonValueKind.Object &&
-                        attrs.TryGetProperty("supported_color_modes", out var scm) &&
-                        scm.ValueKind == JsonValueKind.Array)
-                    {
-                        var modes = new HashSet<String>(StringComparer.OrdinalIgnoreCase);
-                        foreach (var m in scm.EnumerateArray())
-                        {
-                            if (m.ValueKind == JsonValueKind.String)
-                            {
-                                modes.Add(m.GetString() ?? "");
-                            }
-                        }
+                    PluginLog.Info($"[Caps] {entityId} caps: onoff={caps.OnOff} bri={caps.Brightness} ctemp={caps.ColorTemp} color={caps.ColorHs}");
 
-                        onoff = modes.Contains("onoff");
-                        ctemp = modes.Contains("color_temp");
-                        color = modes.Contains("hs") || modes.Contains("rgb") || modes.Contains("xy");
-                        // Brightness is implied by many color modes; be liberal here:
-                        briCap = modes.Contains("brightness") || color || ctemp || !onoff;
-                    }
-                    else
-                    {
-                        // Heuristic fallback when supported_color_modes is missing
-                        briCap = attrs.ValueKind == JsonValueKind.Object && attrs.TryGetProperty("brightness", out _);
-                        ctemp = attrs.ValueKind == JsonValueKind.Object && (
-                                    attrs.TryGetProperty("min_mireds", out _) ||
-                                    attrs.TryGetProperty("max_mireds", out _) ||
-                                    attrs.TryGetProperty("color_temp", out _) ||
-                                    attrs.TryGetProperty("color_temp_kelvin", out _));
-                        color = attrs.ValueKind == JsonValueKind.Object && (
-                                    attrs.TryGetProperty("hs_color", out _) ||
-                                    attrs.TryGetProperty("rgb_color", out _) ||
-                                    attrs.TryGetProperty("xy_color", out _));
-                        onoff = !briCap && !ctemp && !color;
-                    }
-
-                    this._capsByEntity[entityId] = new LightCaps(onoff, briCap, ctemp, color);
-                    PluginLog.Info($"[Caps] {entityId} caps: onoff={onoff} bri={briCap} ctemp={ctemp} color={color}");
 
 
                     if (entityDevice.TryGetValue(entityId, out var map) && !String.IsNullOrEmpty(map.deviceId))
@@ -1289,7 +1255,7 @@ private readonly IHaClient _ha; // adapter over HaWebSocketClient
                     this._hsbByEntity[entityId] = (h, sat, bri); // 👈 ALWAYS set B now
                                                                  //_tempMiredByEntity[entityId] = (minM, maxM, curM);
                                                                  // Only keep a temp cache if the light supports color temperature
-                    if (ctemp)
+                    if (caps.ColorTemp)
                     {
                         this._tempMiredByEntity[entityId] = (minM, maxM, curM);
                     }
