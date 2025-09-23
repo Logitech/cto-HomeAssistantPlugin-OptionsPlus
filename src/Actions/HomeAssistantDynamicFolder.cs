@@ -4,7 +4,6 @@ namespace Loupedeck.HomeAssistantPlugin
     using System.Collections.Generic;
     using System.Text.Json;
     using System.Threading;
-    using System.Threading.Tasks; // for async lambda in DebouncedSender
 
 
 
@@ -25,17 +24,8 @@ namespace Loupedeck.HomeAssistantPlugin
         );
 
 
-        private readonly BitmapImage _bulbIconImg;
-        private readonly BitmapImage _BackIconImg;
-        private readonly BitmapImage _bulbOnImg;
-        private readonly BitmapImage _bulbOffImg;
-        private readonly BitmapImage _brightnessImg;
-        private readonly BitmapImage _retryImg;
-        private readonly BitmapImage _saturationImg;
-        private readonly BitmapImage _issueStatusImg;
-        private readonly BitmapImage _temperatureImg;
-        private readonly BitmapImage _onlineStatusImg;
-        private readonly BitmapImage _hueImg;
+        private readonly IconService _icons;
+
 
 
 
@@ -213,178 +203,78 @@ namespace Loupedeck.HomeAssistantPlugin
             if (actionParameter == AdjBri)
             {
                 var bri = 128;
-
-                if (this._inDeviceView &&
-                    !String.IsNullOrEmpty(this._currentEntityId) &&
-                    this._hsbByEntity.TryGetValue(this._currentEntityId, out var hsbLocal))
-                {
+                if (_inDeviceView && !string.IsNullOrEmpty(_currentEntityId) &&
+                    _hsbByEntity.TryGetValue(_currentEntityId, out var hsbLocal))
                     bri = hsbLocal.B;
-                }
 
-                var pct = (Int32)Math.Round(bri * 100.0 / 255.0);
+                var pct = (int)Math.Round(bri * 100.0 / 255.0);
 
-                Int32 r, g, b;
+                // Your warmish background logic preserved
+                int r, g, b;
                 if (bri <= 0)
-                {
-                    // Make background completely black at 0 brightness
-                    r = g = b = 0;
-                }
+                { r = g = b = 0; }
                 else
-                {
-                    // Same “warmer/brighter” mapping as before
-                    r = Math.Min(30 + pct * 2, 255);
-                    g = Math.Min(30 + pct, 220);
-                    b = 30;
-                }
+                { r = Math.Min(30 + (pct * 2), 255); g = Math.Min(30 + pct, 220); b = 30; }
 
-                using (var bb = new BitmapBuilder(imageSize))
-                {
-                    bb.Clear(new BitmapColor(r, g, b));
-
-                    if (this._brightnessImg != null)
-                    {
-                        var pad = (Int32)Math.Round(Math.Min(bb.Width, bb.Height) * 0.10); // 10% padding
-                        var side = Math.Min(bb.Width, bb.Height) - pad * 2;
-                        var x = (bb.Width - side) / 2;
-                        var y = (bb.Height - side) / 2;
-
-                        bb.DrawImage(this._brightnessImg, x, y, side, side);
-                    }
-                    else
-                    {
-                        bb.DrawText("☀", fontSize: 58, color: new BitmapColor(255, 235, 140));
-                    }
-
-                    return bb.ToImage();
-                }
+                using var bb = new BitmapBuilder(imageSize);
+                bb.Clear(new BitmapColor(r, g, b));
+                return TilePainter.IconOrGlyph(bb, _icons.Get(IconId.Brightness), "☀", padPct: 10, font: 58);
             }
 
 
 
             if (actionParameter == AdjSat)
             {
-                Double H = 0, S = 100;
-                var B = 128;
-
-                if (this._inDeviceView &&
-                    !String.IsNullOrEmpty(this._currentEntityId) &&
-                    this._hsbByEntity.TryGetValue(this._currentEntityId, out var hsb))
-                {
-                    H = hsb.H;
-                    S = Math.Max(0, hsb.S);
-                    B = hsb.B;
-                }
+                double H = 0, S = 100;
+                int B = 128;
+                if (_inDeviceView && !string.IsNullOrEmpty(_currentEntityId) &&
+                    _hsbByEntity.TryGetValue(_currentEntityId, out var h))
+                { H = h.H; S = Math.Max(0, h.S); B = h.B; }
 
                 var (r, g, b) = HSBHelper.HsbToRgb(HSBHelper.Wrap360(H), S, 100.0 * B / 255.0);
 
-                using (var bb = new BitmapBuilder(imageSize))
-                {
-                    bb.Clear(new BitmapColor(r, g, b));
-
-                    if (this._saturationImg != null)
-                    {
-                        // Centered icon with a little padding; scales to fit
-                        var pad = (Int32)Math.Round(Math.Min(bb.Width, bb.Height) * 0.08);
-                        var side = Math.Min(bb.Width, bb.Height) - pad * 2;
-                        var x = (bb.Width - side) / 2;
-                        var y = (bb.Height - side) / 2;
-
-                        bb.DrawImage(this._saturationImg, x, y, side, side);
-                    }
-                    else
-                    {
-                        // Fallback glyph if icon not available
-                        bb.DrawText("S", fontSize: 56, color: new BitmapColor(255, 255, 255));
-                    }
-
-                    return bb.ToImage();
-                }
+                using var bb = new BitmapBuilder(imageSize);
+                bb.Clear(new BitmapColor(r, g, b));
+                return TilePainter.IconOrGlyph(bb, _icons.Get(IconId.Saturation), "S", padPct: 8, font: 56);
             }
+
 
             if (actionParameter == AdjTemp)
             {
-                // Current temperature in Kelvin (default 3000K)
                 var k = 3000;
-                if (this._inDeviceView &&
-                    !String.IsNullOrEmpty(this._currentEntityId) &&
-                    this.TryGetCachedTempMired(this._currentEntityId, out var t))
-                {
+                if (_inDeviceView && !string.IsNullOrEmpty(_currentEntityId) &&
+                    TryGetCachedTempMired(_currentEntityId, out var t))
                     k = ColorTemp.MiredToKelvin(t.Cur);
-                }
 
-                // Clamp to a sane range (2000K..6500K) before mapping
                 k = Math.Max(2000, Math.Min(6500, k));
+                var warmness = HSBHelper.Clamp((6500 - k) / 45, 0, 100);
 
-                // Map 2000K..6500K to a warmness scale (0..100)
-                // higher warmness => warmer background
-                var warmness = HSBHelper.Clamp((6500 - k) / 45, 0, 100); // same idea as your code
+                int r = Math.Min(35 + warmness * 2, 255);
+                int g = Math.Min(35 + (100 - warmness), 255);
+                int b = Math.Min(35 + (100 - warmness) / 2, 255);
 
-                // Background tint based on warmness (keep your style)
-                var r = Math.Min(35 + warmness * 2, 255);
-                var g = Math.Min(35 + (100 - warmness), 255);
-                var b = Math.Min(35 + (100 - warmness) / 2, 255);
-
-                using (var bb = new BitmapBuilder(imageSize))
-                {
-                    bb.Clear(new BitmapColor(r, g, b));
-
-                    if (this._temperatureImg != null)
-                    {
-                        // Center and scale icon with ~10% padding
-                        var pad = (Int32)Math.Round(Math.Min(bb.Width, bb.Height) * 0.10);
-                        var side = Math.Min(bb.Width, bb.Height) - pad * 2;
-                        var x = (bb.Width - side) / 2;
-                        var y = (bb.Height - side) / 2;
-
-                        bb.DrawImage(this._temperatureImg, x, y, side, side);
-                    }
-                    else
-                    {
-                        // Fallback glyph if icon is missing
-                        bb.DrawText("⟷", fontSize: 58, color: new BitmapColor(255, 240, 180));
-                    }
-
-                    return bb.ToImage();
-                }
+                using var bb = new BitmapBuilder(imageSize);
+                bb.Clear(new BitmapColor(r, g, b));
+                return TilePainter.IconOrGlyph(bb, _icons.Get(IconId.Temperature), "⟷", padPct: 10, font: 58);
             }
+
 
 
             if (actionParameter == AdjHue)
             {
-                Double H = 0, S = 100;
-                var B = 128;
-
-                if (this._inDeviceView &&
-                    !String.IsNullOrEmpty(this._currentEntityId) &&
-                    this._hsbByEntity.TryGetValue(this._currentEntityId, out var hsb))
-                {
-                    H = hsb.H;
-                    S = Math.Max(40, hsb.S); // ensure some saturation for preview
-                    B = hsb.B;
-                }
+                double H = 0, S = 100;
+                int B = 128;
+                if (_inDeviceView && !string.IsNullOrEmpty(_currentEntityId) &&
+                    _hsbByEntity.TryGetValue(_currentEntityId, out var h))
+                { H = h.H; S = Math.Max(40, h.S); B = h.B; }
 
                 var (r, g, b) = HSBHelper.HsbToRgb(HSBHelper.Wrap360(H), S, 100.0 * B / 255.0);
 
-                var bb = new BitmapBuilder(imageSize);
+                using var bb = new BitmapBuilder(imageSize);
                 bb.Clear(new BitmapColor(r, g, b));
-
-                if (this._hueImg != null)
-                {
-                    // Draw icon centered with a little padding; scales to fit square
-                    var pad = (Int32)Math.Round(Math.Min(bb.Width, bb.Height) * 0.08); // ~8% padding
-                    var side = Math.Min(bb.Width, bb.Height) - pad * 2;
-                    var x = (bb.Width - side) / 2;
-                    var y = (bb.Height - side) / 2;
-                    bb.DrawImage(this._hueImg, x, y, side, side);
-                }
-                else
-                {
-                    // Fallback glyph
-                    bb.DrawText("H", fontSize: 56, color: new BitmapColor(255, 255, 255));
-                }
-
-                return bb.ToImage();
+                return TilePainter.IconOrGlyph(bb, _icons.Get(IconId.Hue), "H", padPct: 8, font: 56);
             }
+
 
 
 
@@ -546,52 +436,27 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
 
-        private BitmapImage LoadIcon(String resourceName, out Boolean ok)
-        {
-            var img = PluginResources.ReadImage(resourceName);
-            if (img == null)
-            {
-                PluginLog.Error($"[HA] Embedded icon not found: {resourceName}");
-                ok = false;
-            }
-            else
-            {
-                PluginLog.Info($"[HA] Embedded icon loaded OK: {resourceName}");
-                ok = true;
-            }
-            return img;
-        }
+        
 
         public HomeAssistantDynamicFolder()
         {
             this.DisplayName = "Home Assistant";
             this.GroupName = "Smart Home";
 
-            try
+            _icons = new IconService(new Dictionary<string, string>
             {
-                //var names = string.Join(", ", typeof(HomeAssistantDynamicFolder).Assembly.GetManifestResourceNames());
-                //PluginLog.Info("[HA RES] " + names);
-
-                // Idempotent; safe even if the plugin already called it
-                PluginResources.Init(typeof(HomeAssistantPlugin).Assembly);
-
-                Boolean _;
-                this._bulbIconImg      = this.LoadIcon("light_bulb_icon.png", out _);
-                this._BackIconImg      = this.LoadIcon("back_icon.png", out _);
-                this._bulbOnImg        = this.LoadIcon("light_on_icon.png", out _);
-                this._bulbOffImg       = this.LoadIcon("light_off_icon.png", out _);
-                this._brightnessImg    = this.LoadIcon("brightness_icon.png", out _);
-                this._retryImg         = this.LoadIcon("reload_icon.png", out _);
-                this._saturationImg    = this.LoadIcon("saturation_icon.png", out _);
-                this._issueStatusImg   = this.LoadIcon("issue_status_icon.png", out _);
-                this._temperatureImg   = this.LoadIcon("temperature_icon.png", out _);
-                this._onlineStatusImg  = this.LoadIcon("online_status_icon.png", out _);
-                this._hueImg           = this.LoadIcon("hue_icon.png", out _);
-            }
-            catch (Exception ex)
-            {
-                PluginLog.Error(ex, "[HA] ctor: failed to read embedded icon — continuing without it");
-            }
+                { IconId.Bulb,        "light_bulb_icon.png" },
+                { IconId.Back,        "back_icon.png" },
+                { IconId.BulbOn,      "light_on_icon.png" },
+                { IconId.BulbOff,     "light_off_icon.png" },
+                { IconId.Brightness,  "brightness_icon.png" },
+                { IconId.Retry,       "reload_icon.png" },
+                { IconId.Saturation,  "saturation_icon.png" },
+                { IconId.Issue,       "issue_status_icon.png" },
+                { IconId.Temperature, "temperature_icon.png" },
+                { IconId.Online,      "online_status_icon.png" },
+                { IconId.Hue,         "hue_icon.png" },
+            });
 
             // Wrap the raw client so the service can be unit-tested / mocked later
             this._ha = new HaClientAdapter(this._client);
@@ -701,47 +566,23 @@ namespace Loupedeck.HomeAssistantPlugin
 
             if (actionParameter == CmdBack)
             {
-                return this._BackIconImg;
+                return _icons.Get(IconId.Back);
             }
             if (actionParameter == CmdRetry)
             {
-                return this._retryImg;
+                return _icons.Get(IconId.Retry);
             }
 
             // STATUS (unchanged)
             if (actionParameter == CmdStatus)
             {
                 var ok = HealthBus.State == HealthState.Ok;
-
                 using (var bb = new BitmapBuilder(imageSize))
                 {
-                    // Use the corresponding status image as background, or fallback to solid color
-                    if (ok)
-                    {
-                        if (this._onlineStatusImg != null)
-                        {
-                            bb.SetBackgroundImage(this._onlineStatusImg);
-                        }
-                        else
-                        {
-                            bb.Clear(new BitmapColor(0, 160, 60)); // fallback green
-                        }
-                    }
-                    else
-                    {
-                        if (this._issueStatusImg != null)
-                        {
-                            bb.SetBackgroundImage(this._issueStatusImg);
-                        }
-                        else
-                        {
-                            bb.Clear(new BitmapColor(200, 30, 30)); // fallback red
-                        }
-                    }
-
-                    // Keep the label on top
+                    var okImg = _icons.Get(IconId.Online);
+                    var issueImg = _icons.Get(IconId.Issue);
+                    TilePainter.Background(bb, ok ? okImg : issueImg, ok ? new BitmapColor(0, 160, 60) : new BitmapColor(200, 30, 30));
                     bb.DrawText(ok ? "ONLINE" : "ISSUE", fontSize: 22, color: new BitmapColor(255, 255, 255));
-
                     return bb.ToImage();
                 }
             }
@@ -750,17 +591,17 @@ namespace Loupedeck.HomeAssistantPlugin
             // DEVICE tiles (light bulbs)
             if (actionParameter.StartsWith(PfxDevice, StringComparison.OrdinalIgnoreCase))
             {
-                return this._bulbIconImg;
+                return _icons.Get(IconId.Bulb);
             }
 
             // ACTION tiles
             if (actionParameter.StartsWith(PfxActOn, StringComparison.OrdinalIgnoreCase))
             {
-                return this._bulbOnImg;
+                return _icons.Get(IconId.BulbOn);
             }
             if (actionParameter.StartsWith(PfxActOff, StringComparison.OrdinalIgnoreCase))
             {
-                return this._bulbOffImg;
+                return _icons.Get(IconId.BulbOff);
             }
 
             // Retry: no custom image
