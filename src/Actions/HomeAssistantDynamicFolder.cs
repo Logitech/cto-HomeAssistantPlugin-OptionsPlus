@@ -93,6 +93,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private const Int32 DefaultMinMireds = 153;     // ~6500K
         private const Int32 DefaultMaxMireds = 500;     // ~2000K
         private const Int32 DefaultWarmMired = 370;     // ~2700K (UI fallback)
+        private readonly DebouncedSender<string, int> _tempSender;
 
         // ===== HUE control (rotation-only) =====
         private const string AdjHue = "adj:ha-hue";   // wheel id
@@ -106,15 +107,11 @@ namespace Loupedeck.HomeAssistantPlugin
         private const int SatStepPctPerTick = 1;   // feels smooth
         private const int MaxSatPctPerEvent = 15;  // cap burst coalesce
 
+        private readonly DebouncedSender<string, Hs>  _hsSender; // for both Hue and Sat
+
         // Target saturation (per-entity) to support debounced sending
         private readonly Dictionary<string, double> _sTargetPct =
             new(StringComparer.OrdinalIgnoreCase);
-
-
-        // Debounce + targets
-        private readonly Dictionary<string, double> _hTargetDeg = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, (double H, double S)> _hsLastSent = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, System.Timers.Timer> _sendHueTimers = new(StringComparer.OrdinalIgnoreCase);
 
 
 
@@ -123,14 +120,7 @@ namespace Loupedeck.HomeAssistantPlugin
             new(StringComparer.OrdinalIgnoreCase);
 
 
-        // Debounce/send machinery
-        private readonly Dictionary<String, Int32> _tempTargetMired = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<String, Int32> _tempLastSentMired = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<String, System.Timers.Timer> _sendTempTimers =
-            new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<String, System.Timers.Timer> _reconcileTempTimers =
-            new(StringComparer.OrdinalIgnoreCase);
-
+    
         // Debounced, target-based brightness sending
         private readonly Dictionary<String, Int32> _briTarget = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<String, Int32> _briLastSent = new(StringComparer.OrdinalIgnoreCase);
@@ -496,13 +486,12 @@ namespace Loupedeck.HomeAssistantPlugin
 
                     // Optimistic UI
                     this._hsbByEntity[eid] = (hsb.H, newS, hsb.B);
-                    _sTargetPct[eid] = newS;
                     this.AdjustmentValueChanged(AdjSat);
                     this.AdjustmentValueChanged(AdjHue);
 
+                    var curH = this._hsbByEntity.TryGetValue(eid, out var hsb3) ? hsb3.H : 0;
+                    _hsSender.Set(eid, new Hs(curH, newS));
 
-                    // Debounced send — reuse the same sender as Hue
-                    ScheduleHueSend(eid, SendDebounceMs); // <- intentionally reusing Hue's scheduling/sender
 
                 }
             }
@@ -525,12 +514,12 @@ namespace Loupedeck.HomeAssistantPlugin
 
                     // Optimistic UI
                     this._hsbByEntity[eid] = (newH, hsb.S, hsb.B);
-                    _hTargetDeg[eid] = newH;
                     this.AdjustmentValueChanged(AdjHue);
                     this.AdjustmentValueChanged(AdjSat);
 
-                    // Debounced send
-                    ScheduleHueSend(eid, SendDebounceMs);
+                    var curS = this._hsbByEntity.TryGetValue(eid, out var hsb2) ? hsb2.S : 100;
+                    _hsSender.Set(eid, new Hs(newH, curS));
+
                 }
 
             }
@@ -555,11 +544,8 @@ namespace Loupedeck.HomeAssistantPlugin
 
                     // Optimistic UI
                     SetCachedTempMired(eid, null, null, targetM);
-                    _tempTargetMired[eid] = targetM;
                     this.AdjustmentValueChanged(AdjTemp);
-
-                    // Debounced send
-                    ScheduleTempSend(eid, SendDebounceMs);
+                    _tempSender.Set(eid, targetM); // debounce + send as kelvin
                 }
             }
 
@@ -663,38 +649,99 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
             _brightnessSender = new DebouncedSender<string, int>(SendDebounceMs, async (entityId, target) =>
-    {
-        try
-        {
-            if (!this._client.IsAuthenticated)
-            {
-                HealthBus.Error("Connection lost");
-                return;
-            }
+                {
+                try
+                {
+                    if (!this._client.IsAuthenticated)
+                    {
+                        HealthBus.Error("Connection lost");
+                        return;
+                    }
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
-            var data = System.Text.Json.JsonSerializer.SerializeToElement(new { brightness = target });
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+                    var data = System.Text.Json.JsonSerializer.SerializeToElement(new { brightness = target });
 
-            var (ok, err) = await this._client.CallServiceAsync("light", "turn_on", entityId, data, cts.Token)
-                                           .ConfigureAwait(false);
+                    var (ok, err) = await this._client.CallServiceAsync("light", "turn_on", entityId, data, cts.Token)
+                                                .ConfigureAwait(false);
 
-            if (ok)
+                    if (ok)
+                    {
+                        lock (_sendGate)
+                        { _briLastSent[entityId] = target; }
+                        PluginLog.Info($"[wheel/send] brightness={target} -> {entityId} OK");
+                    }
+                    else
+                    {
+                        PluginLog.Warning($"[wheel/send] failed: {err}");
+                        HealthBus.Error(err ?? "Brightness change failed");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    PluginLog.Warning(ex, "[wheel] brightness send exception");
+                }
+            });
+
+
+            _tempSender = new DebouncedSender<string, int>(SendDebounceMs, async (entityId, targetMired) =>
+                {
+                    try
+                    {
+                        if (!this._client.IsAuthenticated)
+                        { HealthBus.Error("Connection lost"); return; }
+                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+
+                        var kelvin = ColorTemp.MiredToKelvin(targetMired);
+                        var data = System.Text.Json.JsonSerializer.SerializeToElement(new { color_temp_kelvin = kelvin });
+
+                        var (ok, err) = await this._client.CallServiceAsync("light", "turn_on", entityId, data, cts.Token)
+                                                        .ConfigureAwait(false);
+                        if (ok)
+                        {
+                            PluginLog.Info($"[temp/send] {kelvin}K ({targetMired} mired) -> {entityId} OK");
+                        }
+                        else
+                        {
+                            PluginLog.Warning($"[temp/send] failed: {err}");
+                            HealthBus.Error(err ?? "Temp change failed");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        PluginLog.Warning(ex, "[temp] send exception");
+                    }
+                });
+
+            _hsSender = new DebouncedSender<string, Hs>(SendDebounceMs, async (entityId, hs) =>
             {
-                lock (_sendGate)
-                { _briLastSent[entityId] = target; }
-                PluginLog.Info($"[wheel/send] brightness={target} -> {entityId} OK");
-            }
-            else
-            {
-                PluginLog.Warning($"[wheel/send] failed: {err}");
-                HealthBus.Error(err ?? "Brightness change failed");
-            }
-        }
-        catch (Exception ex)
-        {
-            PluginLog.Warning(ex, "[wheel] brightness send exception");
-        }
-    });
+                try
+                {
+                    if (!this._client.IsAuthenticated)
+                    { HealthBus.Error("Connection lost"); return; }
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+
+                    // HA expects hs_color: [H, S]
+                    var data = System.Text.Json.JsonSerializer.SerializeToElement(
+                        new { hs_color = new object[] { HSBHelper.Wrap360(hs.H), HSBHelper.Clamp(hs.S, 0, 100) } });
+
+                    var (ok, err) = await this._client.CallServiceAsync("light", "turn_on", entityId, data, cts.Token)
+                                                      .ConfigureAwait(false);
+                    if (ok)
+                    {
+                        PluginLog.Info($"[color/send] hs=[{hs.H:F0},{hs.S:F0}] -> {entityId} OK");
+                    }
+                    else
+                    {
+                        PluginLog.Warning($"[color/send] failed: {err}");
+                        HealthBus.Error(err ?? "Color change failed");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    PluginLog.Warning(ex, "[color] send exception");
+                }
+            });
+
 
         }
 
@@ -1071,28 +1118,8 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 // New debounced sender
                 _brightnessSender?.Dispose();
-
-                // Also clean up other timer maps to avoid leaks
-                foreach (var t in _sendHueTimers.Values)
-                { try { t.Stop(); t.Dispose(); } catch { } }
-                _sendHueTimers.Clear();
-
-                foreach (var t in _sendTempTimers.Values)
-                { try { t.Stop(); t.Dispose(); } catch { } }
-                _sendTempTimers.Clear();
-
-                if (_reconcileTimers != null)
-                {
-                    foreach (var t in _reconcileTimers.Values)
-                    { try { t.Stop(); t.Dispose(); } catch { } }
-                    _reconcileTimers.Clear();
-                }
-                if (_reconcileTempTimers != null)
-                {
-                    foreach (var t in _reconcileTempTimers.Values)
-                    { try { t.Stop(); t.Dispose(); } catch { } }
-                    _reconcileTempTimers.Clear();
-                }
+                _tempSender?.Dispose();
+                _hsSender?.Dispose();
             }
 
             HealthBus.HealthChanged -= this.OnHealthChanged;
@@ -1564,163 +1591,6 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
-        private void ScheduleHueSend(String entityId, Int32 delayMs)
-        {
-            lock (_sendGate)
-            {
-                if (!_sendHueTimers.TryGetValue(entityId, out var t))
-                {
-                    t = new System.Timers.Timer { AutoReset = false };
-                    t.Elapsed += (s, e) => SafeFireHueSend(entityId);
-                    _sendHueTimers[entityId] = t;
-                }
-                t.Interval = delayMs;
-                t.Stop();
-                t.Start();
-            }
-        }
-
-        private void SafeFireHueSend(String entityId)
-        {
-            try
-            { SendLatestHueAsync(entityId).GetAwaiter().GetResult(); }
-            catch (Exception ex) { PluginLog.Warning(ex, $"[hue] send timer for {entityId}"); }
-        }
-
-        private async Task SendLatestHueAsync(String entityId)
-        {
-            double H, S;
-
-            lock (_sendGate)
-            {
-                if (!_hTargetDeg.TryGetValue(entityId, out H))
-                {
-                    // We still want to allow a “sat-only” change to send HS; if no hue target,
-                    // take H from cache (or 0).
-                    H = this._hsbByEntity.TryGetValue(entityId, out var hsbH) ? hsbH.H : 0;
-                }
-
-                // PREFER saturation target if set; else take from cache (or 100 if unknown)
-                if (_sTargetPct.TryGetValue(entityId, out var st))
-                    S = st;
-                else if (this._hsbByEntity.TryGetValue(entityId, out var hsb))
-                    S = hsb.S;
-                else
-                    S = 100;
-
-                // Skip if negligible vs last-sent
-                if (_hsLastSent.TryGetValue(entityId, out var last) &&
-                    Math.Abs(last.H - H) < 0.5 && Math.Abs(last.S - S) < 0.5)
-                    return;
-            }
-
-            if (!this._client.IsAuthenticated)
-            {
-                HealthBus.Error("Connection lost");
-                return;
-            }
-
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
-            var data = System.Text.Json.JsonSerializer.SerializeToElement(new { hs_color = new object[] { H, S } });
-
-            var (ok, err) = await this._client.CallServiceAsync("light", "turn_on", entityId, data, cts.Token);
-            if (ok)
-            {
-                lock (_sendGate)
-                { _hsLastSent[entityId] = (H, S); }
-                PluginLog.Info($"[color/send] hs_color=[{H:F0},{S:F0}] -> {entityId} OK");
-            }
-            else
-            {
-                PluginLog.Warning($"[color/send] failed: {err}");
-                HealthBus.Error(err ?? "Color change failed");
-            }
-        }
-
-
-
-
-        private void ScheduleTempSend(String entityId, Int32 delayMs)
-        {
-            lock (_sendGate)
-            {
-                if (!_sendTempTimers.TryGetValue(entityId, out var t))
-                {
-                    t = new System.Timers.Timer { AutoReset = false };
-                    t.Elapsed += (s, e) => SafeFireTempSend(entityId);
-                    _sendTempTimers[entityId] = t;
-                }
-                t.Interval = delayMs;
-                t.Stop();
-                t.Start();
-            }
-        }
-
-        private void SafeFireTempSend(String entityId)
-        {
-            try
-            { SendLatestTempAsync(entityId).GetAwaiter().GetResult(); }
-            catch (Exception ex) { PluginLog.Warning(ex, $"[temp] send timer for {entityId}"); }
-        }
-
-        private async System.Threading.Tasks.Task SendLatestTempAsync(String entityId)
-        {
-            Int32 targetM;
-            lock (_sendGate)
-            {
-                if (!_tempTargetMired.TryGetValue(entityId, out targetM))
-                    return;
-                if (_tempLastSentMired.TryGetValue(entityId, out var last) && last == targetM)
-                    return;
-            }
-
-            if (!this._client.IsAuthenticated)
-            {
-                HealthBus.Error("Connection lost");
-                return;
-            }
-
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
-            var targetK = ColorTemp.MiredToKelvin(targetM);
-            var data = JsonSerializer.SerializeToElement(new { color_temp_kelvin = targetK });
-
-            var (ok, err) = await this._client.CallServiceAsync("light", "turn_on", entityId, data, cts.Token);
-            if (ok)
-            {
-                lock (_sendGate)
-                { _tempLastSentMired[entityId] = targetM; }
-                PluginLog.Info($"[temp/send] {targetK}K ({targetM} mired) -> {entityId} OK");
-            }
-            else
-            {
-                PluginLog.Warning($"[temp/send] failed: {err}");
-                HealthBus.Error(err ?? "Temp change failed");
-            }
-        }
-
-
-
-
-
-
-        private void SafeFireReconcile(String entityId)
-        {
-            try
-            {
-                var val = GetBrightnessFromHa(entityId);
-                if (val.HasValue)
-                {
-                    SetCachedBrightness(entityId, val.Value);
-                    this.AdjustmentValueChanged(AdjWheel); // redraw value & image
-                    PluginLog.Info($"[wheel/reconcile] HA={val.Value} for {entityId}");
-                }
-            }
-            catch (Exception ex)
-            {
-                PluginLog.Warning(ex, $"[wheel] reconcile timer for {entityId}");
-            }
-        }
-
         private void OnHaBrightnessChanged(string entityId, int? bri)
         {
             // We only care about lights we know
@@ -1793,15 +1663,16 @@ namespace Loupedeck.HomeAssistantPlugin
         return;
 
     _brightnessSender?.Cancel(entityId);
+    _tempSender?.Cancel(entityId);
+    _hsSender?.Cancel(entityId);
 
     lock (_sendGate)
-    {
-        if (_sendTimers.TryGetValue(entityId, out var t)) { try { t.Stop(); } catch { } }
-        if (_reconcileTimers != null && _reconcileTimers.TryGetValue(entityId, out var r)) { try { r.Stop(); } catch { } }
-        if (_sendHueTimers.TryGetValue(entityId, out var tH)) { try { tH.Stop(); } catch { } }
-        if (_sendTempTimers.TryGetValue(entityId, out var t2)) { try { t2.Stop(); } catch { } }
-        if (_reconcileTempTimers != null && _reconcileTempTimers.TryGetValue(entityId, out var r2)) { try { r2.Stop(); } catch { } }
-    }
+            {
+                if (_sendTimers.TryGetValue(entityId, out var t))
+                { try { t.Stop(); } catch { } }
+                if (_reconcileTimers != null && _reconcileTimers.TryGetValue(entityId, out var r))
+                { try { r.Stop(); } catch { } }
+            }
 }
 
 
@@ -1828,14 +1699,8 @@ namespace Loupedeck.HomeAssistantPlugin
                 _briTarget?.Remove(entityId);
                 _briLastSent?.Remove(entityId);
 
-                // Temperature
-                _tempTargetMired?.Remove(entityId);
-                _tempLastSentMired?.Remove(entityId);
-
                 // Hue/Saturation
-                _hTargetDeg?.Remove(entityId);
                 _sTargetPct?.Remove(entityId);
-                _hsLastSent?.Remove(entityId);
             }
         }
 
