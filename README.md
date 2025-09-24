@@ -1,8 +1,8 @@
 # Loupedeck × Home Assistant Plugin
 
-Control your Home Assistant lights (and soon, any entity) from your Loupedeck with a fast, optimistic UI, debounced actions, and capability-aware controls. Open the **Home Assistant** dynamic folder to browse **Areas → Lights → Commands** and use dials for brightness, color temperature, hue, and saturation.
+Control your Home Assistant lights (and soon, any entity) from your Creative Console with a fast, optimistic UI, debounced actions, and capability-aware controls. Open the **All Light Controls** dynamic folder to browse **Areas → Lights → Commands** and use the dial for brightness, color temperature, hue, and saturation.
 
-> **Status**: pre-release. Marketplace submission in progress. OSS-ready and actively refactoring for general entities.
+> **Status**: pre-release. For now there is only support for lights. OSS-ready and actively refactoring for general entities. The plugin was only tested on the Creative Console.
 
 ---
 
@@ -30,18 +30,24 @@ Control your Home Assistant lights (and soon, any entity) from your Loupedeck wi
 
 ## Features
 
-* **Area-first navigation**
-  Root view lists all **Home Assistant Areas**. Pick an area → see **lights** in that area → pick a light for **commands/dials**.
-* **Capability-aware controls**
-  Only shows dials/actions a device actually supports (on/off, brightness, color temperature, hue/sat).
-* **Optimistic UI + debounced sends**
-  Dials update instantly, and actions are coalesced to minimize HA traffic.
-* **Resilient WS integration**
-  Separate authenticated WebSocket for requests + event stream listener to keep state fresh.
-* **Typed, testable core**
-  Clear separation between plugin UI and HA core (models, client, event stream, utilities).
-* **Icon + tile helpers**
-  Centralized `IconService` (one-time icon load) and `TilePainter` (DRY image centering & fallback glyphs).
+* **Setup (Action)**
+  A dedicated action to setup the connection with the **Home Assistant hub`**.
+
+* **Run Home Assistant Scripts (Action)**
+  A dedicated action to trigger any **Home Assistant `script.*`** (with optional variables) and stop/toggle when running.
+
+* **Control All Lights (Action) with Area-First Navigation**
+  One action to browse **Areas → Lights → Commands**: pick an area, select a light, then use per-device controls.
+
+* **Capability-Aware Controls**
+  Only shows controls a device actually supports (on/off, brightness, color temperature, hue, saturation).
+
+* **Optimistic UI + Debounced Sends**
+  Dials update instantly while changes are coalesced to reduce Home Assistant traffic and avoid jitter.
+
+* **Resilient WebSocket Integration**
+  Authenticated request channel plus an event listener to keep state fresh.
+
 
 ---
 
@@ -57,7 +63,7 @@ Control your Home Assistant lights (and soon, any entity) from your Loupedeck wi
 
 ## Requirements
 
-* **Loupedeck** software + a compatible Loupedeck device (Live/Live S/CT, etc.).
+* **Loupedeck** software + a compatible Loupedeck device (Creative Console, Live/Live S/CT, etc.).
 * **Home Assistant** with WebSocket API enabled (standard).
 * **Home Assistant Long-Lived Access Token** (Profile → Security).
 * **.NET SDK** 8.0 (recommended) to build from source.
@@ -71,65 +77,125 @@ Control your Home Assistant lights (and soon, any entity) from your Loupedeck wi
 
 * Search for **“Home Assistant”** in the Loupedeck Marketplace and install.
 
+Awesome—here’s the revised **Manual (from source)** section for your README, aligned with Logitech’s docs:
+
+---
+
 ### Manual (from source)
 
-1. Clone this repo.
-2. Build in **Release**:
+1. **Build the plugin (Release)**
 
-   ```bash
-   dotnet build -c Release
-   ```
-3. Deploy the built plugin according to Loupedeck’s plugin install instructions (path varies by version; typically via the Loupedeck UI’s **Developer / Load Plugin** or by placing output in the local Plugins folder).
-4. Restart Loupedeck.
+```bash
+dotnet build -c Release
+```
 
-> Tip: If you’re developing, you can run in Debug and let Loupedeck discover your dev plugin folder.
+2. **Package to a `.lplug4`** using the Logi Plugin Tool
+
+```bash
+logiplugintool pack ./bin/Release/ ./HomeAssistant.lplug4
+```
+
+(Optional) **Verify** the package:
+
+```bash
+logiplugintool verify ./HomeAssistant.lplug4
+```
+
+The `.lplug4` format is a zip-like package with metadata; it’s registered with Logi Plugin Service.
+
+3. **Install**
+   Double-click the generated `.lplug4` file. It will open in **Logi Options+** and guide you through installation.
+
+> Notes:
+>
+> * Keep the package name readable, e.g. `HomeAssistant_1_0.lplug4`.
+> * Ensure `metadata/LoupedeckPackage.yaml` is present and OS targets match your claims.
+
+
+> Tip: If you’re developing, you can run in Debug and let Loupedeck discover your dev plugin folder. See Logi Actions SDK: [text](https://logitech.github.io/actions-sdk-docs/Getting-started/)
 
 ---
 
 ## Quick Start
 
 1. In Loupedeck, open the **Home Assistant** dynamic folder.
+2. Create a **Long-Lived Token** and copy it Home Assistant -> Profile -> Security -> Long-lived access tokens
 2. Press **Configure Home Assistant** action (or open the plugin’s settings):
 
    * **Base URL**: `ws://homeassistant.local:8123/` (or your `wss://` URL)
    * **Long-Lived Token**: paste from HA Profile
    * Click **Test connection**.
-3. Return to the **Home Assistant** dynamic folder:
-
-   * Select an **Area** → pick a **Light** → use **commands/dials**.
-
----
-
-## Controls & Navigation
-
-* **Root (Areas)**
-  Shows all HA areas that contain at least one light (plus a synthetic **(No area)** bucket if needed).
-
-  * Buttons: **Back**, **Status**, one button per **Area**, **Retry**.
-* **Area (Lights)**
-  Lists the lights within the selected area.
-
-  * Buttons: **Back**, **Status**, one button per **Light**.
-* **Device (Commands & Dials)**
-  Per-light controls, depending on capabilities:
-
-  * **On** / **Off** buttons
-  * **Brightness** dial (0..255), **Color Temp** dial (Kelvin/mired), **Hue**, **Saturation** dials
-  * Brightness on **On**: uses cached brightness (min 1) when available
-* **Back** behavior
-  Device → Area → Root → closes folder.
-
-**Status tile** reflects connectivity; press it to see a status message.
+   * If no error appears after short time click save.
+3. Put any **actions** you want into your layout
 
 ---
 
-## Configuration
+## Actions & How to Use Them
 
-### Plugin Settings
+### Configure Home Assistant (one-time setup)
 
-* **Base URL**: `ws://<host>:<port>/` or `wss://...` (the plugin resolves `/api/websocket` behind the scenes).
-* **Token**: Home Assistant **Long-Lived Access Token**.
-* **Test connection**: Attempts WS auth and shows status.
+Use this once to connect the plugin to your HA instance—then you can remove it from your layout (settings persist).
+
+1. Drop **Configure Home Assistant** into any page.
+2. Enter your **HA WebSocket URL** (e.g., `ws://homeassistant.local:8123/` or `wss://...`).
+3. Paste a **Long-Lived Access Token** from your HA Profile.
+4. Click **Test connection**. If no error appears after a short moment, you’re good.
+5. Click **Save**. You may now delete the action from your layout; the plugin will remember your settings.
+
+---
+
+### HA: Run Script
+
+Trigger or stop any `script.*` in Home Assistant.
+
+* **Press once** → runs the selected script (optionally with variables).
+* **Press again while running** → stops the script.
+
+**To configure:**
+
+1. Place **HA: Run Script** on your layout.
+2. In the popup:
+
+   * **Script**: pick from your `script.*` entities (the list auto-loads from HA).
+   * **Variables (JSON)**: optional; e.g. `{"minutes":5,"who":"guest"}`.
+   * **Prefer `script.toggle`**: leave **off** unless you know you need toggle semantics (toggle ignores variables).
+
+---
+
+### All Light Controls (Areas → Lights → Commands)
+
+Browse all lights and control them with capability-aware dials.
+
+1. Add **All Light Controls** to your layout and press it to enter.
+
+2. You’ll see:
+
+   * **Back** — navigates up one level (Device → Area → Root → closes).
+   * **Status** — shows ONLINE/ISSUE; press when ISSUE to surface the error in Options+.
+   * **Retry** — reconnects and reloads data from HA.
+   * **Areas** — your HA Areas (plus **(No area)** if some lights aren’t assigned).
+
+3. **Pick an Area** → shows all **Lights** in that area.
+
+4. **Pick a Light** → shows **Commands & Dials** for that device:
+
+   * **On / Off** buttons
+
+     * On uses the last cached brightness (min 1) when available.
+   * **Brightness** (dial): 0–255, optimistic UI with debounced sending.
+   * **Color Temp** (dial): warm ↔ cool, shown only if supported.
+   * **Hue** (dial): 0–360°, shown only if supported.
+   * **Saturation** (dial): 0–100%, shown only if supported.
+
+**Notes**
+
+* Controls are **capability-aware**—you only see what the light supports.
+* UI is **optimistic** and sends updates **debounced** to keep HA traffic low.
+* **Back** steps: Device → Area → Root. From Root, Back closes the folder.
+
+
+---
+
 
 ### Home Assistant Permissions
 
@@ -152,8 +218,6 @@ src/
       ConfigureHomeAssistantAction.cs
       RunScriptAction.cs
       HomeAssistantDynamicFolder.cs   # now Areas → Lights → Commands
-    Tiles/
-      TilePainter.cs                  # center/pad/glyph helpers
     Services/
       IconService.cs                  # one-time icon load and cache
       DebouncedSender.cs
@@ -166,6 +230,7 @@ src/
       ColorTemp.cs
       HSBHelper.cs
       JsonExt.cs
+      TilePainter.cs                  # center/pad/glyph helpers
     Helpers/
       HaWebSocketClient.cs
       HaEventListener.cs
