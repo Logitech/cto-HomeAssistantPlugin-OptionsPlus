@@ -34,8 +34,6 @@ Control your Home Assistant lights (and soon, any entity) from your Creative Con
 2. Create a **Long-Lived Token** and copy it (Home Assistant ->Your Profile -> Security -> Long-lived access tokens)
 
 
-![alt text](image.png)
-
 3. Drop the **Configure Home Assistant** action (located inside the HOME ASSISTANT folder) in a tile :
 
    * **Base Websocket URL**: `ws://homeassistant.local:8123/` if Home Assistant was setup using the default way (or your own custom URL starting with `ws://` otherwise).
