@@ -17,12 +17,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 return null;
             }
 
-            if (v.ValueKind == JsonValueKind.Null)
-            {
-                return null;
-            }
-
-            return v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+            return v.ValueKind == JsonValueKind.Null ? null : v.ValueKind == JsonValueKind.String ? v.GetString() : null;
         }
     }
 }

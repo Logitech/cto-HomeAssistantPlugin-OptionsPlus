@@ -8,14 +8,14 @@ namespace Loupedeck.HomeAssistantPlugin
     public sealed class ConfigureHomeAssistantAction : ActionEditorCommand
     {
         private const String CtlBaseUrl = "BaseUrl";
-        private const String CtlToken   = "Token";
-        private const String CtlTest    = "Test";
+        private const String CtlToken = "Token";
+        private const String CtlTest = "Test";
 
         public ConfigureHomeAssistantAction()
         {
-            this.Name        = "ConfigureHomeAssistant";
+            this.Name = "ConfigureHomeAssistant";
             this.DisplayName = "Configure Home Assistant";
-            this.GroupName   = "Home Assistant";
+            this.GroupName = "Home Assistant";
             this.Description = "Drop into a tile to configure Home assistant before the first use(can remove after saving).";
 
             this.ActionEditor.AddControlEx(
@@ -33,7 +33,7 @@ namespace Loupedeck.HomeAssistantPlugin
             this.ActionEditor.Started += this.OnActionEditorStarted;
             this.ActionEditor.ControlValueChanged += this.OnControlValueChanged;
         }
-        
+
 
         protected override Boolean OnLoad() => true;
 
@@ -96,7 +96,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 else if (e.ControlName.EqualsNoCase(CtlTest))
                 {
                     var baseUrl = e.ActionEditorState.GetControlValue(CtlBaseUrl);
-                    var token   = e.ActionEditorState.GetControlValue(CtlToken);
+                    var token = e.ActionEditorState.GetControlValue(CtlToken);
 
                     if (String.IsNullOrWhiteSpace(baseUrl) || String.IsNullOrWhiteSpace(token))
                     {

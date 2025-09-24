@@ -14,7 +14,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private readonly Int32 _tempDebounceMs;
 
         private readonly DebouncedSender<String, Int32> _brightnessSender;
-        private readonly DebouncedSender<String, Hs>  _hsSender;
+        private readonly DebouncedSender<String, Hs> _hsSender;
         private readonly DebouncedSender<String, Int32> _tempSender;
 
         // (Optional) last-sent caches if you need them externally later
@@ -26,12 +26,12 @@ namespace Loupedeck.HomeAssistantPlugin
         {
             this._ha = ha ?? throw new ArgumentNullException(nameof(ha));
             this._brightnessDebounceMs = brightnessDebounceMs;
-            this._hsDebounceMs         = hsDebounceMs;
-            this._tempDebounceMs       = tempDebounceMs;
+            this._hsDebounceMs = hsDebounceMs;
+            this._tempDebounceMs = tempDebounceMs;
 
             this._brightnessSender = new DebouncedSender<String, Int32>(this._brightnessDebounceMs, this.SendBrightnessAsync);
-            this._hsSender         = new DebouncedSender<String, Hs>(this._hsDebounceMs, this.SendHsAsync);
-            this._tempSender       = new DebouncedSender<String, Int32>(this._tempDebounceMs, this.SendTempAsync);
+            this._hsSender = new DebouncedSender<String, Hs>(this._hsDebounceMs, this.SendHsAsync);
+            this._tempSender = new DebouncedSender<String, Int32>(this._tempDebounceMs, this.SendTempAsync);
         }
 
         public void SetBrightness(String entityId, Int32 value)
@@ -63,7 +63,8 @@ namespace Loupedeck.HomeAssistantPlugin
         {
             try
             {
-                if (!this._ha.IsAuthenticated) { HealthBus.Error("Connection lost"); return; }
+                if (!this._ha.IsAuthenticated)
+                { HealthBus.Error("Connection lost"); return; }
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
                 var data = JsonSerializer.SerializeToElement(new { brightness = target });
                 var (ok, err) = await this._ha.CallServiceAsync("light", "turn_on", entityId, data, cts.Token).ConfigureAwait(false);
@@ -92,7 +93,8 @@ namespace Loupedeck.HomeAssistantPlugin
         {
             try
             {
-                if (!this._ha.IsAuthenticated) { HealthBus.Error("Connection lost"); return; }
+                if (!this._ha.IsAuthenticated)
+                { HealthBus.Error("Connection lost"); return; }
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
 
                 var data = JsonSerializer.SerializeToElement(new { hs_color = new Object[] { hs.H, hs.S } });
@@ -117,7 +119,8 @@ namespace Loupedeck.HomeAssistantPlugin
         {
             try
             {
-                if (!this._ha.IsAuthenticated) { HealthBus.Error("Connection lost"); return; }
+                if (!this._ha.IsAuthenticated)
+                { HealthBus.Error("Connection lost"); return; }
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
 
                 var kelvin = ColorTemp.MiredToKelvin(mired);

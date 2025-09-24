@@ -14,10 +14,10 @@ namespace Loupedeck.HomeAssistantPlugin
         private const String LogPrefix = "[RunScript]";
 
         private HaWebSocketClient _client;
-        private HaEventListener   _events;
+        private HaEventListener _events;
 
-        private const String ControlScript    = "ha_script";
-        private const String ControlVarsJson  = "ha_vars_json";
+        private const String ControlScript = "ha_script";
+        private const String ControlVarsJson = "ha_vars_json";
         private const String ControlUseToggle = "ha_use_toggle";
 
         // Cache "running" state of scripts (kept updated by HaEventListener)
@@ -29,9 +29,9 @@ namespace Loupedeck.HomeAssistantPlugin
 
         public RunScriptAction()
         {
-            this.Name        = "HomeAssistant.RunScript";
+            this.Name = "HomeAssistant.RunScript";
             this.DisplayName = "HA: Run Script";
-            this.GroupName   = "Home Assistant";
+            this.GroupName = "Home Assistant";
             this.Description = "Run a Home Assistant script with optional variables; press again to stop if running.";
 
             this.ActionEditor.AddControlEx(new ActionEditorListbox(ControlScript, "Script"));
@@ -47,11 +47,9 @@ namespace Loupedeck.HomeAssistantPlugin
             this.ActionEditor.ListboxItemsRequested += this.OnListboxItemsRequested;
         }
 
-        protected override BitmapImage GetCommandImage(ActionEditorActionParameters parameters, Int32 width, Int32 height)
-        {
+        protected override BitmapImage GetCommandImage(ActionEditorActionParameters parameters, Int32 width, Int32 height) =>
             // Default icon
-            return PluginResources.ReadImage("area_icon.png");
-        }
+            PluginResources.ReadImage("area_icon.png");
 
         protected override Boolean OnLoad()
         {

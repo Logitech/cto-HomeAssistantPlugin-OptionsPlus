@@ -39,7 +39,8 @@ namespace Loupedeck.HomeAssistantPlugin
 
         private static void SafeRaise()
         {
-            try { Volatile.Read(ref HealthChanged)?.Invoke(null, EventArgs.Empty); }
+            try
+            { Volatile.Read(ref HealthChanged)?.Invoke(null, EventArgs.Empty); }
             catch { /* never throw across the SDK boundary */ }
         }
     }

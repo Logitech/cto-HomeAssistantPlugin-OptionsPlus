@@ -8,16 +8,16 @@ namespace Loupedeck.HomeAssistantPlugin
     public class HomeAssistantPlugin : Plugin
     {
         public const String SettingBaseUrl = "ha.baseUrl";
-        public const String SettingToken   = "ha.token";
+        public const String SettingToken = "ha.token";
 
-        public override Boolean HasNoApplication    => true;
+        public override Boolean HasNoApplication => true;
         public override Boolean UsesApplicationApiOnly => true;
         // Expose singletons for actions to use
-    internal HaWebSocketClient HaClient { get; } = new();
-    internal HaEventListener   HaEvents { get; } = new();
+        internal HaWebSocketClient HaClient { get; } = new();
+        internal HaEventListener HaEvents { get; } = new();
 
 
-        
+
 
 
         public HomeAssistantPlugin()
@@ -27,17 +27,14 @@ namespace Loupedeck.HomeAssistantPlugin
             PluginLog.Info("HomeAssistantPlugin ctor");
         }
 
-        public override void Load()
-        {
-            PluginLog.Info("Plugin.Load()");
-        }
+        public override void Load() => PluginLog.Info("Plugin.Load()");
 
         public override void Unload()
         {
             PluginLog.Info("Plugin.Unload()");
             _ = this.HaEvents.SafeCloseAsync();
             _ = this.HaClient.SafeCloseAsync();
-        
+
         }
 
         // Helpers to get settings anywhere in actions/folders

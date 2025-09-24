@@ -14,7 +14,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private Int32 _nextId = 1;
         public Boolean IsAuthenticated { get; private set; }
         public Uri EndpointUri { get; private set; }
-        
+
         private String _lastBaseUrl;
         private String _lastAccessToken;
 
@@ -71,7 +71,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 if (String.Equals(authType, "auth_ok", StringComparison.OrdinalIgnoreCase))
                 {
                     this.IsAuthenticated = true;
-                    this._lastBaseUrl   = baseUrl;
+                    this._lastBaseUrl = baseUrl;
                     this._lastAccessToken = accessToken;
 
                     PluginLog.Info("HA auth_ok ✔");

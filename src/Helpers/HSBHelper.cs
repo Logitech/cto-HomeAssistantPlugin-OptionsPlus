@@ -29,13 +29,9 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 h = 60 * ((G - B) / d % 6);
             }
-            else if (max == G)
-            {
-                h = 60 * ((B - R) / d + 2);
-            }
             else
             {
-                h = 60 * ((R - G) / d + 4);
+                h = max == G ? 60 * ((B - R) / d + 2) : 60 * ((R - G) / d + 4);
             }
 
             h = Wrap360(h);
@@ -83,8 +79,8 @@ namespace Loupedeck.HomeAssistantPlugin
             return (R, G, B);
         }
 
-public static (Int32 R, Int32 G, Int32 B) HsbToRgb255(Double hDeg, Double sPct, Int32 b0to255)
-    => HsbToRgb(hDeg, sPct, b0to255 * 100.0 / 255.0);
+        public static (Int32 R, Int32 G, Int32 B) HsbToRgb255(Double hDeg, Double sPct, Int32 b0to255)
+            => HsbToRgb(hDeg, sPct, b0to255 * 100.0 / 255.0);
 
 
     }

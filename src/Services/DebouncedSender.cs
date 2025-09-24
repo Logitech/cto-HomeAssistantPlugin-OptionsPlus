@@ -2,8 +2,8 @@ namespace Loupedeck.HomeAssistantPlugin
 {
     using System;
     using System.Collections.Generic;
-    using System.Timers;
     using System.Threading.Tasks;
+    using System.Timers;
 
     internal sealed class DebouncedSender<TKey, TValue> : IDisposable
         where TKey : notnull
@@ -64,7 +64,8 @@ namespace Loupedeck.HomeAssistantPlugin
                 value = entry.value;
             }
 
-            try { await this._send(key, value).ConfigureAwait(false); }
+            try
+            { await this._send(key, value).ConfigureAwait(false); }
             catch { /* swallow to keep UI responsive; caller should log in _send */ }
         }
 

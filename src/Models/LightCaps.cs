@@ -25,7 +25,10 @@ namespace Loupedeck.HomeAssistantPlugin
                 var modes = new HashSet<String>(StringComparer.OrdinalIgnoreCase);
                 foreach (var m in scm.EnumerateArray())
                 {
-                    if (m.ValueKind == JsonValueKind.String) modes.Add(m.GetString() ?? "");
+                    if (m.ValueKind == JsonValueKind.String)
+                    {
+                        modes.Add(m.GetString() ?? "");
+                    }
                 }
 
                 onoff = modes.Contains("onoff");
@@ -40,7 +43,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 // Heuristic fallback when supported_color_modes is missing
                 if (attrs.ValueKind == JsonValueKind.Object)
                 {
-                    bri   = attrs.TryGetProperty("brightness", out _);
+                    bri = attrs.TryGetProperty("brightness", out _);
                     ctemp = attrs.TryGetProperty("min_mireds", out _) ||
                             attrs.TryGetProperty("max_mireds", out _) ||
                             attrs.TryGetProperty("color_temp", out _) ||

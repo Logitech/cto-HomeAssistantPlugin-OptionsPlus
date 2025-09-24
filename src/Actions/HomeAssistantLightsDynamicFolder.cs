@@ -66,17 +66,17 @@ namespace Loupedeck.HomeAssistantPlugin
         private enum ViewLevel { Root, Area, Device }
         private ViewLevel _level = ViewLevel.Root;
 
-        private string _currentAreaId = null; // when in Area view
+        private String _currentAreaId = null; // when in Area view
 
         // Area data
-private readonly Dictionary<string, string> _areaIdToName =
-    new(StringComparer.OrdinalIgnoreCase);
-private readonly Dictionary<string, string> _entityToAreaId =
-    new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<String, String> _areaIdToName =
+            new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<String, String> _entityToAreaId =
+            new(StringComparer.OrdinalIgnoreCase);
 
-    // Synthetic “no area” bucket
-private const string UnassignedAreaId = "!unassigned";
-private const string UnassignedAreaName = "(No area)";
+        // Synthetic “no area” bucket
+        private const String UnassignedAreaId = "!unassigned";
+        private const String UnassignedAreaName = "(No area)";
 
         private String _currentEntityId = null;
 
@@ -147,12 +147,9 @@ private const string UnassignedAreaName = "(No area)";
                 return "Color Temp";
             }
 
-            if (actionParameter == AdjHue)
-            {
-                return "Hue";
-            }
-
-            return actionParameter == AdjSat ? "Saturation" : base.GetAdjustmentDisplayName(actionParameter, _);
+            return actionParameter == AdjHue
+                ? "Hue"
+                : actionParameter == AdjSat ? "Saturation" : base.GetAdjustmentDisplayName(actionParameter, _);
         }
 
 
@@ -220,76 +217,80 @@ private const string UnassignedAreaName = "(No area)";
             if (actionParameter == AdjBri)
             {
                 var bri = 128;
-                if (_inDeviceView && !string.IsNullOrEmpty(_currentEntityId) &&
-                    _hsbByEntity.TryGetValue(_currentEntityId, out var hsbLocal))
+                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId) &&
+                    this._hsbByEntity.TryGetValue(this._currentEntityId, out var hsbLocal))
+                {
                     bri = hsbLocal.B;
+                }
 
-                var pct = (int)Math.Round(bri * 100.0 / 255.0);
+                var pct = (Int32)Math.Round(bri * 100.0 / 255.0);
 
                 // Your warmish background logic preserved
-                int r, g, b;
+                Int32 r, g, b;
                 if (bri <= 0)
                 { r = g = b = 0; }
                 else
-                { r = Math.Min(30 + (pct * 2), 255); g = Math.Min(30 + pct, 220); b = 30; }
+                { r = Math.Min(30 + pct * 2, 255); g = Math.Min(30 + pct, 220); b = 30; }
 
                 using var bb = new BitmapBuilder(imageSize);
                 bb.Clear(new BitmapColor(r, g, b));
-                return TilePainter.IconOrGlyph(bb, _icons.Get(IconId.Brightness), "☀", padPct: 10, font: 58);
+                return TilePainter.IconOrGlyph(bb, this._icons.Get(IconId.Brightness), "☀", padPct: 10, font: 58);
             }
 
 
 
             if (actionParameter == AdjSat)
             {
-                double H = 0, S = 100;
-                int B = 128;
-                if (_inDeviceView && !string.IsNullOrEmpty(_currentEntityId) &&
-                    _hsbByEntity.TryGetValue(_currentEntityId, out var h))
+                Double H = 0, S = 100;
+                var B = 128;
+                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId) &&
+                    this._hsbByEntity.TryGetValue(this._currentEntityId, out var h))
                 { H = h.H; S = Math.Max(0, h.S); B = h.B; }
 
                 var (r, g, b) = HSBHelper.HsbToRgb(HSBHelper.Wrap360(H), S, 100.0 * B / 255.0);
 
                 using var bb = new BitmapBuilder(imageSize);
                 bb.Clear(new BitmapColor(r, g, b));
-                return TilePainter.IconOrGlyph(bb, _icons.Get(IconId.Saturation), "S", padPct: 8, font: 56);
+                return TilePainter.IconOrGlyph(bb, this._icons.Get(IconId.Saturation), "S", padPct: 8, font: 56);
             }
 
 
             if (actionParameter == AdjTemp)
             {
                 var k = 3000;
-                if (_inDeviceView && !string.IsNullOrEmpty(_currentEntityId) &&
-                    TryGetCachedTempMired(_currentEntityId, out var t))
+                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId) &&
+                    this.TryGetCachedTempMired(this._currentEntityId, out var t))
+                {
                     k = ColorTemp.MiredToKelvin(t.Cur);
+                }
 
                 k = Math.Max(2000, Math.Min(6500, k));
                 var warmness = HSBHelper.Clamp((6500 - k) / 45, 0, 100);
 
-                int r = Math.Min(35 + warmness * 2, 255);
-                int g = Math.Min(35 + (100 - warmness), 255);
-                int b = Math.Min(35 + (100 - warmness) / 2, 255);
+                var r = Math.Min(35 + warmness * 2, 255);
+                var g = Math.Min(35 + (100 - warmness), 255);
+                var b = Math.Min(35 + (100 - warmness) / 2, 255);
 
                 using var bb = new BitmapBuilder(imageSize);
                 bb.Clear(new BitmapColor(r, g, b));
-                return TilePainter.IconOrGlyph(bb, _icons.Get(IconId.Temperature), "⟷", padPct: 10, font: 58);
+                return TilePainter.IconOrGlyph(bb, this._icons.Get(IconId.Temperature), "⟷", padPct: 10, font: 58);
             }
 
 
 
             if (actionParameter == AdjHue)
             {
-                double H = 0, S = 100;
-                int B = 128;
-                if (_inDeviceView && !string.IsNullOrEmpty(_currentEntityId) &&
-                    _hsbByEntity.TryGetValue(_currentEntityId, out var h))
+                Double H = 0, S = 100;
+                var B = 128;
+                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId) &&
+                    this._hsbByEntity.TryGetValue(this._currentEntityId, out var h))
                 { H = h.H; S = Math.Max(40, h.S); B = h.B; }
 
                 var (r, g, b) = HSBHelper.HsbToRgb(HSBHelper.Wrap360(H), S, 100.0 * B / 255.0);
 
                 using var bb = new BitmapBuilder(imageSize);
                 bb.Clear(new BitmapColor(r, g, b));
-                return TilePainter.IconOrGlyph(bb, _icons.Get(IconId.Hue), "H", padPct: 8, font: 56);
+                return TilePainter.IconOrGlyph(bb, this._icons.Get(IconId.Hue), "H", padPct: 8, font: 56);
             }
 
 
@@ -453,14 +454,14 @@ private const string UnassignedAreaName = "(No area)";
 
 
 
-        
+
 
         public HomeAssistantDynamicFolder()
         {
             this.DisplayName = "All Light Controls";
             this.GroupName = "Lights";
 
-            _icons = new IconService(new Dictionary<string, string>
+            this._icons = new IconService(new Dictionary<String, String>
             {
                 { IconId.Bulb,        "light_bulb_icon.png" },
                 { IconId.Back,        "back_icon.png" },
@@ -499,55 +500,68 @@ private const string UnassignedAreaName = "(No area)";
             PluginDynamicFolderNavigation.None;
 
 
-        public override IEnumerable<string> GetButtonPressActionNames(DeviceType _)
+        public override IEnumerable<String> GetButtonPressActionNames(DeviceType _)
         {
             // Always show Back + Status
             yield return this.CreateCommandName(CmdBack);
             yield return this.CreateCommandName(CmdStatus);
 
-            if (_level == ViewLevel.Device && !string.IsNullOrEmpty(_currentEntityId))
+            if (this._level == ViewLevel.Device && !String.IsNullOrEmpty(this._currentEntityId))
             {
-                var caps = GetCaps(_currentEntityId);
+                var caps = this.GetCaps(this._currentEntityId);
 
                 yield return this.CreateCommandName($"{PfxActOn}{this._currentEntityId}");
                 yield return this.CreateCommandName($"{PfxActOff}{this._currentEntityId}");
 
 
                 if (caps.Brightness)
+                {
                     yield return this.CreateAdjustmentName(AdjBri);
+                }
+
                 if (caps.ColorTemp)
+                {
                     yield return this.CreateAdjustmentName(AdjTemp);
+                }
+
                 if (caps.ColorHs)
                 { yield return this.CreateAdjustmentName(AdjHue); yield return this.CreateAdjustmentName(AdjSat); }
                 yield break;
             }
 
-            if (_level == ViewLevel.Area && !string.IsNullOrEmpty(_currentAreaId))
+            if (this._level == ViewLevel.Area && !String.IsNullOrEmpty(this._currentAreaId))
             {
                 // Lights for current area
-                foreach (var kv in _lightsByEntity)
+                foreach (var kv in this._lightsByEntity)
                 {
-                    if (_entityToAreaId.TryGetValue(kv.Key, out var aid) && string.Equals(aid, _currentAreaId, StringComparison.OrdinalIgnoreCase))
-
+                    if (this._entityToAreaId.TryGetValue(kv.Key, out var aid) && String.Equals(aid, this._currentAreaId, StringComparison.OrdinalIgnoreCase))
+                    {
                         yield return this.CreateCommandName($"{PfxDevice}{kv.Key}");
+                    }
                 }
                 yield break;
             }
 
             // ROOT: list areas that actually have lights
             // (optional) include Retry at root
-            var areaIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var eid in _lightsByEntity.Keys)
-                if (_entityToAreaId.TryGetValue(eid, out var aid))
+            var areaIds = new HashSet<String>(StringComparer.OrdinalIgnoreCase);
+            foreach (var eid in this._lightsByEntity.Keys)
+            {
+                if (this._entityToAreaId.TryGetValue(eid, out var aid))
+                {
                     areaIds.Add(aid);
+                }
+            }
 
             // Order by area name
             var ordered = areaIds
-                .Select(aid => (aid, name: _areaIdToName.TryGetValue(aid, out var n) ? n : aid))
+                .Select(aid => (aid, name: this._areaIdToName.TryGetValue(aid, out var n) ? n : aid))
                 .OrderBy(t => t.name, StringComparer.CurrentCultureIgnoreCase);
 
             foreach (var (aid, _) in ordered)
+            {
                 yield return this.CreateCommandName($"{CmdArea}{aid}");
+            }
 
             yield return this.CreateCommandName(CmdRetry);
         }
@@ -582,10 +596,10 @@ private const string UnassignedAreaName = "(No area)";
             {
                 return "On";
             }
-            if(actionParameter.StartsWith(CmdArea, StringComparison.OrdinalIgnoreCase))
+            if (actionParameter.StartsWith(CmdArea, StringComparison.OrdinalIgnoreCase))
             {
                 var areaId = actionParameter.Substring(CmdArea.Length);
-                return _areaIdToName.TryGetValue(areaId, out var name) ? name : areaId;
+                return this._areaIdToName.TryGetValue(areaId, out var name) ? name : areaId;
             }
 
             return actionParameter.StartsWith(PfxActOff, StringComparison.OrdinalIgnoreCase) ? "Off" : null;
@@ -600,11 +614,11 @@ private const string UnassignedAreaName = "(No area)";
 
             if (actionParameter == CmdBack)
             {
-                return _icons.Get(IconId.Back);
+                return this._icons.Get(IconId.Back);
             }
             if (actionParameter == CmdRetry)
             {
-                return _icons.Get(IconId.Retry);
+                return this._icons.Get(IconId.Retry);
             }
 
             // STATUS (unchanged)
@@ -613,8 +627,8 @@ private const string UnassignedAreaName = "(No area)";
                 var ok = HealthBus.State == HealthState.Ok;
                 using (var bb = new BitmapBuilder(imageSize))
                 {
-                    var okImg = _icons.Get(IconId.Online);
-                    var issueImg = _icons.Get(IconId.Issue);
+                    var okImg = this._icons.Get(IconId.Online);
+                    var issueImg = this._icons.Get(IconId.Issue);
                     TilePainter.Background(bb, ok ? okImg : issueImg, ok ? new BitmapColor(0, 160, 60) : new BitmapColor(200, 30, 30));
                     bb.DrawText(ok ? "ONLINE" : "ISSUE", fontSize: 22, color: new BitmapColor(255, 255, 255));
                     return bb.ToImage();
@@ -625,22 +639,22 @@ private const string UnassignedAreaName = "(No area)";
             // DEVICE tiles (light bulbs)
             if (actionParameter.StartsWith(PfxDevice, StringComparison.OrdinalIgnoreCase))
             {
-                return _icons.Get(IconId.Bulb);
+                return this._icons.Get(IconId.Bulb);
             }
 
-            if(actionParameter.StartsWith(CmdArea, StringComparison.OrdinalIgnoreCase))
+            if (actionParameter.StartsWith(CmdArea, StringComparison.OrdinalIgnoreCase))
             {
-                return _icons.Get(IconId.Area);
+                return this._icons.Get(IconId.Area);
             }
 
             // ACTION tiles
             if (actionParameter.StartsWith(PfxActOn, StringComparison.OrdinalIgnoreCase))
             {
-                return _icons.Get(IconId.BulbOn);
+                return this._icons.Get(IconId.BulbOn);
             }
             if (actionParameter.StartsWith(PfxActOff, StringComparison.OrdinalIgnoreCase))
             {
-                return _icons.Get(IconId.BulbOff);
+                return this._icons.Get(IconId.BulbOff);
             }
 
             // Retry: no custom image
@@ -659,21 +673,21 @@ private const string UnassignedAreaName = "(No area)";
 
             if (actionParameter == CmdBack)
             {
-                if (_level == ViewLevel.Device)
+                if (this._level == ViewLevel.Device)
                 {
-                    _lightSvc.CancelPending(_currentEntityId);
-                    _inDeviceView = false;
-                    _currentEntityId = null;
-                    _level = ViewLevel.Area;
-                    ButtonActionNamesChanged();
-                    EncoderActionNamesChanged();
+                    this._lightSvc.CancelPending(this._currentEntityId);
+                    this._inDeviceView = false;
+                    this._currentEntityId = null;
+                    this._level = ViewLevel.Area;
+                    this.ButtonActionNamesChanged();
+                    this.EncoderActionNamesChanged();
                 }
-                else if (_level == ViewLevel.Area)
+                else if (this._level == ViewLevel.Area)
                 {
-                    _currentAreaId = null;
-                    _level = ViewLevel.Root;
-                    ButtonActionNamesChanged();
-                    EncoderActionNamesChanged();
+                    this._currentAreaId = null;
+                    this._level = ViewLevel.Root;
+                    this.ButtonActionNamesChanged();
+                    this.EncoderActionNamesChanged();
                 }
                 else // Root
                 {
@@ -695,18 +709,18 @@ private const string UnassignedAreaName = "(No area)";
                     ok ? "Home Assistant is connected." : HealthBus.LastMessage);
                 return;
             }
-            
+
             if (actionParameter.StartsWith(CmdArea, StringComparison.OrdinalIgnoreCase))
             {
                 var areaId = actionParameter.Substring(CmdArea.Length);
-                if (_areaIdToName.ContainsKey(areaId) || string.Equals(areaId, UnassignedAreaId, StringComparison.OrdinalIgnoreCase))
+                if (this._areaIdToName.ContainsKey(areaId) || String.Equals(areaId, UnassignedAreaId, StringComparison.OrdinalIgnoreCase))
                 {
-                    _currentAreaId = areaId;
-                    _level = ViewLevel.Area;
-                    _inDeviceView = false;
-                    _currentEntityId = null;
-                    ButtonActionNamesChanged();
-                    EncoderActionNamesChanged();
+                    this._currentAreaId = areaId;
+                    this._level = ViewLevel.Area;
+                    this._inDeviceView = false;
+                    this._currentEntityId = null;
+                    this.ButtonActionNamesChanged();
+                    this.EncoderActionNamesChanged();
                     PluginLog.Info($"ENTER area view: {areaId}");
                 }
                 return;
@@ -723,7 +737,7 @@ private const string UnassignedAreaName = "(No area)";
 
 
                     this._inDeviceView = true;
-                    _level = ViewLevel.Device;
+                    this._level = ViewLevel.Device;
                     this._currentEntityId = entityId;
                     this._wheelCounter = 0; // avoids showing previous ticks anywhere
 
@@ -753,8 +767,8 @@ private const string UnassignedAreaName = "(No area)";
                     this.AdjustmentValueChanged(AdjHue);
                     this.AdjustmentValueChanged(AdjSat);
 
-                    PluginLog.Info($"ENTER device view: {entityId}  level={_level} inDevice={_inDeviceView}");
-    
+                    PluginLog.Info($"ENTER device view: {entityId}  level={this._level} inDevice={this._inDeviceView}");
+
                 }
                 return;
             }
@@ -766,16 +780,16 @@ private const string UnassignedAreaName = "(No area)";
                 var entityId = actionParameter.Substring(PfxActOn.Length);
                 // Use cached brightness if available and the light supports it.
                 JsonElement? data = null;
-                var caps = GetCaps(entityId);
+                var caps = this.GetCaps(entityId);
 
-                if (caps.Brightness && _hsbByEntity.TryGetValue(entityId, out var hsb))
+                if (caps.Brightness && this._hsbByEntity.TryGetValue(entityId, out var hsb))
                 {
                     // HA can treat brightness=0 as effectively off; bump to at least 1 when turning on.
                     var bri = HSBHelper.Clamp(Math.Max(1, hsb.B), 1, 255);
                     data = System.Text.Json.JsonSerializer.SerializeToElement(new { brightness = bri });
                 }
 
-                _ = _lightSvc.TurnOnAsync(entityId, data); // fire-and-forget like before
+                _ = this._lightSvc.TurnOnAsync(entityId, data); // fire-and-forget like before
                 return;
             }
             if (actionParameter.StartsWith(PfxActOff, StringComparison.OrdinalIgnoreCase))
@@ -885,7 +899,7 @@ private const string UnassignedAreaName = "(No area)";
                     HealthBus.Ok("Auth OK");
                     this.Plugin.OnPluginStatusChanged(PluginStatus.Normal, "Connected to Home Assistant.", null);
 
-                    
+
 
                     try
                     {
@@ -917,10 +931,10 @@ private const string UnassignedAreaName = "(No area)";
 
                     this._client.SendPingAsync(this._cts.Token).GetAwaiter().GetResult();
 
-                    _level = ViewLevel.Root;
-                    _currentAreaId = null;
-                    _currentEntityId = null;
-                    _inDeviceView = false;
+                    this._level = ViewLevel.Root;
+                    this._currentAreaId = null;
+                    this._currentEntityId = null;
+                    this._inDeviceView = false;
 
 
                     this.ButtonActionNamesChanged();
@@ -1020,63 +1034,71 @@ private const string UnassignedAreaName = "(No area)";
                 }
 
                 // Build device lookup by device_id AND device->area_id  <-- UPDATED
-        var deviceById = new Dictionary<string, (string name, string mf, string model)>(StringComparer.OrdinalIgnoreCase);
-        var deviceAreaById = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var deviceById = new Dictionary<String, (String name, String mf, String model)>(StringComparer.OrdinalIgnoreCase);
+                var deviceAreaById = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
 
-        if (okDev && devArray.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var dev in devArray.EnumerateArray())
-            {
-                var id    = dev.GetPropertyOrDefault("id");
-                var name  = dev.GetPropertyOrDefault("name_by_user") ?? dev.GetPropertyOrDefault("name") ?? "";
-                var mf    = dev.GetPropertyOrDefault("manufacturer") ?? "";
-                var model = dev.GetPropertyOrDefault("model") ?? "";
-                var area  = dev.GetPropertyOrDefault("area_id"); // may be null
-
-                if (!string.IsNullOrEmpty(id))
+                if (okDev && devArray.ValueKind == JsonValueKind.Array)
                 {
-                    deviceById[id] = (name, mf, model);
-                    if (!string.IsNullOrEmpty(area))
-                        deviceAreaById[id] = area;
+                    foreach (var dev in devArray.EnumerateArray())
+                    {
+                        var id = dev.GetPropertyOrDefault("id");
+                        var name = dev.GetPropertyOrDefault("name_by_user") ?? dev.GetPropertyOrDefault("name") ?? "";
+                        var mf = dev.GetPropertyOrDefault("manufacturer") ?? "";
+                        var model = dev.GetPropertyOrDefault("model") ?? "";
+                        var area = dev.GetPropertyOrDefault("area_id"); // may be null
+
+                        if (!String.IsNullOrEmpty(id))
+                        {
+                            deviceById[id] = (name, mf, model);
+                            if (!String.IsNullOrEmpty(area))
+                            {
+                                deviceAreaById[id] = area;
+                            }
+                        }
+                    }
                 }
-            }
-        }
 
                 // Build entity->device_id AND entity->area_id (direct from entity registry)  <-- UPDATED
-        var entityDevice = new Dictionary<string, (string deviceId, string originalName)>(StringComparer.OrdinalIgnoreCase);
-        var entityArea   = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var entityDevice = new Dictionary<String, (String deviceId, String originalName)>(StringComparer.OrdinalIgnoreCase);
+                var entityArea = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
 
-        if (okEnt && entArray.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var ent in entArray.EnumerateArray())
-            {
-                var entityId = ent.GetPropertyOrDefault("entity_id");
-                if (string.IsNullOrEmpty(entityId))
-                    continue;
+                if (okEnt && entArray.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var ent in entArray.EnumerateArray())
+                    {
+                        var entityId = ent.GetPropertyOrDefault("entity_id");
+                        if (String.IsNullOrEmpty(entityId))
+                        {
+                            continue;
+                        }
 
-                var deviceId = ent.GetPropertyOrDefault("device_id") ?? "";
-                var oname    = ent.GetPropertyOrDefault("original_name") ?? "";
-                var areaId   = ent.GetPropertyOrDefault("area_id"); // may be null
+                        var deviceId = ent.GetPropertyOrDefault("device_id") ?? "";
+                        var oname = ent.GetPropertyOrDefault("original_name") ?? "";
+                        var areaId = ent.GetPropertyOrDefault("area_id"); // may be null
 
-                entityDevice[entityId] = (deviceId, oname);
-                if (!string.IsNullOrEmpty(areaId))
-                    entityArea[entityId] = areaId;
-            }
-        }
+                        entityDevice[entityId] = (deviceId, oname);
+                        if (!String.IsNullOrEmpty(areaId))
+                        {
+                            entityArea[entityId] = areaId;
+                        }
+                    }
+                }
 
-        // Areas: area_id -> name  <-- NEW
-        _areaIdToName.Clear();
-        if (okArea && areaArray.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var ar in areaArray.EnumerateArray())
-            {
-                // HA uses "area_id" as the stable id; older payloads may also include "id"
-                var id   = ar.GetPropertyOrDefault("area_id") ?? ar.GetPropertyOrDefault("id");
-                var name = ar.GetPropertyOrDefault("name") ?? id ?? "";
-                if (!string.IsNullOrEmpty(id))
-                    _areaIdToName[id] = name;
-            }
-        }
+                // Areas: area_id -> name  <-- NEW
+                this._areaIdToName.Clear();
+                if (okArea && areaArray.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var ar in areaArray.EnumerateArray())
+                    {
+                        // HA uses "area_id" as the stable id; older payloads may also include "id"
+                        var id = ar.GetPropertyOrDefault("area_id") ?? ar.GetPropertyOrDefault("id");
+                        var name = ar.GetPropertyOrDefault("name") ?? id ?? "";
+                        if (!String.IsNullOrEmpty(id))
+                        {
+                            this._areaIdToName[id] = name;
+                        }
+                    }
+                }
 
                 // Filter lights from states and assemble LightItem
                 this._lightsByEntity.Clear();
@@ -1118,11 +1140,22 @@ private const string UnassignedAreaName = "(No area)";
                     }
 
                     // --- Area resolution (entity area wins; else device area; else Unassigned)  <-- NEW
-            string areaId = null;
-            if (entityArea.TryGetValue(entityId, out var ea)) areaId = ea;
-            else if (!string.IsNullOrEmpty(deviceId) && deviceAreaById.TryGetValue(deviceId, out var da)) areaId = da;
-            if (string.IsNullOrEmpty(areaId)) areaId = UnassignedAreaId;
-            _entityToAreaId[entityId] = areaId;
+                    String areaId = null;
+                    if (entityArea.TryGetValue(entityId, out var ea))
+                    {
+                        areaId = ea;
+                    }
+                    else if (!String.IsNullOrEmpty(deviceId) && deviceAreaById.TryGetValue(deviceId, out var da))
+                    {
+                        areaId = da;
+                    }
+
+                    if (String.IsNullOrEmpty(areaId))
+                    {
+                        areaId = UnassignedAreaId;
+                    }
+
+                    this._entityToAreaId[entityId] = areaId;
 
                     // --- Brightness: seed for ALL lights, not just color-capable ---
                     var bri = 0;
@@ -1200,13 +1233,14 @@ private const string UnassignedAreaName = "(No area)";
                     var li = new LightItem(entityId, friendly, state, deviceId ?? "", deviceName, mf, model);
                     this._lightsByEntity[entityId] = li;
 
-                   PluginLog.Info($"[Light] {entityId} | name='{friendly}' | state={state} | dev='{deviceName}' mf='{mf}' model='{model}' bri={bri} tempMired={curM} range=[{minM},{maxM}] area='{(_areaIdToName.TryGetValue(areaId, out var an) ? an : areaId)}'");
-          }
+                    PluginLog.Info($"[Light] {entityId} | name='{friendly}' | state={state} | dev='{deviceName}' mf='{mf}' model='{model}' bri={bri} tempMired={curM} range=[{minM},{maxM}] area='{(this._areaIdToName.TryGetValue(areaId, out var an) ? an : areaId)}'");
+                }
 
-          // Ensure a bucket exists for unassigned if any light landed there  <-- NEW
-        if (_entityToAreaId.ContainsValue(UnassignedAreaId))
-            _areaIdToName[UnassignedAreaId] = UnassignedAreaName;
-
+                // Ensure a bucket exists for unassigned if any light landed there  <-- NEW
+                if (this._entityToAreaId.ContainsValue(UnassignedAreaId))
+                {
+                    this._areaIdToName[UnassignedAreaId] = UnassignedAreaName;
+                }
 
                 if (servicesDoc.RootElement.ValueKind == JsonValueKind.Object &&
                     servicesDoc.RootElement.TryGetProperty("light", out var lightDomain) &&
@@ -1249,14 +1283,9 @@ private const string UnassignedAreaName = "(No area)";
 
         private void SetCachedBrightness(String entityId, Int32 bri)
         {
-            if (this._hsbByEntity.TryGetValue(entityId, out var hsb))
-            {
-                this._hsbByEntity[entityId] = (hsb.H, hsb.S, HSBHelper.Clamp(bri, 0, 255));
-            }
-            else
-            {
-                this._hsbByEntity[entityId] = (0, 0, HSBHelper.Clamp(bri, 0, 255));
-            }
+            this._hsbByEntity[entityId] = this._hsbByEntity.TryGetValue(entityId, out var hsb)
+                ? ((Double H, Double S, Int32 B))(hsb.H, hsb.S, HSBHelper.Clamp(bri, 0, 255))
+                : ((Double H, Double S, Int32 B))(0, 0, HSBHelper.Clamp(bri, 0, 255));
         }
 
 

@@ -9,12 +9,15 @@ namespace Loupedeck.HomeAssistantPlugin
     /// </summary>
     internal sealed class IconService
     {
-        private readonly Dictionary<string, BitmapImage?> _cache = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<String, BitmapImage?> _cache = new(StringComparer.OrdinalIgnoreCase);
 
         /// <param name="resourceMap">logical id → embedded resource filename</param>
-        public IconService(IDictionary<string, string> resourceMap)
+        public IconService(IDictionary<String, String> resourceMap)
         {
-            if (resourceMap is null) throw new ArgumentNullException(nameof(resourceMap));
+            if (resourceMap is null)
+            {
+                throw new ArgumentNullException(nameof(resourceMap));
+            }
 
             // Ensure plugin resources are ready (idempotent)
             PluginResources.Init(typeof(HomeAssistantPlugin).Assembly);
@@ -26,28 +29,28 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     PluginLog.Warning($"[IconService] Missing embedded icon: '{kv.Value}' for id '{kv.Key}'");
                 }
-                _cache[kv.Key] = img;
+                this._cache[kv.Key] = img;
             }
         }
 
-        public BitmapImage? Get(string id)
-            => _cache.TryGetValue(id, out var img) ? img : null;
+        public BitmapImage? Get(String id)
+            => this._cache.TryGetValue(id, out var img) ? img : null;
     }
 
     /// <summary>String constants for icons (keeps callsites typo-safe).</summary>
     internal static class IconId
     {
-        public const string Bulb = "bulb";
-        public const string Back = "back";
-        public const string BulbOn = "bulbOn";
-        public const string BulbOff = "bulbOff";
-        public const string Brightness = "bri";
-        public const string Retry = "retry";
-        public const string Saturation = "sat";
-        public const string Issue = "issue";
-        public const string Temperature = "temp";
-        public const string Online = "online";
-        public const string Hue = "hue";
-        public const string Area = "area";
+        public const String Bulb = "bulb";
+        public const String Back = "back";
+        public const String BulbOn = "bulbOn";
+        public const String BulbOff = "bulbOff";
+        public const String Brightness = "bri";
+        public const String Retry = "retry";
+        public const String Saturation = "sat";
+        public const String Issue = "issue";
+        public const String Temperature = "temp";
+        public const String Online = "online";
+        public const String Hue = "hue";
+        public const String Area = "area";
     }
 }
