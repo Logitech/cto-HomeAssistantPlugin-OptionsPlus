@@ -473,6 +473,7 @@ private const string UnassignedAreaName = "(No area)";
                 { IconId.Temperature, "temperature_icon.png" },
                 { IconId.Online,      "online_status_icon.png" },
                 { IconId.Hue,         "hue_icon.png" },
+                { IconId.Area,         "area_icon.png" },
             });
 
             // Wrap the raw client so the service can be unit-tested / mocked later
@@ -629,7 +630,7 @@ private const string UnassignedAreaName = "(No area)";
 
             if(actionParameter.StartsWith(CmdArea, StringComparison.OrdinalIgnoreCase))
             {
-                return _icons.Get(IconId.Bulb);
+                return _icons.Get(IconId.Area);
             }
 
             // ACTION tiles

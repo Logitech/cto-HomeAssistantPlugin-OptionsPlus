@@ -37,16 +37,17 @@ namespace Loupedeck.HomeAssistantPlugin
     /// <summary>String constants for icons (keeps callsites typo-safe).</summary>
     internal static class IconId
     {
-        public const string Bulb        = "bulb";
-        public const string Back        = "back";
-        public const string BulbOn      = "bulbOn";
-        public const string BulbOff     = "bulbOff";
-        public const string Brightness  = "bri";
-        public const string Retry       = "retry";
-        public const string Saturation  = "sat";
-        public const string Issue       = "issue";
+        public const string Bulb = "bulb";
+        public const string Back = "back";
+        public const string BulbOn = "bulbOn";
+        public const string BulbOff = "bulbOff";
+        public const string Brightness = "bri";
+        public const string Retry = "retry";
+        public const string Saturation = "sat";
+        public const string Issue = "issue";
         public const string Temperature = "temp";
-        public const string Online      = "online";
-        public const string Hue         = "hue";
+        public const string Online = "online";
+        public const string Hue = "hue";
+        public const string Area = "area";
     }
 }

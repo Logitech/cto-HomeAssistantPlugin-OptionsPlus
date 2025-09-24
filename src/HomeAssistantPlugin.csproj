@@ -61,6 +61,9 @@
     <EmbeddedResource Include="Resources\icons\hue_icon.png">
       <LogicalName>hue_icon.png</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources\icons\area_icon.png">
+      <LogicalName>area_icon.png</LogicalName>
+    </EmbeddedResource>
     <Reference Include="PluginApi">
       <HintPath>$(PluginApiDir)PluginApi.dll</HintPath>
     </Reference>
