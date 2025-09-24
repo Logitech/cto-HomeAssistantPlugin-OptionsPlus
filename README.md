@@ -51,15 +51,6 @@ Control your Home Assistant lights (and soon, any entity) from your Creative Con
 
 ---
 
-## Demo
-
-*(Screenshots/GIFs encouraged — drop them here later)*
-
-* Root: Areas grid
-* Area: Lights in “Office”
-* Device: On/Off, Brightness dial, Temp/Hue/Sat dials
-
----
 
 ## Requirements
 
@@ -217,26 +208,29 @@ src/
     Actions/
       ConfigureHomeAssistantAction.cs
       RunScriptAction.cs
-      HomeAssistantDynamicFolder.cs   # now Areas → Lights → Commands
+      HomeAssistantLightsDynamicFolder.cs   # now Areas → Lights → Commands
     Services/
       IconService.cs                  # one-time icon load and cache
       DebouncedSender.cs
       LightControlService.cs
       CapabilityService.cs            # capability inference
       ActionParam.cs                  # action parameter codec
+      Hs.cs
+      IHaClient.cs
     Models/
       LightCaps.cs
     Util/
       ColorTemp.cs
-      HSBHelper.cs
       JsonExt.cs
       TilePainter.cs                  # center/pad/glyph helpers
     Helpers/
+      HSBHelper.cs
       HaWebSocketClient.cs
       HaEventListener.cs
       HealthBus.cs                    # simple health propagation
-  HomeAssistant.Core/                 # (future) pure HA integration layer
-  HomeAssistant.Tests/                # unit tests for math/caps/debounce/etc.
+      HaEventListener.cs
+      PluginLog.cs
+      PluginResources.cs
 ```
 
 **Key ideas**
@@ -258,8 +252,7 @@ dotnet build
 
 ### Run / Debug
 
-* Start Loupedeck.
-* Load the plugin (dev mode) or point Loupedeck to your build output.
+* See Logi Actions SDK: [text](https://logitech.github.io/actions-sdk-docs)
 
 ### Style & Analyzers
 
@@ -273,7 +266,7 @@ dotnet build
 
 ---
 
-## Testing
+## Testing (TODO)
 
 Add tests under `HomeAssistant.Tests`:
 
@@ -295,7 +288,6 @@ dotnet test
 * **CI** (recommended): build, test, `dotnet format`, then produce plugin artifact.
 * **Versioning**: semantic (`MAJOR.MINOR.PATCH`).
 * **Changelog**: keep `CHANGELOG.md` up to date.
-* **Marketplace**: include screenshots, description, permissions, and setup steps.
 * **License file** and **attributions** required (see below).
 
 ---
@@ -323,17 +315,11 @@ dotnet test
 * Ensure the device supports brightness; check HA dashboard to confirm.
 * Look for plugin logs about `call_service` errors (network or auth).
 
-**High CPU or sluggish UI**
-
-* Debounced sender is already coalescing; ensure you didn’t add additional timers.
-* Check that you’re not spamming `ButtonActionNamesChanged()` in a loop.
-
 ---
 
 ## Security & Privacy
 
 * The plugin stores your **Base URL** and **Long-Lived Token** in Loupedeck’s plugin settings (local to your machine).
-* No telemetry.
 * Logs may include entity IDs and friendly names; avoid sharing logs publicly.
 
 ---
@@ -341,9 +327,7 @@ dotnet test
 ## Roadmap
 
 * **Generalize beyond lights** (switch, fan, climate, cover, scene)
-* **State store** for all entities + reusable dial model
-* **Reconnect & backoff** strategies exposed in logs
-* **Localization** scaffolding
+* **Other useful actions** beyond all the controls for a device (for ex toggle one light or a group)
 * **Marketplace release**
 
 ---
@@ -352,11 +336,10 @@ dotnet test
 
 Contributions welcome! Suggested ways to help:
 
-* Open issues with repro steps, device models, or HA payload samples.
+* Open issues with reproducibility steps, device models, logs, or HA payload samples.
 * “Good first issues”: tests for `HSBHelper`, `CapabilityService`, and `DebouncedSender`.
-* PRs for additional domains (start with a capability → dial definition).
+* PRs for additional domains (start with a capability definition).
 
-Please see **CONTRIBUTING.md** (create if missing) and follow the code style above.
 
 ---
 
@@ -364,14 +347,12 @@ Please see **CONTRIBUTING.md** (create if missing) and follow the code style abo
 
 **MIT** — see [LICENSE](LICENSE).
 
-> **Icon attributions**: If you ship 3rd-party icons, include their licenses and credits in `NOTICE` or this section.
-
 ---
 
 ## Credits
 
 * Home Assistant team & community
-* Loupedeck SDK & developer community
+* Logi Actions SDK
 * Contributors (add yourself in `AUTHORS`)
 
 ---

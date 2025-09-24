@@ -47,6 +47,12 @@ namespace Loupedeck.HomeAssistantPlugin
             this.ActionEditor.ListboxItemsRequested += this.OnListboxItemsRequested;
         }
 
+        protected override BitmapImage GetCommandImage(ActionEditorActionParameters parameters, Int32 width, Int32 height)
+        {
+            // Default icon
+            return PluginResources.ReadImage("area_icon.png");
+        }
+
         protected override Boolean OnLoad()
         {
             PluginLog.Info($"{LogPrefix} OnLoad()");
