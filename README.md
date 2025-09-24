@@ -28,6 +28,92 @@ Control your Home Assistant lights (and soon, any entity) from your Creative Con
 
 ---
 
+## Quick Start
+1. Find the plugin in the Logi Marketplace in options+ and install the plugin
+
+2. Create a **Long-Lived Token** and copy it (Home Assistant ->Your Profile -> Security -> Long-lived access tokens)
+
+
+![alt text](image.png)
+
+3. Drop the **Configure Home Assistant** action (located inside the HOME ASSISTANT folder) in a tile :
+
+   * **Base Websocket URL**: `ws://homeassistant.local:8123/` if Home Assistant was setup using the default way (or your own custom URL starting with `ws://` otherwise).
+   * **Long-Lived Token**: paste from HA Profile
+   * Click **Test connection**.
+   * If no error appears after short time click save.
+4. Put any **actions** you want into your layout. See what they do in the explanation helow
+5. (Optional) You may now delete the Configure Home Assistant action from your layout . The settings persist.
+
+---
+
+## Actions & How to Use Them
+
+
+### HA: Run Script
+
+Trigger or stop any `script.*` in Home Assistant.
+
+* **Press once** → runs the selected script (optionally with variables).
+* **Press again while running** → stops the script.
+
+**To configure:**
+
+1. Place **HA: Run Script** on your layout.
+2. In the popup:
+
+   * **Script**: pick from your `script.*` entities (the list auto-loads from HA).
+   * **Variables (JSON)**: optional; e.g. `{"minutes":5,"who":"guest"}`.
+   * **Prefer `script.toggle`**: leave **off** unless you know you need toggle semantics (toggle ignores variables).
+
+---
+
+### All Light Controls (Areas → Lights → Commands)
+
+Browse all lights and control them with capability-aware dials.
+
+1. Add **All Light Controls** to your layout and press it to enter.
+
+2. You’ll see:
+
+   * **Back** — navigates up one level (Device → Area → Root → closes).
+   * **Status** — shows ONLINE/ISSUE; press when ISSUE to surface the error in Options+.
+   * **Retry** — reconnects and reloads data from HA.
+   * **Areas** — your HA Areas (plus **(No area)** if some lights aren’t assigned).
+
+3. **Pick an Area** → shows all **Lights** in that area.
+
+4. **Pick a Light** → shows **Commands & Dials** for that device:
+
+   * **On / Off** buttons
+
+     * On uses the last cached brightness (min 1) when available.
+   * **Brightness** (dial): 0–255, optimistic UI with debounced sending.
+   * **Color Temp** (dial): warm ↔ cool, shown only if supported.
+   * **Hue** (dial): 0–360°, shown only if supported.
+   * **Saturation** (dial): 0–100%, shown only if supported.
+
+**Notes**
+
+* Controls are **capability-aware**—you only see what the light supports.
+* UI is **optimistic** and sends updates **debounced** to keep HA traffic low.
+* **Back** steps: Device → Area → Root. From Root, Back closes the folder.
+
+
+---
+
+
+### Home Assistant Permissions
+
+The Long-Lived Token must allow:
+
+* Reading state (`get_states`)
+* Calling services (e.g., `light.turn_on`)
+* Registry access (`config/*_registry/list`) to map devices and areas
+
+> If your HA user has standard admin privileges, you’re all set.
+---
+
 ## Features
 
 * **Setup (Action)**
@@ -107,96 +193,6 @@ The `.lplug4` format is a zip-like package with metadata; it’s registered with
 
 ---
 
-## Quick Start
-
-1. In Loupedeck, open the **Home Assistant** dynamic folder.
-2. Create a **Long-Lived Token** and copy it Home Assistant -> Profile -> Security -> Long-lived access tokens
-2. Press **Configure Home Assistant** action (or open the plugin’s settings):
-
-   * **Base URL**: `ws://homeassistant.local:8123/` (or your `wss://` URL)
-   * **Long-Lived Token**: paste from HA Profile
-   * Click **Test connection**.
-   * If no error appears after short time click save.
-3. Put any **actions** you want into your layout
-
----
-
-## Actions & How to Use Them
-
-### Configure Home Assistant (one-time setup)
-
-Use this once to connect the plugin to your HA instance—then you can remove it from your layout (settings persist).
-
-1. Drop **Configure Home Assistant** into any page.
-2. Enter your **HA WebSocket URL** (e.g., `ws://homeassistant.local:8123/` or `wss://...`).
-3. Paste a **Long-Lived Access Token** from your HA Profile.
-4. Click **Test connection**. If no error appears after a short moment, you’re good.
-5. Click **Save**. You may now delete the action from your layout; the plugin will remember your settings.
-
----
-
-### HA: Run Script
-
-Trigger or stop any `script.*` in Home Assistant.
-
-* **Press once** → runs the selected script (optionally with variables).
-* **Press again while running** → stops the script.
-
-**To configure:**
-
-1. Place **HA: Run Script** on your layout.
-2. In the popup:
-
-   * **Script**: pick from your `script.*` entities (the list auto-loads from HA).
-   * **Variables (JSON)**: optional; e.g. `{"minutes":5,"who":"guest"}`.
-   * **Prefer `script.toggle`**: leave **off** unless you know you need toggle semantics (toggle ignores variables).
-
----
-
-### All Light Controls (Areas → Lights → Commands)
-
-Browse all lights and control them with capability-aware dials.
-
-1. Add **All Light Controls** to your layout and press it to enter.
-
-2. You’ll see:
-
-   * **Back** — navigates up one level (Device → Area → Root → closes).
-   * **Status** — shows ONLINE/ISSUE; press when ISSUE to surface the error in Options+.
-   * **Retry** — reconnects and reloads data from HA.
-   * **Areas** — your HA Areas (plus **(No area)** if some lights aren’t assigned).
-
-3. **Pick an Area** → shows all **Lights** in that area.
-
-4. **Pick a Light** → shows **Commands & Dials** for that device:
-
-   * **On / Off** buttons
-
-     * On uses the last cached brightness (min 1) when available.
-   * **Brightness** (dial): 0–255, optimistic UI with debounced sending.
-   * **Color Temp** (dial): warm ↔ cool, shown only if supported.
-   * **Hue** (dial): 0–360°, shown only if supported.
-   * **Saturation** (dial): 0–100%, shown only if supported.
-
-**Notes**
-
-* Controls are **capability-aware**—you only see what the light supports.
-* UI is **optimistic** and sends updates **debounced** to keep HA traffic low.
-* **Back** steps: Device → Area → Root. From Root, Back closes the folder.
-
-
----
-
-
-### Home Assistant Permissions
-
-The Long-Lived Token must allow:
-
-* Reading state (`get_states`)
-* Calling services (e.g., `light.turn_on`)
-* Registry access (`config/*_registry/list`) to map devices and areas
-
-> If your HA user has standard admin privileges, you’re all set.
 
 ---
 
