@@ -47,7 +47,6 @@ Control your Home Assistant lights (and soon, any entity) from your Creative Con
 
 ## Actions & How to Use Them
 
-
 ### HA: Run Script
 
 Trigger or stop any `script.*` in Home Assistant.
@@ -63,6 +62,27 @@ Trigger or stop any `script.*` in Home Assistant.
    * **Script**: pick from your `script.*` entities (the list auto-loads from HA).
    * **Variables (JSON)**: optional; e.g. `{"minutes":5,"who":"guest"}`.
    * **Prefer `script.toggle`**: leave **off** unless you know you need toggle semantics (toggle ignores variables).
+
+---
+
+### Toggle Light
+
+Toggle a single `light.*` on/off via Home Assistant.
+
+* **Press** → sends `light.toggle` for the selected light.
+
+**To configure:**
+
+1. Place **Toggle Light** on your layout.
+2. In the popup:
+
+   * **Light**: pick from your `light.*` entities (the list auto-loads from HA state).
+   * If HA isn’t configured/connected yet, you’ll see a hint to open plugin settings.
+
+**Notes**
+
+* Works with any HA light entity; no variables are used (it’s a pure toggle).
+* Requires HA **Base URL** and **Long-Lived Token** to be set (see *Configure Home Assistant*).
 
 ---
 
@@ -97,8 +117,8 @@ Browse all lights and control them with capability-aware dials.
 * UI is **optimistic** and sends updates **debounced** to keep HA traffic low.
 * **Back** steps: Device → Area → Root. From Root, Back closes the folder.
 
-
 ---
+
 
 
 ### Home Assistant Permissions
