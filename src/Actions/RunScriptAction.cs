@@ -20,6 +20,8 @@ namespace Loupedeck.HomeAssistantPlugin
         private const String ControlVarsJson = "ha_vars_json";
         private const String ControlUseToggle = "ha_use_toggle";
 
+        private readonly IconService _icons;
+
         // Cache "running" state of scripts (kept updated by HaEventListener)
         private static readonly ConcurrentDictionary<String, Boolean> _isRunningCache =
             new(StringComparer.OrdinalIgnoreCase);
@@ -45,11 +47,15 @@ namespace Loupedeck.HomeAssistantPlugin
             );
 
             this.ActionEditor.ListboxItemsRequested += this.OnListboxItemsRequested;
+
+            this._icons = new IconService(new Dictionary<String, String>
+            {
+                { IconId.RunScript, "run_script_icon.png" },
+            });
         }
 
         protected override BitmapImage GetCommandImage(ActionEditorActionParameters parameters, Int32 width, Int32 height) =>
-            // Default icon
-            PluginResources.ReadImage("area_icon.png");
+            this._icons.Get(IconId.RunScript);
 
         protected override Boolean OnLoad()
         {

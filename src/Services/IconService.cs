@@ -52,5 +52,6 @@ namespace Loupedeck.HomeAssistantPlugin
         public const String Online = "online";
         public const String Hue = "hue";
         public const String Area = "area";
+        public const String RunScript = "run_script";
     }
 }
