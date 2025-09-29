@@ -105,11 +105,11 @@ Browse all lights and control them with capability-aware dials.
 
    * **On / Off** buttons
 
-     * On uses the last cached brightness (min 1) when available.
-   * **Brightness** (dial): 0–255, optimistic UI with debounced sending.
-   * **Color Temp** (dial): warm ↔ cool, shown only if supported.
-   * **Hue** (dial): 0–360°, shown only if supported.
-   * **Saturation** (dial): 0–100%, shown only if supported.
+     * On uses the last cached brightness, hue, sat when available.
+   * **Brightness** (use dial): 0–255, optimistic UI with debounced sending.
+   * **Color Temp** (use dial): warm ↔ cool, shown only if supported.
+   * **Hue** (use dial): 0–360°, shown only if supported.
+   * **Saturation** (use dial): 0–100%, shown only if supported.
 
 **Notes**
 
@@ -301,7 +301,6 @@ dotnet test
 
 * **CI** (recommended): build, test, `dotnet format`, then produce plugin artifact.
 * **Versioning**: semantic (`MAJOR.MINOR.PATCH`).
-* **Changelog**: keep `CHANGELOG.md` up to date.
 * **License file** and **attributions** required (see below).
 
 ---
@@ -333,7 +332,8 @@ dotnet test
 
 ## Security & Privacy
 
-* The plugin stores your **Base URL** and **Long-Lived Token** in Loupedeck’s plugin settings (local to your machine).
+* The plugin stores your **Base URL** and **Long-Lived Token** in Loupedeck’s plugin settings (local to your machine and stored encrypted).
+* Always use `wss://` for enhanced security.
 * Logs may include entity IDs and friendly names; avoid sharing logs publicly.
 
 ---
@@ -352,7 +352,7 @@ Contributions welcome! Suggested ways to help:
 
 * Open issues with reproducibility steps, device models, logs, or HA payload samples.
 * “Good first issues”: tests for `HSBHelper`, `CapabilityService`, and `DebouncedSender`.
-* PRs for additional domains (start with a capability definition).
+* PRs for additional domains eg. Blind controls.
 
 
 ---
@@ -367,7 +367,6 @@ Contributions welcome! Suggested ways to help:
 
 * Home Assistant team & community
 * Logi Actions SDK
-* Contributors (add yourself in `AUTHORS`)
 
 ---
 
