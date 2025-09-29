@@ -36,7 +36,7 @@ Control your Home Assistant lights (and soon, any entity) from your Creative Con
 
 3. Drop the **Configure Home Assistant** action (located inside the HOME ASSISTANT folder) in a tile :
 
-   * **Base Websocket URL**: `ws://homeassistant.local:8123/` if Home Assistant was setup using the default way (or your own custom URL starting with `ws://` otherwise).
+   * **Base Websocket URL**: `wss://homeassistant.local:8123/` if Home Assistant was setup using the default way (or your own custom URL starting with `wss://` or `ws://` otherwise). Prefer `wss://` for enhanced security.
    * **Long-Lived Token**: paste from HA Profile
    * Click **Test connection**.
    * If no error appears after short time click save.

@@ -19,8 +19,8 @@ namespace Loupedeck.HomeAssistantPlugin
             this.Description = "Drop into a tile to configure Home assistant before the first use(can remove after saving).";
 
             this.ActionEditor.AddControlEx(
-                new ActionEditorTextbox(CtlBaseUrl, "Base URL:")
-                    .SetPlaceholder("ws://homeassistant.local:8123/"));
+                new ActionEditorTextbox(CtlBaseUrl, "Base URL (prefer wss for enhanced security):")
+                    .SetPlaceholder("wss://homeassistant.local:8123/"));
 
             this.ActionEditor.AddControlEx(
                 new ActionEditorTextbox(CtlToken, "Long-Lived Token:")

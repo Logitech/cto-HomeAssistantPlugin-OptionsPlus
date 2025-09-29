@@ -1,29 +1,3 @@
-// ===============================================
-// "Toggle Light" Action - Requirements & UX Spec
-// ===============================================
-//
-// Purpose:
-//   - Allow users to toggle a specific Home Assistant light entity on/off via a plugin action.
-//
-// User Experience:
-//   - In the action editor, user sees a dropdown listing all available Home Assistant lights (by friendly name).
-//   - User selects a light from the dropdown to associate with this action instance.
-//   - The action displays an appropriate lightbulb icon (using IconService).
-//   - When the action is triggered, it toggles the selected light's state (on <-> off).
-//   - User receives visual feedback (e.g., icon animation, color change, or notification) indicating the toggle was sent.
-//
-// Requirements:
-//   - Retrieve list of all Home Assistant lights (entities of domain "light") for dropdown population.
-//   - Store the selected light entity_id in the action's configuration.
-//   - On execution, send a "toggle" command to the selected light via Home Assistant API/service.
-//   - Use IconService to display a lightbulb icon in the action UI.
-//   - Register and expose the action so it appears in the plugin's action list.
-//
-// Notes:
-//   - Should handle errors gracefully (e.g., if the selected light is unavailable).
-//   - Should support dynamic updates if lights are added/removed in Home Assistant.
-//
-// ===============================================
 namespace Loupedeck.HomeAssistantPlugin
 {
     using System;

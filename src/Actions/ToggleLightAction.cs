@@ -12,7 +12,6 @@ namespace Loupedeck.HomeAssistantPlugin
     {
         private const String LogPrefix = "[ToggleLight]";
         private HaWebSocketClient _client;
-        private HaEventListener _events;
 
         private const String ControlLight = "ha_light";
         private readonly IconService _icons;
@@ -53,7 +52,6 @@ namespace Loupedeck.HomeAssistantPlugin
             if (this.Plugin is HomeAssistantPlugin p)
             {
                 this._client = p.HaClient;
-                this._events = p.HaEvents;
                 return true;
             }
             PluginLog.Warning($"{LogPrefix} OnLoad(): plugin not available");
