@@ -8,23 +8,27 @@ Control your Home Assistant lights (and soon, any entity) from your Creative Con
 
 ## Table of Contents
 
-* [Features](#features)
-* [Demo](#demo)
-* [Requirements](#requirements)
-* [Install](#install)
-* [Quick Start](#quick-start)
-* [Controls & Navigation](#controls--navigation)
-* [Configuration](#configuration)
-* [Architecture](#architecture)
-* [Development](#development)
-* [Testing](#testing)
-* [Packaging & Release](#packaging--release)
-* [Troubleshooting](#troubleshooting)
-* [Security & Privacy](#security--privacy)
-* [Roadmap](#roadmap)
-* [Contributing](#contributing)
-* [License](#license)
-* [Credits](#credits)
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Actions & How to Use Them](#actions--how-to-use-them)
+  - [Home Assistant Permissions](#home-assistant-permissions)
+- [Requirements](#requirements)
+- [Install](#install)
+  - [Marketplace (soon)](#marketplace-soon)
+  - [Manual (from source)](#manual-from-source)
+- [Architecture](#architecture)
+- [Development](#development)
+- [Testing](#testing-todo)
+- [Packaging & Release](#packaging--release)
+- [Troubleshooting](#troubleshooting)
+- [Security & Privacy](#security--privacy)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [License](#license)
+- [Credits](#credits)
+- [Licensing & Icon Attributions](#licensing--icon-attributions)
+- [Appendix: Power-user Notes](#appendix-power-user-notes)
+
 
 ---
 
@@ -369,6 +373,17 @@ Contributions welcome! Suggested ways to help:
 * Logi Actions SDK
 
 ---
+
+## Licensing & Icon Attributions
+
+This project includes several third-party icons from [SVG Repo](https://www.svgrepo.com).
+
+- **MIT Licensed icons** by framework7io and Adam Whitcroft (lightbulb-fill, lightbulb-slash, reload).
+- **Apache 2.0 Licensed icon** by Richard9394 (back 2).
+- **Public Domain icons** by stephenhutchings and Noah Jacobus (lightbulb, door-open).
+
+Full license texts and attribution details are included in [THIRD_PARTY_LICENSES.md](./THIRD_PARTY_LICENSES.md).
+ ---
 
 ### Appendix: Power-user Notes
 
