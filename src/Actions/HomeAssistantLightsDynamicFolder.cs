@@ -463,18 +463,18 @@ namespace Loupedeck.HomeAssistantPlugin
 
             this._icons = new IconService(new Dictionary<String, String>
             {
-                { IconId.Bulb,        "light_bulb_icon.png" },
-                { IconId.Back,        "back_icon.png" },
-                { IconId.BulbOn,      "light_on_icon.png" },
-                { IconId.BulbOff,     "light_off_icon.png" },
+                { IconId.BulbSVG,        "light_bulb_icon.svg" },
+                { IconId.Back,        "back_icon.svg" },
+                { IconId.BulbOn,      "light_on_icon.svg" },
+                { IconId.BulbOff,     "light_off_icon.svg" },
                 { IconId.Brightness,  "brightness_icon.png" },
-                { IconId.Retry,       "reload_icon.png" },
+                { IconId.Retry,       "reload_icon.svg" },
                 { IconId.Saturation,  "saturation_icon.png" },
                 { IconId.Issue,       "issue_status_icon.png" },
                 { IconId.Temperature, "temperature_icon.png" },
                 { IconId.Online,      "online_status_icon.png" },
                 { IconId.Hue,         "hue_icon.png" },
-                { IconId.Area,         "area_icon.png" },
+                { IconId.Area,         "area_icon.svg" },
             });
 
             // Wrap the raw client so the service can be unit-tested / mocked later
@@ -639,7 +639,7 @@ namespace Loupedeck.HomeAssistantPlugin
             // DEVICE tiles (light bulbs)
             if (actionParameter.StartsWith(PfxDevice, StringComparison.OrdinalIgnoreCase))
             {
-                return this._icons.Get(IconId.Bulb);
+                return this._icons.Get(IconId.BulbSVG);
             }
 
             if (actionParameter.StartsWith(CmdArea, StringComparison.OrdinalIgnoreCase))

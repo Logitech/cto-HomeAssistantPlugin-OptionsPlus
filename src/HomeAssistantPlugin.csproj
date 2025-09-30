@@ -31,20 +31,23 @@
     <EmbeddedResource Include="Resources\icons\light_bulb_icon.png">
       <LogicalName>light_bulb_icon.png</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="Resources\icons\back_icon.png">
-      <LogicalName>back_icon.png</LogicalName>
+    <EmbeddedResource Include="Resources\icons\light_bulb_icon.svg">
+      <LogicalName>light_bulb_icon.svg</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="Resources\icons\light_on_icon.png">
-      <LogicalName>light_on_icon.png</LogicalName>
+    <EmbeddedResource Include="Resources\icons\back_icon.svg">
+      <LogicalName>back_icon.svg</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="Resources\icons\light_off_icon.png">
-      <LogicalName>light_off_icon.png</LogicalName>
+    <EmbeddedResource Include="Resources\icons\light_on_icon.svg">
+      <LogicalName>light_on_icon.svg</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\icons\light_off_icon.svg">
+      <LogicalName>light_off_icon.svg</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="Resources\icons\brightness_icon.png">
       <LogicalName>brightness_icon.png</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="Resources\icons\reload_icon.png">
-      <LogicalName>reload_icon.png</LogicalName>
+    <EmbeddedResource Include="Resources\icons\reload_icon.svg">
+      <LogicalName>reload_icon.svg</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="Resources\icons\saturation_icon.png">
       <LogicalName>saturation_icon.png</LogicalName>
@@ -61,8 +64,8 @@
     <EmbeddedResource Include="Resources\icons\hue_icon.png">
       <LogicalName>hue_icon.png</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="Resources\icons\area_icon.png">
-      <LogicalName>area_icon.png</LogicalName>
+    <EmbeddedResource Include="Resources\icons\area_icon.svg">
+      <LogicalName>area_icon.svg</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="Resources\icons\run_script_icon.png">
       <LogicalName>run_script_icon.png</LogicalName>
