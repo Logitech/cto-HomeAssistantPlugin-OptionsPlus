@@ -45,9 +45,9 @@ namespace Loupedeck.HomeAssistantPlugin
         private readonly Dictionary<String, (Double H, Double S, Int32 B)> _hsbByEntity
             = new Dictionary<String, (Double H, Double S, Int32 B)>(StringComparer.OrdinalIgnoreCase);
 
-            // ON/OFF state cache per entity (true = on, false = off)
-private readonly Dictionary<String, Boolean> _isOnByEntity =
-    new(StringComparer.OrdinalIgnoreCase);
+        // ON/OFF state cache per entity (true = on, false = off)
+        private readonly Dictionary<String, Boolean> _isOnByEntity =
+            new(StringComparer.OrdinalIgnoreCase);
 
 
         private readonly Dictionary<String, LightCaps> _capsByEntity =
@@ -137,6 +137,13 @@ private readonly Dictionary<String, Boolean> _isOnByEntity =
         private readonly IHaClient _ha; // adapter over HaWebSocketClient
 
 
+        // --- Echo suppression: ignore HA frames shortly after we sent a command ---
+        private readonly Dictionary<String, DateTime> _lastCmdAt =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        private static readonly TimeSpan EchoSuppressWindow = TimeSpan.FromSeconds(3);
+
+
 
 
 
@@ -148,12 +155,9 @@ private readonly Dictionary<String, Boolean> _isOnByEntity =
                 return this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId) ? "Brightness" : "Test Wheel";
             }
 
-            if (actionParameter == AdjTemp)
-            {
-                return "Color Temp";
-            }
-
-            return actionParameter == AdjHue
+            return actionParameter == AdjTemp
+                ? "Color Temp"
+                : actionParameter == AdjHue
                 ? "Hue"
                 : actionParameter == AdjSat ? "Saturation" : base.GetAdjustmentDisplayName(actionParameter, _);
         }
@@ -168,8 +172,8 @@ private readonly Dictionary<String, Boolean> _isOnByEntity =
             {
                 if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                 {
-                    var effB = GetEffectiveBrightnessForDisplay(this._currentEntityId);
-var pct = (Int32)Math.Round(effB * 100.0 / 255.0);
+                    var effB = this.GetEffectiveBrightnessForDisplay(this._currentEntityId);
+                    var pct = (Int32)Math.Round(effB * 100.0 / 255.0);
                     return $"{pct}%";
                 }
 
@@ -220,14 +224,13 @@ var pct = (Int32)Math.Round(effB * 100.0 / 255.0);
             if (actionParameter == AdjBri)
             {
                 var bri = 128;
-if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
-{
-    bri = this.GetEffectiveBrightnessForDisplay(this._currentEntityId);
-}
+                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
+                {
+                    bri = this.GetEffectiveBrightnessForDisplay(this._currentEntityId);
+                }
 
                 var pct = (Int32)Math.Round(bri * 100.0 / 255.0);
 
-                // Your warmish background logic preserved
                 Int32 r, g, b;
                 if (bri <= 0)
                 { r = g = b = 0; }
@@ -239,23 +242,32 @@ if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                 return TilePainter.IconOrGlyph(bb, this._icons.Get(IconId.Brightness), "☀", padPct: 10, font: 58);
             }
 
-
-
             if (actionParameter == AdjSat)
             {
                 Double H = 0, S = 100;
-                var B = 128;
-                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId) &&
-                    this._hsbByEntity.TryGetValue(this._currentEntityId, out var h))
-                { H = h.H; S = Math.Max(0, h.S); B = h.B; }
+                var effB = 128; // NEW: effective brightness (0 if off)
+                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
+                {
+                    // HS from cache (if present)
+                    if (this._hsbByEntity.TryGetValue(this._currentEntityId, out var h))
+                    {
+                        H = h.H;
+                        S = Math.Max(0, h.S);
+                    }
+                    // NEW: always compute display brightness from effective brightness
+                    effB = this.GetEffectiveBrightnessForDisplay(this._currentEntityId);
+                }
 
-                var (r, g, b) = HSBHelper.HsbToRgb(HSBHelper.Wrap360(H), S, 100.0 * B / 255.0);
+                var (r, g, b) = HSBHelper.HsbToRgb(
+                    HSBHelper.Wrap360(H),
+                    S,
+                    100.0 * effB / 255.0 // NEW: use effective brightness
+                );
 
                 using var bb = new BitmapBuilder(imageSize);
                 bb.Clear(new BitmapColor(r, g, b));
                 return TilePainter.IconOrGlyph(bb, this._icons.Get(IconId.Saturation), "S", padPct: 8, font: 56);
             }
-
 
             if (actionParameter == AdjTemp)
             {
@@ -278,28 +290,35 @@ if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                 return TilePainter.IconOrGlyph(bb, this._icons.Get(IconId.Temperature), "⟷", padPct: 10, font: 58);
             }
 
-
-
             if (actionParameter == AdjHue)
             {
                 Double H = 0, S = 100;
-                var B = 128;
-                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId) &&
-                    this._hsbByEntity.TryGetValue(this._currentEntityId, out var h))
-                { H = h.H; S = Math.Max(40, h.S); B = h.B; }
+                var effB = 128; // NEW: effective brightness (0 if off)
+                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
+                {
+                    if (this._hsbByEntity.TryGetValue(this._currentEntityId, out var h))
+                    {
+                        H = h.H;
+                        S = Math.Max(40, h.S); // keep your min-S for Hue tile
+                    }
+                    // NEW: always compute display brightness from effective brightness
+                    effB = this.GetEffectiveBrightnessForDisplay(this._currentEntityId);
+                }
 
-                var (r, g, b) = HSBHelper.HsbToRgb(HSBHelper.Wrap360(H), S, 100.0 * B / 255.0);
+                var (r, g, b) = HSBHelper.HsbToRgb(
+                    HSBHelper.Wrap360(H),
+                    S,
+                    100.0 * effB / 255.0 // NEW: use effective brightness
+                );
 
                 using var bb = new BitmapBuilder(imageSize);
                 bb.Clear(new BitmapColor(r, g, b));
                 return TilePainter.IconOrGlyph(bb, this._icons.Get(IconId.Hue), "H", padPct: 8, font: 56);
             }
 
-
-
-
             return null;
         }
+
 
 
 
@@ -331,6 +350,11 @@ if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                         // optimistic UI: update cache immediately → live value/image
                         this.SetCachedBrightness(entityId, targetB);
                         this.AdjustmentValueChanged(actionParameter);
+                        this.AdjustmentValueChanged(AdjSat);
+                        this.AdjustmentValueChanged(AdjHue);
+
+
+                        this.MarkCommandSent(entityId);
 
                         this._lightSvc.SetBrightness(entityId, targetB);
 
@@ -378,6 +402,7 @@ if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                     this.AdjustmentValueChanged(AdjHue);
 
                     var curH = this._hsbByEntity.TryGetValue(eid, out var hsb3) ? hsb3.H : 0;
+                    this.MarkCommandSent(eid);
                     this._lightSvc.SetHueSat(eid, curH, newS);
 
 
@@ -411,6 +436,7 @@ if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                     this.AdjustmentValueChanged(AdjSat);
 
                     var curS = this._hsbByEntity.TryGetValue(eid, out var hsb2) ? hsb2.S : 100;
+                    this.MarkCommandSent(eid);
                     this._lightSvc.SetHueSat(eid, newH, curS);
 
                 }
@@ -441,6 +467,7 @@ if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                     // Optimistic UI
                     this.SetCachedTempMired(eid, null, null, targetM);
                     this.AdjustmentValueChanged(AdjTemp);
+                    this.MarkCommandSent(eid);
                     this._lightSvc.SetTempMired(eid, targetM);
                 }
             }
@@ -610,10 +637,9 @@ if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
         private Int32 GetEffectiveBrightnessForDisplay(String entityId)
         {
             // If we know it’s OFF, show 0; otherwise show cached B
-            if (this._isOnByEntity.TryGetValue(entityId, out var on) && !on)
-                return 0;
-
-            return this._hsbByEntity.TryGetValue(entityId, out var hsb) ? hsb.B : 0;
+            return this._isOnByEntity.TryGetValue(entityId, out var on) && !on
+                ? 0
+                : this._hsbByEntity.TryGetValue(entityId, out var hsb) ? hsb.B : 0;
         }
 
 
@@ -795,7 +821,11 @@ if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                 this._isOnByEntity[entityId] = true;
                 this.CommandImageChanged(this.CreateCommandName($"{PfxDevice}{entityId}"));
                 if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
+                {
                     this.AdjustmentValueChanged(AdjBri);
+                    this.AdjustmentValueChanged(AdjSat);
+                    this.AdjustmentValueChanged(AdjHue);
+                }
 
                 JsonElement? data = null;
                 var caps = this.GetCaps(entityId);
@@ -804,6 +834,7 @@ if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                     var bri = HSBHelper.Clamp(Math.Max(1, hsb.B), 1, 255);
                     data = JsonSerializer.SerializeToElement(new { brightness = bri });
                 }
+                this.MarkCommandSent(entityId);
                 _ = this._lightSvc.TurnOnAsync(entityId, data);
                 return;
             }
@@ -815,9 +846,14 @@ if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                 this._isOnByEntity[entityId] = false;
                 this.CommandImageChanged(this.CreateCommandName($"{PfxDevice}{entityId}"));
                 if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
+                {
                     this.AdjustmentValueChanged(AdjBri);
+                    this.AdjustmentValueChanged(AdjSat);
+                    this.AdjustmentValueChanged(AdjHue);
+                }
 
                 this._lightSvc.TurnOffAsync(entityId);
+                this.MarkCommandSent(entityId);
                 return;
             }
 
@@ -851,8 +887,8 @@ if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
 
             // New debounced sender
             this._lightSvc?.Dispose();
-            _eventsCts?.Cancel();
-            _events.SafeCloseAsync();
+            this._eventsCts?.Cancel();
+            this._events.SafeCloseAsync();
 
             HealthBus.HealthChanged -= this.OnHealthChanged;
             return true;
@@ -871,7 +907,7 @@ if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
             PluginLog.Info("DynamicFolder.Deactivate() -> close WS");
             this._cts?.Cancel();
             this._client.SafeCloseAsync().GetAwaiter().GetResult();
-            _eventsCts?.Cancel();
+            this._eventsCts?.Cancel();
             _ = this._events.SafeCloseAsync();
             //this.Plugin.OnPluginStatusChanged(PluginStatus.Warning, "Folder closed.", null);
             return true;
@@ -929,8 +965,8 @@ if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
 
                     try
                     {
-                        _eventsCts?.Cancel();
-_eventsCts = new CancellationTokenSource();
+                        this._eventsCts?.Cancel();
+                        this._eventsCts = new CancellationTokenSource();
                         this._events.BrightnessChanged -= this.OnHaBrightnessChanged; // avoid dup
                         this._events.BrightnessChanged += this.OnHaBrightnessChanged;
 
@@ -940,15 +976,15 @@ _eventsCts = new CancellationTokenSource();
                         this._events.HsColorChanged -= this.OnHaHsColorChanged;
                         this._events.HsColorChanged += this.OnHaHsColorChanged;
 
-this._events.RgbColorChanged -= this.OnHaRgbColorChanged;
-this._events.RgbColorChanged += this.OnHaRgbColorChanged;
+                        this._events.RgbColorChanged -= this.OnHaRgbColorChanged;
+                        this._events.RgbColorChanged += this.OnHaRgbColorChanged;
 
-this._events.XyColorChanged  -= this.OnHaXyColorChanged;
+                        this._events.XyColorChanged -= this.OnHaXyColorChanged;
                         this._events.XyColorChanged += this.OnHaXyColorChanged;
-PluginLog.Verbose("[WS] connecting event stream…");
+                        PluginLog.Verbose("[WS] connecting event stream…");
 
 
-                        _ = this._events.ConnectAndSubscribeAsync(baseUrl, token, _eventsCts.Token); // fire-and-forget
+                        _ = this._events.ConnectAndSubscribeAsync(baseUrl, token, this._eventsCts.Token); // fire-and-forget
                         PluginLog.Info("[events] subscribed to state_changed");
                     }
                     catch (Exception ex)
@@ -1196,31 +1232,31 @@ PluginLog.Verbose("[WS] connecting event stream…");
                     this._entityToAreaId[entityId] = areaId;
 
                     // --- Brightness: seed without clobbering last non-zero on OFF ---
-var bri = 0;
+                    var bri = 0;
 
-JsonElement brEl = default;   // <-- initialize
-var hasAttrBri = false;
+                    JsonElement brEl = default;   // <-- initialize
+                    var hasAttrBri = false;
 
-if (attrs.ValueKind == JsonValueKind.Object &&
-    attrs.TryGetProperty("brightness", out brEl) &&
-    brEl.ValueKind == JsonValueKind.Number)
-{
-    hasAttrBri = true;
-}
+                    if (attrs.ValueKind == JsonValueKind.Object &&
+                        attrs.TryGetProperty("brightness", out brEl) &&
+                        brEl.ValueKind == JsonValueKind.Number)
+                    {
+                        hasAttrBri = true;
+                    }
 
-if (hasAttrBri)
-{
-    bri = HSBHelper.Clamp(brEl.GetInt32(), 0, 255);
-}
-else if (!isOn) // OFF and no brightness attribute: keep last-known if any
-{
-    bri = this._hsbByEntity.TryGetValue(entityId, out var oldBri) ? oldBri.B : 0;
-}
-else
-{
-    // ON but no brightness attribute → reasonable fallback
-    bri = 128;
-}
+                    if (hasAttrBri)
+                    {
+                        bri = HSBHelper.Clamp(brEl.GetInt32(), 0, 255);
+                    }
+                    else if (!isOn) // OFF and no brightness attribute: keep last-known if any
+                    {
+                        bri = this._hsbByEntity.TryGetValue(entityId, out var oldBri) ? oldBri.B : 0;
+                    }
+                    else
+                    {
+                        // ON but no brightness attribute → reasonable fallback
+                        bri = 128;
+                    }
 
 
                     // Optional HS seed (doesn’t matter for brightness UI, but nice to keep)
@@ -1343,70 +1379,52 @@ else
 
 
         private void OnHaBrightnessChanged(String entityId, Int32? bri)
-{
-    if (!entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase)) return;
-
-    // Snapshot what the UI currently *shows*
-    var wasOn    = this._isOnByEntity.TryGetValue(entityId, out var onTmp) && onTmp;
-    var prevEffB = GetEffectiveBrightnessForDisplay(entityId);
-
-    var stateChanged   = false;
-    var cacheBChanged  = false;
-
-    if (bri.HasValue)
-    {
-        if (bri.Value <= 0)
         {
-            // OFF: do NOT change cached B; only flip state if it actually changed
-            if (wasOn)
+            // Only lights
+            if (!entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
             {
-                this._isOnByEntity[entityId] = false;
-                stateChanged = true;
+                return;
             }
+
+            if (this.ShouldIgnoreFrame(entityId, "brightness"))
+            {
+                return;
+            }
+
+            // Update ON/OFF state from brightness signal:
+            if (bri.HasValue)
+            {
+                if (bri.Value <= 0)
+                {
+                    // OFF → don't change cached B, just mark state off
+                    this._isOnByEntity[entityId] = false;
+                }
+                else
+                {
+                    // ON → update cached B and mark on
+                    this._isOnByEntity[entityId] = true;
+                    this.SetCachedBrightness(entityId, HSBHelper.Clamp(bri.Value, 0, 255));
+                }
+            }
+
+            // Repaint: show 0 if OFF, else cached B
+            if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
+            {
+                this.AdjustmentValueChanged(AdjBri);
+            }
+
+            // Also repaint the device tile icon if visible in the current view
+            this.CommandImageChanged(this.CreateCommandName($"{PfxDevice}{entityId}"));
         }
-        else
-        {
-            // ON: ensure state is ON and update cached B *only if different*
-            var clamped = HSBHelper.Clamp(bri.Value, 0, 255);
-
-            if (!wasOn)
-            {
-                this._isOnByEntity[entityId] = true;
-                stateChanged = true;
-            }
-
-            if (!this._hsbByEntity.TryGetValue(entityId, out var hsb) || hsb.B != clamped)
-            {
-                this.SetCachedBrightness(entityId, clamped);
-                cacheBChanged = true;
-            }
-        }
-    }
-
-    // If nothing changes in what the UI shows, bail out early
-    var newEffB = GetEffectiveBrightnessForDisplay(entityId);
-    if (!stateChanged && !cacheBChanged && newEffB == prevEffB)
-        return;
-
-    // Repaint only if we’re looking at this device
-    if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
-    {
-        this.AdjustmentValueChanged(AdjBri);
-        this.AdjustmentImageChanged(AdjBri); // image too, for good measure
-    }
-
-    // Device tile icon depends on ON/OFF → refresh only if state flipped
-    if (stateChanged)
-    {
-        this.CommandImageChanged(this.CreateCommandName($"{PfxDevice}{entityId}"));
-    }
-}
-
 
 
         private void OnHaColorTempChanged(String entityId, Int32? mired, Int32? kelvin, Int32? minM, Int32? maxM)
         {
             if (!entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+            if (this.ShouldIgnoreFrame(entityId, "color_temp"))
             {
                 return;
             }
@@ -1438,6 +1456,10 @@ else
             {
                 return;
             }
+            if (this.ShouldIgnoreFrame(entityId, "hs_color"))
+            {
+                return;
+            }
 
             PluginLog.Verbose($"[OnHaHsColorChanged] eid={entityId} h={h?.ToString("F1")} s={s?.ToString("F1")}");
 
@@ -1463,75 +1485,127 @@ else
         }
 
         // Small thresholds to avoid UI churn on tiny float changes
-private const Double HueEps = 0.5;     // degrees
-private const Double SatEps = 0.5;     // percent
+        private const Double HueEps = 0.5;     // degrees
+        private const Double SatEps = 0.5;     // percent
 
-private void OnHaRgbColorChanged(String entityId, Int32? r, Int32? g, Int32? b)
-{
-    if (!entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase)) return;
-    if (!r.HasValue || !g.HasValue || !b.HasValue) return;
-
-    PluginLog.Verbose($"[OnHaRgbColorChanged] eid={entityId} rgb=[{r},{g},{b}]");
-    
-
-    var (h, s) = HSBHelper.RgbToHs(r.Value, g.Value, b.Value);
-    h = HSBHelper.Wrap360(h);
-    s = HSBHelper.Clamp(s, 0, 100);
-
-    var cur = this._hsbByEntity.TryGetValue(entityId, out var old) ? old : (0, 100.0, 128);
-    bool changed = Math.Abs(cur.H - h) >= HueEps || Math.Abs(cur.S - s) >= SatEps;
-
-    if (!changed) return;
-
-    this._hsbByEntity[entityId] = (h, s, cur.B);
-
-    if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
-    {
-        this.AdjustmentValueChanged(AdjHue);
-        this.AdjustmentValueChanged(AdjSat);
-        // brightness unchanged here
-    }
-}
-
-private void OnHaXyColorChanged(String entityId, Double? x, Double? y, Int32? bri)
-{
-    if (!entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase)) return;
-    if (!x.HasValue || !y.HasValue) return;
-    
-    PluginLog.Verbose($"[OnHaXyColorChanged] eid={entityId} xy=[{x?.ToString("F4")},{y?.ToString("F4")}] bri={bri}");
-    
-
-    // Pick a luminance for XY->RGB: prefer event bri, else cached, else mid
-            Int32 baseB = this._hsbByEntity.TryGetValue(entityId, out var old) ? old.B : 128;
-    Int32 usedB = HSBHelper.Clamp(bri ?? baseB, 0, 255);
-
-    var (R, G, B) = ColorConv.XyBriToRgb(x.Value, y.Value, usedB);
-    var (h, s) = HSBHelper.RgbToHs(R, G, B);
-    h = HSBHelper.Wrap360(h);
-    s = HSBHelper.Clamp(s, 0, 100);
-
-    // Compare with old to avoid churn
-    var cur = this._hsbByEntity.TryGetValue(entityId, out var curHsb) ? curHsb : (0, 100.0, 128);
-    bool hsChanged  = Math.Abs(cur.H - h) >= HueEps || Math.Abs(cur.S - s) >= SatEps;
-    bool briChanged = bri.HasValue && usedB != cur.B;
-
-    if (!hsChanged && !briChanged) return;
-
-    this._hsbByEntity[entityId] = (h, s, briChanged ? usedB : cur.B);
-
-    if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
-    {
-        if (hsChanged)
+        private void OnHaRgbColorChanged(String entityId, Int32? r, Int32? g, Int32? b)
         {
-            this.AdjustmentValueChanged(AdjHue);
-            this.AdjustmentValueChanged(AdjSat);
+            if (!entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (!r.HasValue || !g.HasValue || !b.HasValue)
+            {
+                return;
+            }
+
+            if (this.ShouldIgnoreFrame(entityId, "rgb_color"))
+            {
+                return;
+            }
+
+            PluginLog.Verbose($"[OnHaRgbColorChanged] eid={entityId} rgb=[{r},{g},{b}]");
+
+
+            var (h, s) = HSBHelper.RgbToHs(r.Value, g.Value, b.Value);
+            h = HSBHelper.Wrap360(h);
+            s = HSBHelper.Clamp(s, 0, 100);
+
+            var cur = this._hsbByEntity.TryGetValue(entityId, out var old) ? old : (0, 100.0, 128);
+            var changed = Math.Abs(cur.H - h) >= HueEps || Math.Abs(cur.S - s) >= SatEps;
+
+            if (!changed)
+            {
+                return;
+            }
+
+            this._hsbByEntity[entityId] = (h, s, cur.B);
+
+            if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
+            {
+                this.AdjustmentValueChanged(AdjHue);
+                this.AdjustmentValueChanged(AdjSat);
+                // brightness unchanged here
+            }
         }
-        if (briChanged)
+
+        private void OnHaXyColorChanged(String entityId, Double? x, Double? y, Int32? bri)
         {
-            this.AdjustmentValueChanged(AdjBri);
+            if (!entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (!x.HasValue || !y.HasValue)
+            {
+                return;
+            }
+
+            if (this.ShouldIgnoreFrame(entityId, "xy_color"))
+            {
+                return;
+            }
+
+            PluginLog.Verbose($"[OnHaXyColorChanged] eid={entityId} xy=[{x?.ToString("F4")},{y?.ToString("F4")}] bri={bri}");
+
+
+            // Pick a luminance for XY->RGB: prefer event bri, else cached, else mid
+            var baseB = this._hsbByEntity.TryGetValue(entityId, out var old) ? old.B : 128;
+            var usedB = HSBHelper.Clamp(bri ?? baseB, 0, 255);
+
+            var (R, G, B) = ColorConv.XyBriToRgb(x.Value, y.Value, usedB);
+            var (h, s) = HSBHelper.RgbToHs(R, G, B);
+            h = HSBHelper.Wrap360(h);
+            s = HSBHelper.Clamp(s, 0, 100);
+
+            // Compare with old to avoid churn
+            var cur = this._hsbByEntity.TryGetValue(entityId, out var curHsb) ? curHsb : (0, 100.0, 128);
+            var hsChanged = Math.Abs(cur.H - h) >= HueEps || Math.Abs(cur.S - s) >= SatEps;
+            var briChanged = bri.HasValue && usedB != cur.B;
+
+            if (!hsChanged && !briChanged)
+            {
+                return;
+            }
+
+            this._hsbByEntity[entityId] = (h, s, briChanged ? usedB : cur.B);
+
+            if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
+            {
+                if (hsChanged)
+                {
+                    this.AdjustmentValueChanged(AdjHue);
+                    this.AdjustmentValueChanged(AdjSat);
+                }
+                if (briChanged)
+                {
+                    this.AdjustmentValueChanged(AdjBri);
+                }
+            }
         }
-    }
-}
+
+
+        private void MarkCommandSent(String entityId) => this._lastCmdAt[entityId] = DateTime.UtcNow;
+
+        private Boolean ShouldIgnoreFrame(String entityId, String reasonForLog = null)
+        {
+            if (this._lastCmdAt.TryGetValue(entityId, out var t))
+            {
+                if ((DateTime.UtcNow - t) <= EchoSuppressWindow)
+                {
+                    if (!String.IsNullOrEmpty(reasonForLog))
+                    {
+                        PluginLog.Verbose($"[echo] Suppressing frame for {entityId} ({reasonForLog})");
+                    }
+
+                    return true;
+                }
+                // past the window → forget it
+                this._lastCmdAt.Remove(entityId);
+            }
+            return false;
+        }
 
 
 

@@ -16,14 +16,14 @@ namespace Loupedeck.HomeAssistantPlugin
         private HaWebSocketClient _client;
         private HaEventListener _events;
 
-        private const string ItemLoading = "!loading";
-        private const string ItemNone = "!none";
+        private const String ItemLoading = "!loading";
+        private const String ItemNone = "!none";
 
 
-        private static readonly ConcurrentDictionary<string, string> _scripts =
+        private static readonly ConcurrentDictionary<String, String> _scripts =
     new(StringComparer.OrdinalIgnoreCase);
 
-        private static volatile bool _scriptsLoadedOnce = false;
+        private static volatile Boolean _scriptsLoadedOnce = false;
         private static readonly SemaphoreSlim _scriptsRefreshGate = new(1, 1);
 
         private const String ControlScript = "ha_script";
@@ -268,7 +268,9 @@ namespace Loupedeck.HomeAssistantPlugin
         private void OnListboxItemsRequested(Object sender, ActionEditorListboxItemsRequestedEventArgs e)
         {
             if (!e.ControlName.EqualsNoCase(ControlScript))
+            {
                 return;
+            }
 
             PluginLog.Info($"{LogPrefix} ListboxItemsRequested({e.ControlName})");
 
@@ -286,8 +288,8 @@ namespace Loupedeck.HomeAssistantPlugin
                     PluginLog.Info($"{LogPrefix} Served cached scripts: {count}");
 
                     // Keep current selection if still valid
-                    var current = e.ActionEditorState?.GetControlValue(ControlScript) as string;
-                    if (!string.IsNullOrEmpty(current) && _scripts.ContainsKey(current))
+                    var current = e.ActionEditorState?.GetControlValue(ControlScript) as String;
+                    if (!String.IsNullOrEmpty(current) && _scripts.ContainsKey(current))
                     {
                         e.SetSelectedItemName(current);
                     }
@@ -324,11 +326,15 @@ namespace Loupedeck.HomeAssistantPlugin
         private void OnActionEditorControlValueChanged(Object _, ActionEditorControlValueChangedEventArgs ce)
         {
             if (!ce.ControlName.EqualsNoCase(ControlScript))
+            {
                 return;
+            }
 
             var v = ce.ActionEditorState.GetControlValue(ControlScript);
             if (!String.Equals(v, ItemLoading, StringComparison.OrdinalIgnoreCase))
+            {
                 return;
+            }
 
             // Try a refresh in the background; user can reopen the list to see results
             Task.Run(async () =>
@@ -345,7 +351,7 @@ namespace Loupedeck.HomeAssistantPlugin
         }
 
 
-        private async Task<bool> RefreshScriptsCacheAsync(CancellationToken ct)
+        private async Task<Boolean> RefreshScriptsCacheAsync(CancellationToken ct)
         {
             await _scriptsRefreshGate.WaitAsync(ct).ConfigureAwait(false);
             try
@@ -357,21 +363,26 @@ namespace Loupedeck.HomeAssistantPlugin
                 }
 
                 var (ok, json, error) = await this._client.RequestAsync("get_states", ct).ConfigureAwait(false);
-                if (!ok || string.IsNullOrEmpty(json))
+                if (!ok || String.IsNullOrEmpty(json))
                 {
                     PluginLog.Warning($"{LogPrefix} RefreshScriptsCacheAsync: get_states failed: '{error ?? "unknown"}'");
                     return false;
                 }
 
-                var local = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var local = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
                 using var doc = JsonDocument.Parse(json);
                 foreach (var el in doc.RootElement.EnumerateArray())
                 {
                     if (!el.TryGetProperty("entity_id", out var idProp))
+                    {
                         continue;
+                    }
+
                     var id = idProp.GetString();
-                    if (string.IsNullOrEmpty(id) || !id.StartsWith("script.", StringComparison.OrdinalIgnoreCase))
+                    if (String.IsNullOrEmpty(id) || !id.StartsWith("script.", StringComparison.OrdinalIgnoreCase))
+                    {
                         continue;
+                    }
 
                     var display = id;
                     if (el.TryGetProperty("attributes", out var attrs) &&
@@ -387,7 +398,9 @@ namespace Loupedeck.HomeAssistantPlugin
                 // swap into concurrent cache
                 _scripts.Clear();
                 foreach (var kv in local)
+                {
                     _scripts[kv.Key] = kv.Value;
+                }
 
                 _scriptsLoadedOnce = true;
                 PluginLog.Info($"{LogPrefix} Refreshed scripts: count={_scripts.Count}");

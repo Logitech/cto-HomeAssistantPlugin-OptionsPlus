@@ -25,13 +25,9 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 h = 0;
             }
-            else if (max == R)
-            {
-                h = 60 * ((G - B) / d % 6);
-            }
             else
             {
-                h = max == G ? 60 * ((B - R) / d + 2) : 60 * ((R - G) / d + 4);
+                h = max == R ? 60 * ((G - B) / d % 6) : max == G ? 60 * ((B - R) / d + 2) : 60 * ((R - G) / d + 4);
             }
 
             h = Wrap360(h);

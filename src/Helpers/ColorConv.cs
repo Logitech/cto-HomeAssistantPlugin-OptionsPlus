@@ -16,16 +16,18 @@ namespace Loupedeck.HomeAssistantPlugin
             var Y = Math.Max(0, Math.Min(1, brightness / 255.0)); // relative luminance
 
             // xyY -> XYZ
-            var X = (Y / y) * x;
-            var Z = (Y / y) * (1.0 - x - y);
+            var X = Y / y * x;
+            var Z = Y / y * (1.0 - x - y);
 
             // XYZ -> linear sRGB (D65)
-            var r =  3.2406 * X - 1.5372 * Y - 0.4986 * Z;
+            var r = 3.2406 * X - 1.5372 * Y - 0.4986 * Z;
             var g = -0.9689 * X + 1.8758 * Y + 0.0415 * Z;
-            var b =  0.0557 * X - 0.2040 * Y + 1.0570 * Z;
+            var b = 0.0557 * X - 0.2040 * Y + 1.0570 * Z;
 
             // clip negatives before gamma
-            r = Math.Max(0, r); g = Math.Max(0, g); b = Math.Max(0, b);
+            r = Math.Max(0, r);
+            g = Math.Max(0, g);
+            b = Math.Max(0, b);
 
             // Gamma to sRGB
             r = r <= 0.0031308 ? 12.92 * r : 1.055 * Math.Pow(r, 1.0 / 2.4) - 0.055;
@@ -34,11 +36,12 @@ namespace Loupedeck.HomeAssistantPlugin
 
             // normalize if any >1
             var max = Math.Max(r, Math.Max(g, b));
-            if (max > 1.0) { r /= max; g /= max; b /= max; }
+            if (max > 1.0)
+            { r /= max; g /= max; b /= max; }
 
-            Int32 R = (Int32)Math.Round(255.0 * Math.Max(0, Math.Min(1, r)));
-            Int32 G = (Int32)Math.Round(255.0 * Math.Max(0, Math.Min(1, g)));
-            Int32 B = (Int32)Math.Round(255.0 * Math.Max(0, Math.Min(1, b)));
+            var R = (Int32)Math.Round(255.0 * Math.Max(0, Math.Min(1, r)));
+            var G = (Int32)Math.Round(255.0 * Math.Max(0, Math.Min(1, g)));
+            var B = (Int32)Math.Round(255.0 * Math.Max(0, Math.Min(1, b)));
             return (R, G, B);
         }
     }

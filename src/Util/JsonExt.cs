@@ -12,12 +12,9 @@ namespace Loupedeck.HomeAssistantPlugin
                 return null;
             }
 
-            if (!el.TryGetProperty(name, out var v))
-            {
-                return null;
-            }
-
-            return v.ValueKind == JsonValueKind.Null ? null : v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+            return !el.TryGetProperty(name, out var v)
+                ? null
+                : v.ValueKind == JsonValueKind.Null ? null : v.ValueKind == JsonValueKind.String ? v.GetString() : null;
         }
     }
 }
