@@ -14,6 +14,7 @@ namespace Loupedeck.HomeAssistantPlugin
     /// </summary>
     public readonly record struct LightCaps(Boolean OnOff, Boolean Brightness, Boolean ColorTemp, Boolean ColorHs)
     {
+        const String HS = "hs", RGB = "rgb", XY = "xy", RGBW = "rgbw", RGBWW = "rgbww", CT = "color_temp", BR = "brightness", ONOFF = "onoff", WHITE = "white";
         public static LightCaps FromAttributes(JsonElement attrs)
         {
             Boolean onoff = false, bri = false, ctemp = false, color = false;
@@ -33,10 +34,11 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 onoff = modes.Contains("onoff");
                 ctemp = modes.Contains("color_temp");
-                color = modes.Contains("hs") || modes.Contains("rgb") || modes.Contains("xy");
+                color = modes.Contains(HS) || modes.Contains(RGB) || modes.Contains(XY) || modes.Contains(RGBW) || modes.Contains(RGBWW);
+
 
                 // Brightness is implied by many color modes in HA; be liberal:
-                bri = modes.Contains("brightness") || color || ctemp || !onoff;
+                bri = modes.Contains(BR) || modes.Contains(WHITE) || color || ctemp;
             }
             else
             {

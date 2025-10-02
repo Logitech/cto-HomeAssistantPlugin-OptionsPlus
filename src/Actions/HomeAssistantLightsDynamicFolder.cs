@@ -54,7 +54,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private LightCaps GetCaps(String eid) =>
             this._capsByEntity.TryGetValue(eid, out var c)
                 ? c
-                : new LightCaps(true, true, false, false); // safe default: on/off + brightness
+                : new LightCaps(true, false, false, false); // safe default: on/off + brightness
 
 
 
