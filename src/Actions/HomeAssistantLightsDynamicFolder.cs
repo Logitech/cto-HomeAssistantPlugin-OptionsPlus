@@ -45,6 +45,11 @@ namespace Loupedeck.HomeAssistantPlugin
         private readonly Dictionary<String, (Double H, Double S, Int32 B)> _hsbByEntity
             = new Dictionary<String, (Double H, Double S, Int32 B)>(StringComparer.OrdinalIgnoreCase);
 
+            // ON/OFF state cache per entity (true = on, false = off)
+private readonly Dictionary<String, Boolean> _isOnByEntity =
+    new(StringComparer.OrdinalIgnoreCase);
+
+
         private readonly Dictionary<String, LightCaps> _capsByEntity =
             new(StringComparer.OrdinalIgnoreCase);
 
@@ -122,6 +127,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private const Int32 MaxPctPerEvent = 10;  // cap huge coalesced diffs to keep UI sane
 
         private readonly HaEventListener _events = new();
+        private CancellationTokenSource _eventsCts;
 
 
 
@@ -162,12 +168,9 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                 {
-                    if (this._hsbByEntity.TryGetValue(this._currentEntityId, out var hsb))
-                    {
-                        var pct = (Int32)Math.Round(hsb.B * 100.0 / 255.0);
-                        return $"{pct}%";
-                    }
-                    return "— %"; // no cache yet → neutral placeholder
+                    var effB = GetEffectiveBrightnessForDisplay(this._currentEntityId);
+var pct = (Int32)Math.Round(effB * 100.0 / 255.0);
+                    return $"{pct}%";
                 }
 
                 // Root view: tick counter for diagnostics
@@ -217,11 +220,10 @@ namespace Loupedeck.HomeAssistantPlugin
             if (actionParameter == AdjBri)
             {
                 var bri = 128;
-                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId) &&
-                    this._hsbByEntity.TryGetValue(this._currentEntityId, out var hsbLocal))
-                {
-                    bri = hsbLocal.B;
-                }
+if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
+{
+    bri = this.GetEffectiveBrightnessForDisplay(this._currentEntityId);
+}
 
                 var pct = (Int32)Math.Round(bri * 100.0 / 255.0);
 
@@ -605,6 +607,16 @@ namespace Loupedeck.HomeAssistantPlugin
             return actionParameter.StartsWith(PfxActOff, StringComparison.OrdinalIgnoreCase) ? "Off" : null;
         }
 
+        private Int32 GetEffectiveBrightnessForDisplay(String entityId)
+        {
+            // If we know it’s OFF, show 0; otherwise show cached B
+            if (this._isOnByEntity.TryGetValue(entityId, out var on) && !on)
+                return 0;
+
+            return this._hsbByEntity.TryGetValue(entityId, out var hsb) ? hsb.B : 0;
+        }
+
+
         // Paint the tile: green when OK, red on error
         public override BitmapImage GetCommandImage(String actionParameter, PluginImageSize imageSize)
         {
@@ -778,26 +790,37 @@ namespace Loupedeck.HomeAssistantPlugin
             if (actionParameter.StartsWith(PfxActOn, StringComparison.OrdinalIgnoreCase))
             {
                 var entityId = actionParameter.Substring(PfxActOn.Length);
-                // Use cached brightness if available and the light supports it.
+
+                // Optimistic: mark ON immediately (UI becomes responsive)
+                this._isOnByEntity[entityId] = true;
+                this.CommandImageChanged(this.CreateCommandName($"{PfxDevice}{entityId}"));
+                if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
+                    this.AdjustmentValueChanged(AdjBri);
+
                 JsonElement? data = null;
                 var caps = this.GetCaps(entityId);
-
                 if (caps.Brightness && this._hsbByEntity.TryGetValue(entityId, out var hsb))
                 {
-                    // HA can treat brightness=0 as effectively off; bump to at least 1 when turning on.
                     var bri = HSBHelper.Clamp(Math.Max(1, hsb.B), 1, 255);
-                    data = System.Text.Json.JsonSerializer.SerializeToElement(new { brightness = bri });
+                    data = JsonSerializer.SerializeToElement(new { brightness = bri });
                 }
-
-                _ = this._lightSvc.TurnOnAsync(entityId, data); // fire-and-forget like before
+                _ = this._lightSvc.TurnOnAsync(entityId, data);
                 return;
             }
             if (actionParameter.StartsWith(PfxActOff, StringComparison.OrdinalIgnoreCase))
             {
                 var entityId = actionParameter.Substring(PfxActOff.Length);
+
+                // Optimistic: mark OFF (don’t touch cached B)
+                this._isOnByEntity[entityId] = false;
+                this.CommandImageChanged(this.CreateCommandName($"{PfxDevice}{entityId}"));
+                if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
+                    this.AdjustmentValueChanged(AdjBri);
+
                 this._lightSvc.TurnOffAsync(entityId);
                 return;
             }
+
         }
 
 
@@ -828,6 +851,8 @@ namespace Loupedeck.HomeAssistantPlugin
 
             // New debounced sender
             this._lightSvc?.Dispose();
+            _eventsCts?.Cancel();
+            _events.SafeCloseAsync();
 
             HealthBus.HealthChanged -= this.OnHealthChanged;
             return true;
@@ -846,6 +871,7 @@ namespace Loupedeck.HomeAssistantPlugin
             PluginLog.Info("DynamicFolder.Deactivate() -> close WS");
             this._cts?.Cancel();
             this._client.SafeCloseAsync().GetAwaiter().GetResult();
+            _eventsCts?.Cancel();
             _ = this._events.SafeCloseAsync();
             //this.Plugin.OnPluginStatusChanged(PluginStatus.Warning, "Folder closed.", null);
             return true;
@@ -903,7 +929,8 @@ namespace Loupedeck.HomeAssistantPlugin
 
                     try
                     {
-                        var ctsEv = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                        _eventsCts?.Cancel();
+_eventsCts = new CancellationTokenSource();
                         this._events.BrightnessChanged -= this.OnHaBrightnessChanged; // avoid dup
                         this._events.BrightnessChanged += this.OnHaBrightnessChanged;
 
@@ -913,7 +940,15 @@ namespace Loupedeck.HomeAssistantPlugin
                         this._events.HsColorChanged -= this.OnHaHsColorChanged;
                         this._events.HsColorChanged += this.OnHaHsColorChanged;
 
-                        _ = this._events.ConnectAndSubscribeAsync(baseUrl, token, ctsEv.Token); // fire-and-forget
+this._events.RgbColorChanged -= this.OnHaRgbColorChanged;
+this._events.RgbColorChanged += this.OnHaRgbColorChanged;
+
+this._events.XyColorChanged  -= this.OnHaXyColorChanged;
+                        this._events.XyColorChanged += this.OnHaXyColorChanged;
+PluginLog.Verbose("[WS] connecting event stream…");
+
+
+                        _ = this._events.ConnectAndSubscribeAsync(baseUrl, token, _eventsCts.Token); // fire-and-forget
                         PluginLog.Info("[events] subscribed to state_changed");
                     }
                     catch (Exception ex)
@@ -1115,6 +1150,9 @@ namespace Loupedeck.HomeAssistantPlugin
 
                     var state = st.TryGetProperty("state", out var s) ? s.GetString() ?? "" : "";
                     var attrs = st.TryGetProperty("attributes", out var a) ? a : default;
+                    var isOn = String.Equals(state, "on", StringComparison.OrdinalIgnoreCase);
+                    this._isOnByEntity[entityId] = isOn;
+
                     var friendly = (attrs.ValueKind == JsonValueKind.Object && attrs.TryGetProperty("friendly_name", out var fn))
                                    ? fn.GetString() ?? entityId
                                    : entityId;
@@ -1157,19 +1195,33 @@ namespace Loupedeck.HomeAssistantPlugin
 
                     this._entityToAreaId[entityId] = areaId;
 
-                    // --- Brightness: seed for ALL lights, not just color-capable ---
-                    var bri = 0;
-                    if (attrs.ValueKind == JsonValueKind.Object &&
-                        attrs.TryGetProperty("brightness", out var br) &&
-                        br.ValueKind == JsonValueKind.Number)
-                    {
-                        bri = HSBHelper.Clamp(br.GetInt32(), 0, 255);
-                    }
-                    else
-                    {
-                        // if HA says "off" often brightness is omitted → treat as 0
-                        bri = String.Equals(state, "off", StringComparison.OrdinalIgnoreCase) ? 0 : 128;
-                    }
+                    // --- Brightness: seed without clobbering last non-zero on OFF ---
+var bri = 0;
+
+JsonElement brEl = default;   // <-- initialize
+var hasAttrBri = false;
+
+if (attrs.ValueKind == JsonValueKind.Object &&
+    attrs.TryGetProperty("brightness", out brEl) &&
+    brEl.ValueKind == JsonValueKind.Number)
+{
+    hasAttrBri = true;
+}
+
+if (hasAttrBri)
+{
+    bri = HSBHelper.Clamp(brEl.GetInt32(), 0, 255);
+}
+else if (!isOn) // OFF and no brightness attribute: keep last-known if any
+{
+    bri = this._hsbByEntity.TryGetValue(entityId, out var oldBri) ? oldBri.B : 0;
+}
+else
+{
+    // ON but no brightness attribute → reasonable fallback
+    bri = 128;
+}
+
 
                     // Optional HS seed (doesn’t matter for brightness UI, but nice to keep)
                     Double h = 0, sat = 0;
@@ -1283,6 +1335,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
         private void SetCachedBrightness(String entityId, Int32 bri)
         {
+            PluginLog.Verbose($"[SetCachedBrightness] eid={entityId} bri={bri}");
             this._hsbByEntity[entityId] = this._hsbByEntity.TryGetValue(entityId, out var hsb)
                 ? ((Double H, Double S, Int32 B))(hsb.H, hsb.S, HSBHelper.Clamp(bri, 0, 255))
                 : ((Double H, Double S, Int32 B))(0, 0, HSBHelper.Clamp(bri, 0, 255));
@@ -1290,25 +1343,66 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
         private void OnHaBrightnessChanged(String entityId, Int32? bri)
+{
+    if (!entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase)) return;
+
+    // Snapshot what the UI currently *shows*
+    var wasOn    = this._isOnByEntity.TryGetValue(entityId, out var onTmp) && onTmp;
+    var prevEffB = GetEffectiveBrightnessForDisplay(entityId);
+
+    var stateChanged   = false;
+    var cacheBChanged  = false;
+
+    if (bri.HasValue)
+    {
+        if (bri.Value <= 0)
         {
-            // We only care about lights we know
-            if (!entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
+            // OFF: do NOT change cached B; only flip state if it actually changed
+            if (wasOn)
             {
-                return;
-            }
-
-            // Update cache
-            if (bri.HasValue)
-            {
-                this.SetCachedBrightness(entityId, HSBHelper.Clamp(bri.Value, 0, 255));
-            }
-
-            // If this is the active device, redraw the wheel value & image
-            if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
-            {
-                this.AdjustmentValueChanged(AdjBri);
+                this._isOnByEntity[entityId] = false;
+                stateChanged = true;
             }
         }
+        else
+        {
+            // ON: ensure state is ON and update cached B *only if different*
+            var clamped = HSBHelper.Clamp(bri.Value, 0, 255);
+
+            if (!wasOn)
+            {
+                this._isOnByEntity[entityId] = true;
+                stateChanged = true;
+            }
+
+            if (!this._hsbByEntity.TryGetValue(entityId, out var hsb) || hsb.B != clamped)
+            {
+                this.SetCachedBrightness(entityId, clamped);
+                cacheBChanged = true;
+            }
+        }
+    }
+
+    // If nothing changes in what the UI shows, bail out early
+    var newEffB = GetEffectiveBrightnessForDisplay(entityId);
+    if (!stateChanged && !cacheBChanged && newEffB == prevEffB)
+        return;
+
+    // Repaint only if we’re looking at this device
+    if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
+    {
+        this.AdjustmentValueChanged(AdjBri);
+        this.AdjustmentImageChanged(AdjBri); // image too, for good measure
+    }
+
+    // Device tile icon depends on ON/OFF → refresh only if state flipped
+    if (stateChanged)
+    {
+        this.CommandImageChanged(this.CreateCommandName($"{PfxDevice}{entityId}"));
+    }
+}
+
+
 
         private void OnHaColorTempChanged(String entityId, Int32? mired, Int32? kelvin, Int32? minM, Int32? maxM)
         {
@@ -1345,6 +1439,9 @@ namespace Loupedeck.HomeAssistantPlugin
                 return;
             }
 
+            PluginLog.Verbose($"[OnHaHsColorChanged] eid={entityId} h={h?.ToString("F1")} s={s?.ToString("F1")}");
+
+
             // Update HS in cache
             if (this._hsbByEntity.TryGetValue(entityId, out var hsb))
             {
@@ -1364,6 +1461,77 @@ namespace Loupedeck.HomeAssistantPlugin
                 this.AdjustmentValueChanged(AdjSat);
             }
         }
+
+        // Small thresholds to avoid UI churn on tiny float changes
+private const Double HueEps = 0.5;     // degrees
+private const Double SatEps = 0.5;     // percent
+
+private void OnHaRgbColorChanged(String entityId, Int32? r, Int32? g, Int32? b)
+{
+    if (!entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase)) return;
+    if (!r.HasValue || !g.HasValue || !b.HasValue) return;
+
+    PluginLog.Verbose($"[OnHaRgbColorChanged] eid={entityId} rgb=[{r},{g},{b}]");
+    
+
+    var (h, s) = HSBHelper.RgbToHs(r.Value, g.Value, b.Value);
+    h = HSBHelper.Wrap360(h);
+    s = HSBHelper.Clamp(s, 0, 100);
+
+    var cur = this._hsbByEntity.TryGetValue(entityId, out var old) ? old : (0, 100.0, 128);
+    bool changed = Math.Abs(cur.H - h) >= HueEps || Math.Abs(cur.S - s) >= SatEps;
+
+    if (!changed) return;
+
+    this._hsbByEntity[entityId] = (h, s, cur.B);
+
+    if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
+    {
+        this.AdjustmentValueChanged(AdjHue);
+        this.AdjustmentValueChanged(AdjSat);
+        // brightness unchanged here
+    }
+}
+
+private void OnHaXyColorChanged(String entityId, Double? x, Double? y, Int32? bri)
+{
+    if (!entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase)) return;
+    if (!x.HasValue || !y.HasValue) return;
+    
+    PluginLog.Verbose($"[OnHaXyColorChanged] eid={entityId} xy=[{x?.ToString("F4")},{y?.ToString("F4")}] bri={bri}");
+    
+
+    // Pick a luminance for XY->RGB: prefer event bri, else cached, else mid
+            Int32 baseB = this._hsbByEntity.TryGetValue(entityId, out var old) ? old.B : 128;
+    Int32 usedB = HSBHelper.Clamp(bri ?? baseB, 0, 255);
+
+    var (R, G, B) = ColorConv.XyBriToRgb(x.Value, y.Value, usedB);
+    var (h, s) = HSBHelper.RgbToHs(R, G, B);
+    h = HSBHelper.Wrap360(h);
+    s = HSBHelper.Clamp(s, 0, 100);
+
+    // Compare with old to avoid churn
+    var cur = this._hsbByEntity.TryGetValue(entityId, out var curHsb) ? curHsb : (0, 100.0, 128);
+    bool hsChanged  = Math.Abs(cur.H - h) >= HueEps || Math.Abs(cur.S - s) >= SatEps;
+    bool briChanged = bri.HasValue && usedB != cur.B;
+
+    if (!hsChanged && !briChanged) return;
+
+    this._hsbByEntity[entityId] = (h, s, briChanged ? usedB : cur.B);
+
+    if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
+    {
+        if (hsChanged)
+        {
+            this.AdjustmentValueChanged(AdjHue);
+            this.AdjustmentValueChanged(AdjSat);
+        }
+        if (briChanged)
+        {
+            this.AdjustmentValueChanged(AdjBri);
+        }
+    }
+}
 
 
 

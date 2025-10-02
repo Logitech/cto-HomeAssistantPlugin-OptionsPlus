@@ -21,6 +21,9 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
         public event Action<String, Double?, Double?> HsColorChanged; // (entityId, hue 0..360, sat 0..100)
+        public event Action<String, Int32?, Int32?, Int32?> RgbColorChanged;
+        public event Action<String, Double?, Double?, Int32?> XyColorChanged;
+
         public event Action<String, Boolean> ScriptRunningChanged; // (entityId, isRunning)
 
 
@@ -88,106 +91,140 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
         // Local helper to compute Kelvin when HA only gives mireds
-        private async Task ReceiveLoopAsync(CancellationToken ct)
+private async Task ReceiveLoopAsync(CancellationToken ct)
+{
+    // Local helper to compute Kelvin when HA only gives mireds
+    static Int32 MiredToKelvinSafe(Int32 m) => (Int32)Math.Round(1_000_000.0 / Math.Max(1, m));
+
+    try
+    {
+        while (!ct.IsCancellationRequested && this._ws?.State == WebSocketState.Open)
         {
-            // Local helper to compute Kelvin when HA only gives mireds
-            static Int32 MiredToKelvinSafe(Int32 m) => (Int32)Math.Round(1_000_000.0 / Math.Max(1, m));
+            var msg = await this.ReceiveTextAsync(ct);
+            using var doc = JsonDocument.Parse(msg);
+            var root = doc.RootElement;
 
-            try
-            {
-                while (!ct.IsCancellationRequested && this._ws?.State == WebSocketState.Open)
-                {
-                    var msg = await this.ReceiveTextAsync(ct);
-                    using var doc = JsonDocument.Parse(msg);
-                    var root = doc.RootElement;
+            // Only care about event frames
+            if (!root.TryGetProperty("type", out var t) || t.GetString() != "event")
+                continue;
 
-                    // Only care about event frames
-                    if (!root.TryGetProperty("type", out var t) || t.GetString() != "event")
-                    {
-                        continue;
-                    }
+            // Must be a state_changed event
+            if (!root.TryGetProperty("event", out var ev) || ev.ValueKind != JsonValueKind.Object)
+                continue;
 
-                    // Must be a state_changed event
-                    if (!root.TryGetProperty("event", out var ev) || ev.ValueKind != JsonValueKind.Object)
-                    {
-                        continue;
-                    }
+            if (!ev.TryGetProperty("event_type", out var et) || et.GetString() != "state_changed")
+                continue;
 
-                    if (!ev.TryGetProperty("event_type", out var et) || et.GetString() != "state_changed")
-                    {
-                        continue;
-                    }
+            if (!ev.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
+                continue;
 
-                    if (!ev.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
-                    {
-                        continue;
-                    }
+            var entityId = data.TryGetProperty("entity_id", out var idProp) ? idProp.GetString() : null;
+            if (String.IsNullOrEmpty(entityId))
+                continue;
+            if (entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
+        {
+            PluginLog.Verbose($"[ReceiveLoopAsync]{entityId} frame received");
+        }
 
-                    var entityId = data.TryGetProperty("entity_id", out var idProp) ? idProp.GetString() : null;
-                    if (String.IsNullOrEmpty(entityId))
-                    {
-                        continue;
-                    }
 
-                    // NEW/UPDATED STATE
+            // NEW/UPDATED STATE
                     Int32? bri = null;
-                    Int32? ctMired = null;
-                    Int32? ctKelvin = null;
-                    Int32? minMireds = null;
-                    Int32? maxMireds = null;
+            Int32? ctMired = null;
+            Int32? ctKelvin = null;
+            Int32? minMireds = null;
+            Int32? maxMireds = null;
 
-                    // HS color
-                    Double? hue = null, sat = null;
+            // HS color
+            Double? hue = null, sat = null;
 
-                    // Generic ON/OFF (used for scripts toggle state)
-                    Boolean? isOn = null;
+            // NEW: RGB and XY
+            Int32? rgbR = null, rgbG = null, rgbB = null;
+            Double? xyX = null, xyY = null;
 
-                    if (data.TryGetProperty("new_state", out var ns) && ns.ValueKind == JsonValueKind.Object)
+            // Generic ON/OFF (used for scripts toggle state)
+            Boolean? isOn = null;
+
+            if (data.TryGetProperty("new_state", out var ns) && ns.ValueKind == JsonValueKind.Object)
+            {
+                // attributes (may be missing depending on integration/state)
+                if (ns.TryGetProperty("attributes", out var attrs) && attrs.ValueKind == JsonValueKind.Object)
+                {
+                    // Brightness 0..255
+                    if (attrs.TryGetProperty("brightness", out var br) && br.ValueKind == JsonValueKind.Number)
                     {
-                        // attributes (may be missing depending on integration/state)
-                        if (ns.TryGetProperty("attributes", out var attrs) && attrs.ValueKind == JsonValueKind.Object)
-                        {
-                            // Brightness 0..255
-                            if (attrs.TryGetProperty("brightness", out var br) && br.ValueKind == JsonValueKind.Number)
-                            {
-                                bri = HSBHelper.Clamp(br.GetInt32(), 0, 255);
-                            }
+                        bri = HSBHelper.Clamp(br.GetInt32(), 0, 255);
+                    }
 
-                            // Color temperature (mireds + (optional) kelvin, plus bounds)
-                            if (attrs.TryGetProperty("color_temp", out var ctT) && ctT.ValueKind == JsonValueKind.Number)
-                            {
-                                ctMired = ctT.GetInt32();
-                            }
-                            if (attrs.TryGetProperty("color_temp_kelvin", out var ctk) && ctk.ValueKind == JsonValueKind.Number)
-                            {
-                                ctKelvin = ctk.GetInt32();
-                            }
-                            if (attrs.TryGetProperty("min_mireds", out var minM) && minM.ValueKind == JsonValueKind.Number)
-                            {
-                                minMireds = minM.GetInt32();
-                            }
-                            if (attrs.TryGetProperty("max_mireds", out var maxM) && maxM.ValueKind == JsonValueKind.Number)
-                            {
-                                maxMireds = maxM.GetInt32();
-                            }
+                    // Color temperature (mireds + (optional) kelvin, plus bounds)
+                    if (attrs.TryGetProperty("color_temp", out var ctT) && ctT.ValueKind == JsonValueKind.Number)
+                    {
+                        ctMired = ctT.GetInt32();
+                    }
+                    if (attrs.TryGetProperty("color_temp_kelvin", out var ctk) && ctk.ValueKind == JsonValueKind.Number)
+                    {
+                        ctKelvin = ctk.GetInt32();
+                    }
+                    if (attrs.TryGetProperty("min_mireds", out var minM) && minM.ValueKind == JsonValueKind.Number)
+                    {
+                        minMireds = minM.GetInt32();
+                    }
+                    if (attrs.TryGetProperty("max_mireds", out var maxM) && maxM.ValueKind == JsonValueKind.Number)
+                    {
+                        maxMireds = maxM.GetInt32();
+                    }
 
-                            // HS color (Hue/Saturation)
-                            if (attrs.TryGetProperty("hs_color", out var hs) &&
-                                hs.ValueKind == JsonValueKind.Array && hs.GetArrayLength() >= 2)
-                            {
-                                if (hs[0].ValueKind == JsonValueKind.Number)
-                                {
-                                    hue = hs[0].GetDouble(); // 0..360
-                                }
+                    // HS color (Hue/Saturation)
+                    if (attrs.TryGetProperty("hs_color", out var hs) &&
+                        hs.ValueKind == JsonValueKind.Array && hs.GetArrayLength() >= 2)
+                    {
+                        if (hs[0].ValueKind == JsonValueKind.Number)
+                            hue = hs[0].GetDouble(); // 0..360
 
-                                if (hs[1].ValueKind == JsonValueKind.Number)
-                                {
-                                    sat = hs[1].GetDouble(); // 0..100
-                                }
-                            }
-                        }
+                        if (hs[1].ValueKind == JsonValueKind.Number)
+                            sat = hs[1].GetDouble(); // 0..100
+                    }
 
-                        // Generic state
+                    // NEW: RGB color
+                    if (attrs.TryGetProperty("rgb_color", out var rgb) &&
+                        rgb.ValueKind == JsonValueKind.Array && rgb.GetArrayLength() >= 3 &&
+                        rgb[0].ValueKind == JsonValueKind.Number &&
+                        rgb[1].ValueKind == JsonValueKind.Number &&
+                        rgb[2].ValueKind == JsonValueKind.Number)
+                    {
+                        rgbR = rgb[0].GetInt32();
+                        rgbG = rgb[1].GetInt32();
+                        rgbB = rgb[2].GetInt32();
+                    }
+
+                    // NEW: XY color
+                    if (attrs.TryGetProperty("xy_color", out var xy) &&
+                        xy.ValueKind == JsonValueKind.Array && xy.GetArrayLength() >= 2 &&
+                        xy[0].ValueKind == JsonValueKind.Number &&
+                        xy[1].ValueKind == JsonValueKind.Number)
+                    {
+                        xyX = xy[0].GetDouble();
+                        xyY = xy[1].GetDouble();
+                        // brightness is taken from 'bri' above if present; if not present, handler can fallback
+                    }
+                }
+                
+                if (bri.HasValue)
+    PluginLog.Verbose($" bri={bri} eid={entityId}");
+
+if (hue.HasValue || sat.HasValue)
+    PluginLog.Verbose($"hs=[{hue?.ToString("F1") ?? "-"},{sat?.ToString("F1") ?? "-"}] eid={entityId}");
+
+if (rgbR.HasValue)
+    PluginLog.Verbose($"rgb=[{rgbR},{rgbG},{rgbB}] eid={entityId}");
+
+if (xyX.HasValue)
+    PluginLog.Verbose($" xy=[{xyX:F4},{xyY:F4}] eid={entityId}");
+
+if (ctMired.HasValue || ctKelvin.HasValue)
+    PluginLog.Verbose($"ct={ctMired}mired/{ctKelvin}K min={minMireds} max={maxMireds} eid={entityId}");
+
+
+                // Generic state
                         if (ns.TryGetProperty("state", out var st) && st.ValueKind == JsonValueKind.String)
                         {
                             var stStr = st.GetString();
@@ -201,48 +238,64 @@ namespace Loupedeck.HomeAssistantPlugin
                                 // some lights don't report those attributes while off.
                             }
                         }
-                    }
+            }
 
-                    // If we only got mireds OR only kelvin, derive the other for convenience
-                    if (!ctKelvin.HasValue && ctMired.HasValue)
-                    {
-                        ctKelvin = MiredToKelvinSafe(ctMired.Value);
-                    }
+            // If we only got mireds OR only kelvin, derive the other for convenience
+            if (!ctKelvin.HasValue && ctMired.HasValue)
+            {
+                ctKelvin = MiredToKelvinSafe(ctMired.Value);
+            }
 
-                    if (!ctMired.HasValue && ctKelvin.HasValue && ctKelvin.Value > 0)
-                    {
-                        ctMired = (Int32)Math.Round(1_000_000.0 / ctKelvin.Value);
-                    }
+            if (!ctMired.HasValue && ctKelvin.HasValue && ctKelvin.Value > 0)
+            {
+                ctMired = (Int32)Math.Round(1_000_000.0 / ctKelvin.Value);
+            }
+
+                    var hasHs = hue.HasValue && sat.HasValue;
 
                     // Fire events (individually guarded so one can't break the other)
                     try
-                    { BrightnessChanged?.Invoke(entityId, bri); }
-                    catch { /* keep loop alive */ }
-                    try
-                    { ColorTempChanged?.Invoke(entityId, ctMired, ctKelvin, minMireds, maxMireds); }
-                    catch { /* keep loop alive */ }
-                    try
-                    { HsColorChanged?.Invoke(entityId, hue, sat); }
-                    catch { /* keep loop alive */ }
-
-                    // NEW: script running state (on = running, off = idle)
-                    try
                     {
-                        if (entityId.StartsWith("script.", StringComparison.OrdinalIgnoreCase) && isOn.HasValue)
-                        {
-                            ScriptRunningChanged?.Invoke(entityId, isOn.Value);
-                        }
+                        var briSubs = BrightnessChanged?.GetInvocationList()?.Length ?? 0;
+                        PluginLog.Verbose($"[EV] BrightnessChanged subscribers={briSubs} eid={entityId}");
+                        BrightnessChanged?.Invoke(entityId, bri);
+                        PluginLog.Verbose($"firing brightness event for {entityId} bri={bri}");
                     }
                     catch { /* keep loop alive */ }
+            try { ColorTempChanged?.Invoke(entityId, ctMired, ctKelvin, minMireds, maxMireds); } catch { /* keep loop alive */ }
+            try { HsColorChanged?.Invoke(entityId, hue, sat); } catch { /* keep loop alive */ }
+
+                    // Only emit RGB/XY when HS not present (avoids duplicate UI work)
+                    if (!hasHs)
+                    {
+                        try
+                        { RgbColorChanged?.Invoke(entityId, rgbR, rgbG, rgbB); }
+                        catch { }
+                        try
+                        { XyColorChanged?.Invoke(entityId, xyX, xyY, bri); }
+                        catch { }
+                    }
+
+
+            // NEW: script running state (on = running, off = idle)
+            try
+            {
+                if (entityId.StartsWith("script.", StringComparison.OrdinalIgnoreCase) && isOn.HasValue)
+                {
+                    ScriptRunningChanged?.Invoke(entityId, isOn.Value);
                 }
             }
-            catch (OperationCanceledException) { /* normal on shutdown */ }
-            catch (WebSocketException) { /* connection dropped; outer code will handle */ }
-            catch (Exception ex)
-            {
-                PluginLog.Warning(ex, "[events] receive loop crashed");
-            }
+            catch { /* keep loop alive */ }
         }
+    }
+    catch (OperationCanceledException) { /* normal on shutdown */ }
+    catch (WebSocketException) { /* connection dropped; outer code will handle */ }
+    catch (Exception ex)
+    {
+        PluginLog.Warning(ex, "[events] receive loop crashed");
+    }
+}
+
 
 
 
