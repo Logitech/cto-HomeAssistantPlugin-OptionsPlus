@@ -20,15 +20,7 @@ namespace Loupedeck.HomeAssistantPlugin
             var d = max - min;
 
             // Hue
-            Double h;
-            if (d == 0)
-            {
-                h = 0;
-            }
-            else
-            {
-                h = max == R ? 60 * ((G - B) / d % 6) : max == G ? 60 * ((B - R) / d + 2) : 60 * ((R - G) / d + 4);
-            }
+            var h = d == 0 ? 0 : max == R ? 60 * ((G - B) / d % 6) : max == G ? 60 * ((B - R) / d + 2) : 60 * ((R - G) / d + 4);
 
             h = Wrap360(h);
 

@@ -150,12 +150,9 @@ namespace Loupedeck.HomeAssistantPlugin
         // --- WHEEL: label shown next to the dial
         public override String GetAdjustmentDisplayName(String actionParameter, PluginImageSize _)
         {
-            if (actionParameter == AdjBri)
-            {
-                return this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId) ? "Brightness" : "Test Wheel";
-            }
-
-            return actionParameter == AdjTemp
+            return actionParameter == AdjBri
+                ? this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId) ? "Brightness" : "Test Wheel"
+                : actionParameter == AdjTemp
                 ? "Color Temp"
                 : actionParameter == AdjHue
                 ? "Hue"
@@ -278,17 +275,34 @@ namespace Loupedeck.HomeAssistantPlugin
                     k = ColorTemp.MiredToKelvin(t.Cur);
                 }
 
+                // Clamp CCT range
                 k = Math.Max(2000, Math.Min(6500, k));
+
+                // 0=cool(6500K), 100=warm(2000K)
                 var warmness = HSBHelper.Clamp((6500 - k) / 45, 0, 100);
 
-                var r = Math.Min(35 + warmness * 2, 255);
-                var g = Math.Min(35 + (100 - warmness), 255);
-                var b = Math.Min(35 + (100 - warmness) / 2, 255);
+                // Base color at full brightness (your original mapping)
+                var baseR = Math.Min(35 + warmness * 2, 255);
+                var baseG = Math.Min(35 + (100 - warmness), 255);
+                var baseB = Math.Min(35 + (100 - warmness) / 2, 255);
+
+                // NEW: scale by effective brightness (0..255); when off → black
+                var effB = 128;
+                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
+                {
+                    effB = this.GetEffectiveBrightnessForDisplay(this._currentEntityId);
+                }
+
+                var scale = effB / 255.0;
+                var r = (Int32)Math.Round(baseR * scale);
+                var g = (Int32)Math.Round(baseG * scale);
+                var b = (Int32)Math.Round(baseB * scale);
 
                 using var bb = new BitmapBuilder(imageSize);
                 bb.Clear(new BitmapColor(r, g, b));
                 return TilePainter.IconOrGlyph(bb, this._icons.Get(IconId.Temperature), "⟷", padPct: 10, font: 58);
             }
+
 
             if (actionParameter == AdjHue)
             {
@@ -352,6 +366,7 @@ namespace Loupedeck.HomeAssistantPlugin
                         this.AdjustmentValueChanged(actionParameter);
                         this.AdjustmentValueChanged(AdjSat);
                         this.AdjustmentValueChanged(AdjHue);
+                        this.AdjustmentValueChanged(AdjTemp); // temp tile also reflects effB
 
 
                         this.MarkCommandSent(entityId);
@@ -400,6 +415,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     this._hsbByEntity[eid] = (hsb.H, newS, hsb.B);
                     this.AdjustmentValueChanged(AdjSat);
                     this.AdjustmentValueChanged(AdjHue);
+
 
                     var curH = this._hsbByEntity.TryGetValue(eid, out var hsb3) ? hsb3.H : 0;
                     this.MarkCommandSent(eid);
@@ -825,6 +841,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     this.AdjustmentValueChanged(AdjBri);
                     this.AdjustmentValueChanged(AdjSat);
                     this.AdjustmentValueChanged(AdjHue);
+                    this.AdjustmentValueChanged(AdjTemp);
                 }
 
                 JsonElement? data = null;
@@ -850,6 +867,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     this.AdjustmentValueChanged(AdjBri);
                     this.AdjustmentValueChanged(AdjSat);
                     this.AdjustmentValueChanged(AdjHue);
+                    this.AdjustmentValueChanged(AdjTemp);
                 }
 
                 this._lightSvc.TurnOffAsync(entityId);
@@ -1481,6 +1499,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 // 🔸 brightness-style: refresh all related wheels
                 this.AdjustmentValueChanged(AdjHue);
                 this.AdjustmentValueChanged(AdjSat);
+
             }
         }
 
