@@ -29,7 +29,10 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
 
-
+        private enum LookMode { Hs, Temp } // which color mode to show in the adjustment tile
+                                           // What the user adjusted last per light (drives preview mode)
+        private readonly Dictionary<String, LookMode> _lookModeByEntity =
+            new(StringComparer.OrdinalIgnoreCase);
 
         private const String CmdStatus = "status";
         private const String CmdRetry = "retry";
@@ -215,6 +218,138 @@ namespace Loupedeck.HomeAssistantPlugin
         }
 
 
+        // --- sRGB <-> linear helpers (IEC 61966-2-1) ---
+        private static Double SrgbToLinear01(Double c)
+            => (c <= 0.04045) ? (c / 12.92) : Math.Pow((c + 0.055) / 1.055, 2.4);
+
+        private static Double LinearToSrgb01(Double c)
+        {
+            c = Math.Max(0.0, Math.Min(1.0, c));
+            return (c <= 0.0031308) ? (12.92 * c) : (1.055 * Math.Pow(c, 1.0 / 2.4) - 0.055);
+        }
+
+        // --- Kelvin (blackbody) -> sRGB, using Tanner Helland / Neil Bartlett coeffs ---
+        private static (Int32 R, Int32 G, Int32 B) KelvinToSrgb(Int32 kelvin)
+        {
+            // Clamp to a sensible household lamp range to avoid cartoonish extremes
+            var K = HSBHelper.Clamp(kelvin, 1800, 6500) / 100.0; // Temp in hundreds of K
+            Double r, g, b;
+
+            if (K <= 66.0)
+            {
+                r = 255.0;
+                g = 99.4708025861 * Math.Log(K) - 161.1195681661;
+                b = (K <= 19.0) ? 0.0 : 138.5177312231 * Math.Log(K - 10.0) - 305.0447927307;
+            }
+            else
+            {
+                r = 329.698727446 * Math.Pow(K - 60.0, -0.1332047592);
+                g = 288.1221695283 * Math.Pow(K - 60.0, -0.0755148492);
+                b = 255.0;
+            }
+
+            var R = HSBHelper.Clamp((Int32)Math.Round(r), 0, 255);
+            var G = HSBHelper.Clamp((Int32)Math.Round(g), 0, 255);
+            var B = HSBHelper.Clamp((Int32)Math.Round(b), 0, 255);
+            return (R, G, B);
+        }
+
+        // Scale an sRGB color by brightness in *linear* light, then encode back to sRGB
+        private static (Int32 R, Int32 G, Int32 B) ApplyBrightnessLinear((Int32 R, Int32 G, Int32 B) srgb, Int32 effB)
+        {
+            var l = HSBHelper.Clamp(effB, 0, 255) / 255.0;     // 0..1
+            if (l <= 0.0)
+            {
+                return (0, 0, 0);
+            }
+
+            var lr = SrgbToLinear01(srgb.R / 255.0) * l;
+            var lg = SrgbToLinear01(srgb.G / 255.0) * l;
+            var lb = SrgbToLinear01(srgb.B / 255.0) * l;
+
+            var R = HSBHelper.Clamp((Int32)Math.Round(LinearToSrgb01(lr) * 255.0), 0, 255);
+            var G = HSBHelper.Clamp((Int32)Math.Round(LinearToSrgb01(lg) * 255.0), 0, 255);
+            var B = HSBHelper.Clamp((Int32)Math.Round(LinearToSrgb01(lb) * 255.0), 0, 255);
+            return (R, G, B);
+        }
+
+
+        // Simulate how the light *actually* looks, honoring last-look mode (HS vs Temp),
+        // using blackbody CCT for Temp and gamma-correct dimming for both modes.
+        private (Int32 R, Int32 G, Int32 B) GetSimulatedLightRgbForCurrentDevice()
+        {
+            if (!this._inDeviceView || String.IsNullOrEmpty(this._currentEntityId))
+            {
+                return (64, 64, 64);
+            }
+
+            var eid = this._currentEntityId;
+
+            // Effective brightness (0 if off)
+            var effB = this.GetEffectiveBrightnessForDisplay(eid); // 0..255
+            if (effB <= 0)
+            {
+                return (0, 0, 0);
+            }
+
+            var prefer = this._lookModeByEntity.TryGetValue(eid, out var pref) ? pref : LookMode.Hs;
+
+            // --- Preferred: HS look ---
+            (Int32 R, Int32 G, Int32 B) RenderFromHs()
+            {
+                if (!this._hsbByEntity.TryGetValue(eid, out var hsb))
+                {
+                    return (-1, -1, -1);
+                }
+
+                // Get full-brightness sRGB from your HSV/HSB helper, then dim in linear space
+                var (sr, sg, sb) = HSBHelper.HsbToRgb(
+                    HSBHelper.Wrap360(hsb.H),
+                    HSBHelper.Clamp(Math.Max(0, hsb.S), 0, 100),
+                    100.0 // full value; we'll apply brightness correctly afterwards
+                );
+
+                // Optional: tiny desaturation at very low brightness for human-perception feel
+                // (keeps extreme colors from looking too "inky" when almost off)
+                // double l = effB / 255.0;
+                // if (l < 0.10) { sr = (int)(sr * (0.9 + l)); sg = (int)(sg * (0.9 + l)); sb = (int)(sb * (0.9 + l)); }
+
+                return ApplyBrightnessLinear((sr, sg, sb), effB);
+            }
+
+            // --- Preferred: Color Temp look ---
+            (Int32 R, Int32 G, Int32 B) RenderFromTemp()
+            {
+                if (!this.TryGetCachedTempMired(eid, out var t))
+                {
+                    return (-1, -1, -1);
+                }
+
+                var k = ColorTemp.MiredToKelvin(t.Cur);
+                var srgb = KelvinToSrgb(k);                // blackbody approximate in sRGB
+                return ApplyBrightnessLinear(srgb, effB);  // dim in linear light, back to sRGB
+            }
+
+            (Int32 R, Int32 G, Int32 B) rgb;
+
+            rgb = (prefer == LookMode.Hs) ? RenderFromHs() : RenderFromTemp();
+            if (rgb.R >= 0)
+            {
+                return rgb;
+            }
+
+            rgb = (prefer == LookMode.Hs) ? RenderFromTemp() : RenderFromHs();
+            if (rgb.R >= 0)
+            {
+                return rgb;
+            }
+
+            // Fallback: neutral gray at brightness
+            return (effB, effB, effB);
+        }
+
+
+
 
         public override BitmapImage GetAdjustmentImage(String actionParameter, PluginImageSize imageSize)
         {
@@ -241,26 +376,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
             if (actionParameter == AdjSat)
             {
-                Double H = 0, S = 100;
-                var effB = 128; // NEW: effective brightness (0 if off)
-                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
-                {
-                    // HS from cache (if present)
-                    if (this._hsbByEntity.TryGetValue(this._currentEntityId, out var h))
-                    {
-                        H = h.H;
-                        S = Math.Max(0, h.S);
-                    }
-                    // NEW: always compute display brightness from effective brightness
-                    effB = this.GetEffectiveBrightnessForDisplay(this._currentEntityId);
-                }
-
-                var (r, g, b) = HSBHelper.HsbToRgb(
-                    HSBHelper.Wrap360(H),
-                    S,
-                    100.0 * effB / 255.0 // NEW: use effective brightness
-                );
-
+                var (r, g, b) = this.GetSimulatedLightRgbForCurrentDevice();
                 using var bb = new BitmapBuilder(imageSize);
                 bb.Clear(new BitmapColor(r, g, b));
                 return TilePainter.IconOrGlyph(bb, this._icons.Get(IconId.Saturation), "S", padPct: 8, font: 56);
@@ -268,63 +384,15 @@ namespace Loupedeck.HomeAssistantPlugin
 
             if (actionParameter == AdjTemp)
             {
-                var k = 3000;
-                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId) &&
-                    this.TryGetCachedTempMired(this._currentEntityId, out var t))
-                {
-                    k = ColorTemp.MiredToKelvin(t.Cur);
-                }
-
-                // Clamp CCT range
-                k = Math.Max(2000, Math.Min(6500, k));
-
-                // 0=cool(6500K), 100=warm(2000K)
-                var warmness = HSBHelper.Clamp((6500 - k) / 45, 0, 100);
-
-                // Base color at full brightness (your original mapping)
-                var baseR = Math.Min(35 + warmness * 2, 255);
-                var baseG = Math.Min(35 + (100 - warmness), 255);
-                var baseB = Math.Min(35 + (100 - warmness) / 2, 255);
-
-                // NEW: scale by effective brightness (0..255); when off → black
-                var effB = 128;
-                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
-                {
-                    effB = this.GetEffectiveBrightnessForDisplay(this._currentEntityId);
-                }
-
-                var scale = effB / 255.0;
-                var r = (Int32)Math.Round(baseR * scale);
-                var g = (Int32)Math.Round(baseG * scale);
-                var b = (Int32)Math.Round(baseB * scale);
-
+                var (r, g, b) = this.GetSimulatedLightRgbForCurrentDevice();
                 using var bb = new BitmapBuilder(imageSize);
                 bb.Clear(new BitmapColor(r, g, b));
                 return TilePainter.IconOrGlyph(bb, this._icons.Get(IconId.Temperature), "⟷", padPct: 10, font: 58);
             }
 
-
             if (actionParameter == AdjHue)
             {
-                Double H = 0, S = 100;
-                var effB = 128; // NEW: effective brightness (0 if off)
-                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
-                {
-                    if (this._hsbByEntity.TryGetValue(this._currentEntityId, out var h))
-                    {
-                        H = h.H;
-                        S = Math.Max(40, h.S); // keep your min-S for Hue tile
-                    }
-                    // NEW: always compute display brightness from effective brightness
-                    effB = this.GetEffectiveBrightnessForDisplay(this._currentEntityId);
-                }
-
-                var (r, g, b) = HSBHelper.HsbToRgb(
-                    HSBHelper.Wrap360(H),
-                    S,
-                    100.0 * effB / 255.0 // NEW: use effective brightness
-                );
-
+                var (r, g, b) = this.GetSimulatedLightRgbForCurrentDevice();
                 using var bb = new BitmapBuilder(imageSize);
                 bb.Clear(new BitmapColor(r, g, b));
                 return TilePainter.IconOrGlyph(bb, this._icons.Get(IconId.Hue), "H", padPct: 8, font: 56);
@@ -400,6 +468,8 @@ namespace Loupedeck.HomeAssistantPlugin
 
                     var eid = this._currentEntityId;
 
+                    this._lookModeByEntity[this._currentEntityId] = LookMode.Hs;
+
                     // Current HS from cache (fallbacks)
                     if (!this._hsbByEntity.TryGetValue(eid, out var hsb))
                     {
@@ -415,6 +485,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     this._hsbByEntity[eid] = (hsb.H, newS, hsb.B);
                     this.AdjustmentValueChanged(AdjSat);
                     this.AdjustmentValueChanged(AdjHue);
+                    this.AdjustmentValueChanged(AdjTemp);
 
 
                     var curH = this._hsbByEntity.TryGetValue(eid, out var hsb3) ? hsb3.H : 0;
@@ -434,6 +505,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     }
 
                     var eid = this._currentEntityId;
+                    this._lookModeByEntity[this._currentEntityId] = LookMode.Hs;
 
                     // Current HS from cache (fallbacks)
                     if (!this._hsbByEntity.TryGetValue(eid, out var hsb))
@@ -450,6 +522,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     this._hsbByEntity[eid] = (newH, hsb.S, hsb.B);
                     this.AdjustmentValueChanged(AdjHue);
                     this.AdjustmentValueChanged(AdjSat);
+                    this.AdjustmentValueChanged(AdjTemp); // temp tile also reflects effB
 
                     var curS = this._hsbByEntity.TryGetValue(eid, out var hsb2) ? hsb2.S : 100;
                     this.MarkCommandSent(eid);
@@ -470,6 +543,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     }
 
                     var eid = this._currentEntityId;
+                    this._lookModeByEntity[this._currentEntityId] = LookMode.Temp;
 
                     var (minM, maxM, curM) = this._tempMiredByEntity.TryGetValue(eid, out var t)
                         ? t
@@ -483,6 +557,8 @@ namespace Loupedeck.HomeAssistantPlugin
                     // Optimistic UI
                     this.SetCachedTempMired(eid, null, null, targetM);
                     this.AdjustmentValueChanged(AdjTemp);
+                    this.AdjustmentValueChanged(AdjHue);
+                    this.AdjustmentValueChanged(AdjSat);
                     this.MarkCommandSent(eid);
                     this._lightSvc.SetTempMired(eid, targetM);
                 }
