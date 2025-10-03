@@ -29,7 +29,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
             this._icons = new IconService(new Dictionary<String, String>
             {
-                { IconId.BulbPNG, "light_bulb_icon.png" }
+                { IconId.Bulb, "light_bulb_icon.svg" }
             });
         }
 
@@ -39,9 +39,9 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 // Optionally, show On/Off icon based on cached state (if available)
                 // For simplicity, always show bulb icon
-                return this._icons.Get(IconId.BulbPNG);
+                return this._icons.Get(IconId.Bulb);
             }
-            return this._icons.Get(IconId.BulbPNG);
+            return this._icons.Get(IconId.Bulb);
         }
 
         protected override Boolean OnLoad()

@@ -64,7 +64,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
             this._icons = new IconService(new Dictionary<String, String>
             {
-                { IconId.RunScript, "run_script_icon.png" },
+                { IconId.RunScript, "run_script_icon.svg" },
             });
 
             // Fire-and-forget prefetch with a short timeout to be ready for the first open

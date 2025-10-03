@@ -28,9 +28,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Resources\icons\light_bulb_icon.png">
-      <LogicalName>light_bulb_icon.png</LogicalName>
-    </EmbeddedResource>
     <EmbeddedResource Include="Resources\icons\light_bulb_icon.svg">
       <LogicalName>light_bulb_icon.svg</LogicalName>
     </EmbeddedResource>
@@ -43,32 +40,32 @@
     <EmbeddedResource Include="Resources\icons\light_off_icon.svg">
       <LogicalName>light_off_icon.svg</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="Resources\icons\brightness_icon.png">
-      <LogicalName>brightness_icon.png</LogicalName>
+    <EmbeddedResource Include="Resources\icons\brightness_icon.svg">
+      <LogicalName>brightness_icon.svg</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="Resources\icons\reload_icon.svg">
       <LogicalName>reload_icon.svg</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="Resources\icons\saturation_icon.png">
-      <LogicalName>saturation_icon.png</LogicalName>
+    <EmbeddedResource Include="Resources\icons\saturation_icon.svg">
+      <LogicalName>saturation_icon.svg</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="Resources\icons\issue_status_icon.png">
-      <LogicalName>issue_status_icon.png</LogicalName>
+    <EmbeddedResource Include="Resources\icons\issue_status_icon.svg">
+      <LogicalName>issue_status_icon.svg</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="Resources\icons\temperature_icon.png">
-      <LogicalName>temperature_icon.png</LogicalName>
+    <EmbeddedResource Include="Resources\icons\temperature_icon.svg">
+      <LogicalName>temperature_icon.svg</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="Resources\icons\online_status_icon.png">
       <LogicalName>online_status_icon.png</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="Resources\icons\hue_icon.png">
-      <LogicalName>hue_icon.png</LogicalName>
+    <EmbeddedResource Include="Resources\icons\hue_icon.svg">
+      <LogicalName>hue_icon.svg</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="Resources\icons\area_icon.svg">
       <LogicalName>area_icon.svg</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="Resources\icons\run_script_icon.png">
-      <LogicalName>run_script_icon.png</LogicalName>
+    <EmbeddedResource Include="Resources\icons\run_script_icon.svg">
+      <LogicalName>run_script_icon.svg</LogicalName>
     </EmbeddedResource>
     
     <Reference Include="PluginApi">

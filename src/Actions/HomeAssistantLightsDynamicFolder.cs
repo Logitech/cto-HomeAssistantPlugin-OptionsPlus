@@ -584,17 +584,17 @@ namespace Loupedeck.HomeAssistantPlugin
 
             this._icons = new IconService(new Dictionary<String, String>
             {
-                { IconId.BulbSVG,        "light_bulb_icon.svg" },
+                { IconId.Bulb,        "light_bulb_icon.svg" },
                 { IconId.Back,        "back_icon.svg" },
                 { IconId.BulbOn,      "light_on_icon.svg" },
                 { IconId.BulbOff,     "light_off_icon.svg" },
-                { IconId.Brightness,  "brightness_icon.png" },
+                { IconId.Brightness,  "brightness_icon.svg" },
                 { IconId.Retry,       "reload_icon.svg" },
-                { IconId.Saturation,  "saturation_icon.png" },
-                { IconId.Issue,       "issue_status_icon.png" },
-                { IconId.Temperature, "temperature_icon.png" },
+                { IconId.Saturation,  "saturation_icon.svg" },
+                { IconId.Issue,       "issue_status_icon.svg" },
+                { IconId.Temperature, "temperature_icon.svg" },
                 { IconId.Online,      "online_status_icon.png" },
-                { IconId.Hue,         "hue_icon.png" },
+                { IconId.Hue,         "hue_icon.svg" },
                 { IconId.Area,         "area_icon.svg" },
             });
 
@@ -769,7 +769,7 @@ namespace Loupedeck.HomeAssistantPlugin
             // DEVICE tiles (light bulbs)
             if (actionParameter.StartsWith(PfxDevice, StringComparison.OrdinalIgnoreCase))
             {
-                return this._icons.Get(IconId.BulbSVG);
+                return this._icons.Get(IconId.Bulb);
             }
 
             if (actionParameter.StartsWith(CmdArea, StringComparison.OrdinalIgnoreCase))

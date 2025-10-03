@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none">
+<defs><linearGradient id="g_antimonochrome" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#ff0707" /><stop offset="100%" stop-color="#ff0708" /></linearGradient></defs><path d="M16.6469 18.4257L16.9969 14.9257V12.0557H15.0049V14.9257L15.3549 18.4257H16.6469Z" fill="url(#g_antimonochrome)" />
+<path d="M16.0017 19.257C15.2318 19.257 14.6018 19.859 14.6018 20.629C14.6018 21.399 15.2318 22.001 16.0017 22.001C16.7718 22.001 17.4018 21.399 17.4018 20.629C17.4018 19.859 16.7718 19.257 16.0017 19.257Z" fill="url(#g_antimonochrome)" />
+<path fill-rule="evenodd" clip-rule="evenodd" d="M17.7405 6.99445C16.9707 5.66358 15.0497 5.66283 14.2788 6.9931L5.00495 22.9972C4.23233 24.3306 5.1944 26 6.73542 26H25.2665C26.8068 26 27.769 24.3319 26.9978 22.9986L17.7405 6.99445ZM6.73542 24L16.0093 7.99585L25.2665 24L6.73542 24Z" fill="url(#g_antimonochrome)" />
+</svg>
