@@ -374,17 +374,6 @@ Contributions welcome! Suggested ways to help:
 
 ---
 
-## Licensing & Icon Attributions
-
-This project includes several third-party icons from [SVG Repo](https://www.svgrepo.com).
-
-- **MIT Licensed icons** by framework7io and Adam Whitcroft (lightbulb-fill, lightbulb-slash, reload).
-- **Apache 2.0 Licensed icon** by Richard9394 (back 2).
-- **Public Domain icons** by stephenhutchings and Noah Jacobus (lightbulb, door-open).
-
-Full license texts and attribution details are included in [THIRD_PARTY_LICENSES.md](./THIRD_PARTY_LICENSES.md).
- ---
-
 ### Appendix: Power-user Notes
 
 * **ActionParam codec** avoids stringly command parsing (`"area:<id>"`, `"device:<entity_id>"`, `"act:on:<entity_id>"`, etc.).
