@@ -26,6 +26,11 @@ namespace Loupedeck.HomeAssistantPlugin
 
         public event Action<String, Boolean> ScriptRunningChanged; // (entityId, isRunning)
 
+        // Cover events
+        public event Action<String, Int32?> CoverPositionChanged; // (entityId, position 0-100)
+        public event Action<String, Int32?> CoverTiltChanged;     // (entityId, tilt 0-100)
+        public event Action<String, String> CoverStateChanged;    // (entityId, state: "open"/"closed"/"opening"/"closing")
+
 
 
         public async Task<Boolean> ConnectAndSubscribeAsync(String baseUrl, String accessToken, CancellationToken ct)
@@ -152,6 +157,11 @@ namespace Loupedeck.HomeAssistantPlugin
                     Int32? rgbR = null, rgbG = null, rgbB = null;
                     Double? xyX = null, xyY = null;
 
+                    // Cover state
+                    Int32? coverPosition = null;
+                    Int32? coverTilt = null;
+                    String coverState = null;
+
                     // Generic ON/OFF (used for scripts toggle state)
                     Boolean? isOn = null;
 
@@ -220,6 +230,28 @@ namespace Loupedeck.HomeAssistantPlugin
                                 xyX = xy[0].GetDouble();
                                 xyY = xy[1].GetDouble();
                                 // brightness is taken from 'bri' above if present; if not present, handler can fallback
+                            }
+
+                            // Cover position (0-100%)
+                            if (attrs.TryGetProperty("current_position", out var pos) && pos.ValueKind == JsonValueKind.Number)
+                            {
+                                coverPosition = HSBHelper.Clamp(pos.GetInt32(), 0, 100);
+                            }
+
+                            // Cover tilt position (0-100%)
+                            if (attrs.TryGetProperty("current_tilt_position", out var tilt) && tilt.ValueKind == JsonValueKind.Number)
+                            {
+                                coverTilt = HSBHelper.Clamp(tilt.GetInt32(), 0, 100);
+                            }
+                        }
+
+                        // Cover state from main state field
+                        if (ns.TryGetProperty("state", out var coverSt) && coverSt.ValueKind == JsonValueKind.String)
+                        {
+                            var stateStr = coverSt.GetString();
+                            if (entityId.StartsWith("cover.", StringComparison.OrdinalIgnoreCase))
+                            {
+                                coverState = stateStr;
                             }
                         }
 
@@ -315,6 +347,40 @@ namespace Loupedeck.HomeAssistantPlugin
                         }
                     }
                     catch { /* keep loop alive */ }
+
+                    // Cover events
+                    if (entityId.StartsWith("cover.", StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            if (coverPosition.HasValue)
+                            {
+                                PluginLog.Verbose($"[cover] position={coverPosition}% eid={entityId}");
+                                CoverPositionChanged?.Invoke(entityId, coverPosition);
+                            }
+                        }
+                        catch { /* keep loop alive */ }
+
+                        try
+                        {
+                            if (coverTilt.HasValue)
+                            {
+                                PluginLog.Verbose($"[cover] tilt={coverTilt}% eid={entityId}");
+                                CoverTiltChanged?.Invoke(entityId, coverTilt);
+                            }
+                        }
+                        catch { /* keep loop alive */ }
+
+                        try
+                        {
+                            if (!String.IsNullOrEmpty(coverState))
+                            {
+                                PluginLog.Verbose($"[cover] state={coverState} eid={entityId}");
+                                CoverStateChanged?.Invoke(entityId, coverState);
+                            }
+                        }
+                        catch { /* keep loop alive */ }
+                    }
                 }
             }
             catch (OperationCanceledException) { /* normal on shutdown */ }

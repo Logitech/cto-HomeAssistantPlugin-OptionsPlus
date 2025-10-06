@@ -1,0 +1,84 @@
+// Models/CoverCaps.cs
+namespace Loupedeck.HomeAssistantPlugin
+{
+    using System;
+    using System.Collections.Generic;
+    using System.Text.Json;
+
+    /// <summary>
+    /// Capability model for HA covers (blinds, curtains, shades, etc.).
+    /// Basic: device supports open/close/stop only
+    /// Position: supports position control 0-100%
+    /// Tilt: supports tilt control 0-100% (venetian blinds)
+    /// </summary>
+    public readonly record struct CoverCaps(Boolean Basic, Boolean Position, Boolean Tilt, String DeviceClass)
+    {
+        public static CoverCaps FromAttributes(JsonElement attrs)
+        {
+            Boolean basic = true; // All covers support basic open/close/stop
+            Boolean position = false;
+            Boolean tilt = false;
+            String deviceClass = "";
+
+            if (attrs.ValueKind == JsonValueKind.Object)
+            {
+                // Check for position support
+                if (attrs.TryGetProperty("current_position", out _) ||
+                    attrs.TryGetProperty("position", out _))
+                {
+                    position = true;
+                }
+
+                // Check for tilt support  
+                if (attrs.TryGetProperty("current_tilt_position", out _) ||
+                    attrs.TryGetProperty("tilt_position", out _))
+                {
+                    tilt = true;
+                }
+
+                // Get device class for icon selection
+                if (attrs.TryGetProperty("device_class", out var dc) && 
+                    dc.ValueKind == JsonValueKind.String)
+                {
+                    deviceClass = dc.GetString() ?? "";
+                }
+
+                // Check supported_features bitmask if available
+                if (attrs.TryGetProperty("supported_features", out var sf) && 
+                    sf.ValueKind == JsonValueKind.Number)
+                {
+                    var features = sf.GetInt32();
+                    // HA cover feature flags:
+                    // SUPPORT_OPEN = 1, SUPPORT_CLOSE = 2, SUPPORT_SET_POSITION = 4, 
+                    // SUPPORT_STOP = 8, SUPPORT_OPEN_TILT = 16, SUPPORT_CLOSE_TILT = 32,
+                    // SUPPORT_STOP_TILT = 64, SUPPORT_SET_TILT_POSITION = 128
+                    
+                    position = position || (features & 4) != 0; // SUPPORT_SET_POSITION
+                    tilt = tilt || (features & 128) != 0;       // SUPPORT_SET_TILT_POSITION
+                }
+            }
+
+            return new CoverCaps(basic, position, tilt, deviceClass);
+        }
+
+        /// <summary>
+        /// Get appropriate icon ID based on device class
+        /// </summary>
+        public String GetIconId()
+        {
+            return DeviceClass.ToLowerInvariant() switch
+            {
+                "blind" => IconId.Blind,
+                "curtain" => IconId.Curtain,
+                "shade" => IconId.Shade,
+                "shutter" => IconId.Shutter,
+                "awning" => IconId.Awning,
+                "garage" => IconId.Garage,
+                "gate" => IconId.Gate,
+                "door" => IconId.Door,
+                "window" => IconId.Window,
+                _ => IconId.Cover // Default cover icon
+            };
+        }
+    }
+}

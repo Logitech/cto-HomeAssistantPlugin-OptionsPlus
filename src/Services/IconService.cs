@@ -40,6 +40,7 @@ namespace Loupedeck.HomeAssistantPlugin
     /// <summary>String constants for icons (keeps callsites typo-safe).</summary>
     internal static class IconId
     {
+        // Light icons
         public const String Bulb = "bulb";
         public const String Back = "back";
         public const String BulbOn = "bulbOn";
@@ -53,5 +54,22 @@ namespace Loupedeck.HomeAssistantPlugin
         public const String Hue = "hue";
         public const String Area = "area";
         public const String RunScript = "run_script";
+        
+        // Cover/Blind icons
+        public const String Cover = "cover";
+        public const String Blind = "blind";
+        public const String Curtain = "curtain";
+        public const String Shade = "shade";
+        public const String Shutter = "shutter";
+        public const String Awning = "awning";
+        public const String Garage = "garage";
+        public const String Gate = "gate";
+        public const String Door = "door";
+        public const String Window = "window";
+        public const String CoverOpen = "cover_open";
+        public const String CoverClosed = "cover_closed";
+        public const String Position = "position";
+        public const String Tilt = "tilt";
+        public const String Stop = "stop";
     }
 }
