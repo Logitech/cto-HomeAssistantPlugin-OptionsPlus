@@ -274,10 +274,30 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 var caps = this.GetCaps(this._currentEntityId);
 
-                // Basic controls
-                yield return this.CreateCommandName($"{PfxActOpen}{this._currentEntityId}");
-                yield return this.CreateCommandName($"{PfxActClose}{this._currentEntityId}");
-                yield return this.CreateCommandName($"{PfxActStop}{this._currentEntityId}");
+                // Show appropriate controls based on device capabilities
+                if (caps.Basic)
+                {
+                    // Basic controls (open/close/stop)
+                    yield return this.CreateCommandName($"{PfxActOpen}{this._currentEntityId}");
+                    yield return this.CreateCommandName($"{PfxActClose}{this._currentEntityId}");
+                    yield return this.CreateCommandName($"{PfxActStop}{this._currentEntityId}");
+                }
+                
+                // Show tilt controls if supported (can be in addition to basic controls)
+                if (caps.Tilt && !caps.Basic)
+                {
+                    // Tilt-only controls (for devices that only support tilt)
+                    yield return this.CreateCommandName($"act:open_tilt:{this._currentEntityId}");
+                    yield return this.CreateCommandName($"act:close_tilt:{this._currentEntityId}");
+                    yield return this.CreateCommandName($"act:stop_tilt:{this._currentEntityId}");
+                }
+                else if (caps.Tilt && caps.Basic)
+                {
+                    // Additional tilt controls for devices that support both basic and tilt
+                    yield return this.CreateCommandName($"act:open_tilt:{this._currentEntityId}");
+                    yield return this.CreateCommandName($"act:close_tilt:{this._currentEntityId}");
+                    yield return this.CreateCommandName($"act:stop_tilt:{this._currentEntityId}");
+                }
 
                 // Position control
                 if (caps.Position)
@@ -346,6 +366,11 @@ namespace Loupedeck.HomeAssistantPlugin
             if (actionParameter.StartsWith(PfxActOpen, StringComparison.OrdinalIgnoreCase)) return "Open";
             if (actionParameter.StartsWith(PfxActClose, StringComparison.OrdinalIgnoreCase)) return "Close";
             if (actionParameter.StartsWith(PfxActStop, StringComparison.OrdinalIgnoreCase)) return "Stop";
+            
+            // Tilt-specific actions
+            if (actionParameter.StartsWith("act:open_tilt:", StringComparison.OrdinalIgnoreCase)) return "Open Tilt";
+            if (actionParameter.StartsWith("act:close_tilt:", StringComparison.OrdinalIgnoreCase)) return "Close Tilt";
+            if (actionParameter.StartsWith("act:stop_tilt:", StringComparison.OrdinalIgnoreCase)) return "Stop Tilt";
 
             if (actionParameter.StartsWith(CmdArea, StringComparison.OrdinalIgnoreCase))
             {
@@ -395,6 +420,14 @@ namespace Loupedeck.HomeAssistantPlugin
             if (actionParameter.StartsWith(PfxActClose, StringComparison.OrdinalIgnoreCase))
                 return this._icons.Get(IconId.CoverClosed);
             if (actionParameter.StartsWith(PfxActStop, StringComparison.OrdinalIgnoreCase))
+                return this._icons.Get(IconId.Stop);
+                
+            // Tilt-specific action icons
+            if (actionParameter.StartsWith("act:open_tilt:", StringComparison.OrdinalIgnoreCase))
+                return this._icons.Get(IconId.CoverOpen);
+            if (actionParameter.StartsWith("act:close_tilt:", StringComparison.OrdinalIgnoreCase))
+                return this._icons.Get(IconId.CoverClosed);
+            if (actionParameter.StartsWith("act:stop_tilt:", StringComparison.OrdinalIgnoreCase))
                 return this._icons.Get(IconId.Stop);
 
             return null;
@@ -486,7 +519,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 return;
             }
 
-            // Cover actions
+            // Cover actions - basic controls
             if (actionParameter.StartsWith(PfxActOpen, StringComparison.OrdinalIgnoreCase))
             {
                 var entityId = actionParameter.Substring(PfxActOpen.Length);
@@ -508,6 +541,31 @@ namespace Loupedeck.HomeAssistantPlugin
                 var entityId = actionParameter.Substring(PfxActStop.Length);
                 this.MarkCommandSent(entityId);
                 _ = this._coverSvc.StopAsync(entityId);
+                return;
+            }
+            
+            // Cover actions - tilt controls
+            if (actionParameter.StartsWith("act:open_tilt:", StringComparison.OrdinalIgnoreCase))
+            {
+                var entityId = actionParameter.Substring("act:open_tilt:".Length);
+                this.MarkCommandSent(entityId);
+                _ = this._coverSvc.OpenTiltAsync(entityId);
+                return;
+            }
+
+            if (actionParameter.StartsWith("act:close_tilt:", StringComparison.OrdinalIgnoreCase))
+            {
+                var entityId = actionParameter.Substring("act:close_tilt:".Length);
+                this.MarkCommandSent(entityId);
+                _ = this._coverSvc.CloseTiltAsync(entityId);
+                return;
+            }
+
+            if (actionParameter.StartsWith("act:stop_tilt:", StringComparison.OrdinalIgnoreCase))
+            {
+                var entityId = actionParameter.Substring("act:stop_tilt:".Length);
+                this.MarkCommandSent(entityId);
+                _ = this._coverSvc.StopTiltAsync(entityId);
                 return;
             }
         }
