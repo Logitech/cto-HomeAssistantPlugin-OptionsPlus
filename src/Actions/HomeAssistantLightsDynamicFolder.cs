@@ -9,7 +9,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
     using Loupedeck; // ensure this is present
 
-    public class HomeAssistantDynamicFolder : PluginDynamicFolder
+    public class HomeAssistantLightsDynamicFolder : PluginDynamicFolder
     {
 
 
@@ -577,7 +577,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
 
-        public HomeAssistantDynamicFolder()
+        public HomeAssistantLightsDynamicFolder()
         {
             this.DisplayName = "All Light Controls";
             this.GroupName = "Lights";
