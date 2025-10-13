@@ -297,31 +297,10 @@ namespace Loupedeck.HomeAssistantPlugin
             return null;
         }
 
-        private Boolean ProcessSingleLight(String entityId, LightCaps caps, Int32? brightness, Int32? temperature,
+        private Boolean ProcessSingleLight(String entityId, LightCaps caps, Int32? brightness, Int32? temperature, 
             Double? hue, Double? saturation, Int32? whiteLevel)
         {
             PluginLog.Info($"{LogPrefix} Processing light: {entityId}");
-            PluginLog.Info($"{LogPrefix} Light capabilities: onoff={caps.OnOff} brightness={caps.Brightness} colorTemp={caps.ColorTemp} colorHs={caps.ColorHs}");
-            PluginLog.Info($"{LogPrefix} Input parameters: brightness={brightness} temperature={temperature}K hue={hue}° saturation={saturation}% whiteLevel={whiteLevel}");
-
-            // If no parameters specified, just toggle
-            if (!brightness.HasValue && !temperature.HasValue && !hue.HasValue && !saturation.HasValue && !whiteLevel.HasValue)
-            {
-                PluginLog.Info($"{LogPrefix} No parameters provided, using simple toggle for '{entityId}'");
-                var (ok, err) = this._client.CallServiceAsync("light", "toggle", entityId, null, CancellationToken.None)
-                    .GetAwaiter().GetResult();
-                PluginLog.Info($"{LogPrefix} HA SERVICE CALL: domain=light service=toggle entity_id={entityId} data=null -> ok={ok} err='{err}'");
-                
-                if (!ok)
-                {
-                    var friendlyName = entityId; // Could be enhanced to get friendly name from light list
-                    this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
-                        $"Failed to toggle light {friendlyName}: {err ?? "Unknown error"}",
-                        "Check Home Assistant logs for details");
-                }
-                
-                return ok;
-            }
 
             // Build service call data based on available parameters and capabilities
             var serviceData = new Dictionary<String, Object>();
@@ -329,92 +308,45 @@ namespace Loupedeck.HomeAssistantPlugin
             // Add brightness if supported and specified
             if (brightness.HasValue && caps.Brightness)
             {
-                var bri = HSBHelper.Clamp(brightness.Value, 1, 255); // Ensure at least 1 for turn_on
-                serviceData["brightness"] = bri;
-                PluginLog.Info($"{LogPrefix} Added brightness: {brightness.Value} -> {bri} (clamped 1-255)");
-            }
-            else if (whiteLevel.HasValue && caps.Brightness)
-            {
-                // White level as fallback brightness
-                var bri = HSBHelper.Clamp(whiteLevel.Value, 1, 255);
-                serviceData["brightness"] = bri;
-                PluginLog.Info($"{LogPrefix} Added white level as brightness: {whiteLevel.Value} -> {bri} (clamped 1-255)");
-            }
-            else if (brightness.HasValue && !caps.Brightness)
-            {
-                PluginLog.Warning($"{LogPrefix} Brightness {brightness.Value} requested but not supported by {entityId}");
+                serviceData["brightness"] = brightness.Value;
             }
 
-            // Add color controls - prioritize temperature over HS to avoid conflicts
-            // (HA doesn't allow both color_temp and hs_color in the same call)
+            // Add color temperature if supported and specified
             if (temperature.HasValue && caps.ColorTemp)
             {
                 var kelvin = HSBHelper.Clamp(temperature.Value, 2000, 6500);
-                var mired = ColorTemp.KelvinToMired(kelvin);
-                serviceData["color_temp"] = mired;
-                PluginLog.Info($"{LogPrefix} Added color temp: {temperature.Value}K -> {kelvin}K -> {mired} mireds (color temp takes priority over HS)");
-                
-                if (hue.HasValue || saturation.HasValue)
+                serviceData["color_temp_kelvin"] = kelvin;
+            }
+
+            // Add hue/saturation if supported and specified
+            if (hue.HasValue && saturation.HasValue && caps.ColorHs)
+            {
+                serviceData["hs_color"] = new Double[] { hue.Value, saturation.Value };
+            }
+
+            // Add white level if supported and specified
+            if (whiteLevel.HasValue && caps.Brightness)
+            {
+                // White level can be treated as brightness for basic lights
+                if (!brightness.HasValue)
                 {
-                    PluginLog.Info($"{LogPrefix} Skipping HS color because color temperature was specified (HA doesn't allow both)");
+                    serviceData["brightness"] = whiteLevel.Value;
                 }
-            }
-            else if (hue.HasValue && saturation.HasValue && caps.ColorHs)
-            {
-                var h = HSBHelper.Wrap360(hue.Value);
-                var s = HSBHelper.Clamp(saturation.Value, 0, 100);
-                serviceData["hs_color"] = new Double[] { h, s };
-                PluginLog.Info($"{LogPrefix} Added hs_color: hue {hue.Value}° -> {h}°, saturation {saturation.Value}% -> {s}%");
-            }
-            else if (temperature.HasValue && !caps.ColorTemp)
-            {
-                PluginLog.Warning($"{LogPrefix} Color temperature {temperature.Value}K requested but not supported by {entityId}");
-            }
-            else if ((hue.HasValue || saturation.HasValue) && !caps.ColorHs)
-            {
-                PluginLog.Warning($"{LogPrefix} Hue/Saturation requested but not supported by {entityId}");
             }
 
             JsonElement? data = null;
             if (serviceData.Any())
             {
                 data = JsonSerializer.SerializeToElement(serviceData);
-                var dataJson = JsonSerializer.Serialize(data);
-                PluginLog.Info($"{LogPrefix} Built service data: {dataJson}");
-                
-                // Use turn_on when we have specific parameters (like the dynamic folder does)
-                var (ok, err) = this._client.CallServiceAsync("light", "turn_on", entityId, data, CancellationToken.None)
-                    .GetAwaiter().GetResult();
-                PluginLog.Info($"{LogPrefix} HA SERVICE CALL: domain=light service=turn_on entity_id={entityId} data={dataJson} -> ok={ok} err='{err}'");
-                
-                if (!ok)
-                {
-                    var friendlyName = entityId; // Could be enhanced to get friendly name from light list
-                    this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
-                        $"Failed to control light {friendlyName}: {err ?? "Unknown error"}",
-                        "Check Home Assistant logs for details");
-                }
-                
-                return ok;
             }
-            else
-            {
-                // No valid parameters, just toggle
-                PluginLog.Info($"{LogPrefix} No valid parameters after capability check, using simple toggle for '{entityId}'");
-                var (ok, err) = this._client.CallServiceAsync("light", "toggle", entityId, null, CancellationToken.None)
-                    .GetAwaiter().GetResult();
-                PluginLog.Info($"{LogPrefix} HA SERVICE CALL: domain=light service=toggle entity_id={entityId} data=null -> ok={ok} err='{err}'");
-                
-                if (!ok)
-                {
-                    var friendlyName = entityId; // Could be enhanced to get friendly name from light list
-                    this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
-                        $"Failed to toggle light {friendlyName}: {err ?? "Unknown error"}",
-                        "Check Home Assistant logs for details");
-                }
-                
-                return ok;
-            }
+
+            // Toggle the light with the specified parameters
+            var (ok, err) = this._client.CallServiceAsync("light", "toggle", entityId, data, CancellationToken.None)
+                .GetAwaiter().GetResult();
+
+            PluginLog.Info($"{LogPrefix} call_service light.toggle '{entityId}' with {serviceData.Count} params -> ok={ok} err='{err}'");
+            
+            return ok;
         }
 
         private void OnListboxItemsRequested(Object sender, ActionEditorListboxItemsRequestedEventArgs e)
