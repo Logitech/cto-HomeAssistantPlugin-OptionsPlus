@@ -197,6 +197,9 @@ namespace Loupedeck.HomeAssistantPlugin
                 { HealthBus.Error("Connection lost"); return; }
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(ServiceCallTimeoutSeconds));
                 var data = JsonSerializer.SerializeToElement(new { brightness = target });
+                
+                PluginLog.Info($"[light] Sending brightness command to {entityId} with data: {data}");
+                
                 var (ok, err) = await this._ha.CallServiceAsync("light", "turn_on", entityId, data, cts.Token).ConfigureAwait(false);
                 if (ok)
                 {
@@ -215,7 +218,7 @@ namespace Loupedeck.HomeAssistantPlugin
             }
             catch (Exception ex)
             {
-                PluginLog.Warning(ex, "[light] SendBrightnessAsync exception");
+                PluginLog.Warning(ex, $"[light] SendBrightnessAsync exception for {entityId}");
             }
         }
 
@@ -228,6 +231,9 @@ namespace Loupedeck.HomeAssistantPlugin
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(ServiceCallTimeoutSeconds));
 
                 var data = JsonSerializer.SerializeToElement(new { hs_color = new Object[] { hs.H, hs.S } });
+                
+                PluginLog.Info($"[light] Sending hue/saturation command to {entityId} with data: {data}");
+                
                 var (ok, err) = await this._ha.CallServiceAsync("light", "turn_on", entityId, data, cts.Token).ConfigureAwait(false);
                 if (ok)
                 {
@@ -241,7 +247,7 @@ namespace Loupedeck.HomeAssistantPlugin
             }
             catch (Exception ex)
             {
-                PluginLog.Warning(ex, "[light] SendHsAsync exception");
+                PluginLog.Warning(ex, $"[light] SendHsAsync exception for {entityId}");
             }
         }
 
@@ -256,6 +262,8 @@ namespace Loupedeck.HomeAssistantPlugin
                 var kelvin = ColorTemp.MiredToKelvin(mired);
                 var data = JsonSerializer.SerializeToElement(new { color_temp_kelvin = kelvin });
 
+                PluginLog.Info($"[light] Sending temperature command to {entityId} with data: {data}");
+
                 var (ok, err) = await this._ha.CallServiceAsync("light", "turn_on", entityId, data, cts.Token).ConfigureAwait(false);
                 if (ok)
                 {
@@ -269,7 +277,7 @@ namespace Loupedeck.HomeAssistantPlugin
             }
             catch (Exception ex)
             {
-                PluginLog.Warning(ex, "[light] SendTempAsync exception");
+                PluginLog.Warning(ex, $"[light] SendTempAsync exception for {entityId}");
             }
         }
 
