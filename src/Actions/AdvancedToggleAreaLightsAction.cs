@@ -146,18 +146,18 @@ namespace Loupedeck.HomeAssistantPlugin
             return this._capSvc.ForLight(attrs);
         }
 
-        private (List<String> lights, LightCaps commonCaps) GetAreaLightsAndCapabilities(String areaId)
+        private List<String> GetAreaLights(String areaId)
         {
             PluginLog.Info($"{LogPrefix} Getting lights for area: {areaId}");
 
-            // Get states to find lights and their capabilities
+            // Get states to find lights
             var (okStates, statesJson, errStates) = this._client.RequestAsync("get_states", CancellationToken.None)
                 .GetAwaiter().GetResult();
 
             if (!okStates || String.IsNullOrEmpty(statesJson))
             {
                 PluginLog.Warning($"{LogPrefix} get_states failed: {errStates}");
-                return (new List<String>(), new LightCaps(false, false, false, false));
+                return new List<String>();
             }
 
             // Get entity registry to map entities to areas
@@ -219,7 +219,6 @@ namespace Loupedeck.HomeAssistantPlugin
 
             // Find lights in the specified area
             var areaLights = new List<String>();
-            var allCaps = new List<LightCaps>();
 
             using var statesDoc = JsonDocument.Parse(statesJson);
             foreach (var state in statesDoc.RootElement.EnumerateArray())
@@ -235,7 +234,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     lightAreaId = entArea;
                 }
-                else if (entityToDevice.TryGetValue(entityId, out var deviceId) && 
+                else if (entityToDevice.TryGetValue(entityId, out var deviceId) &&
                          deviceToArea.TryGetValue(deviceId, out var devArea))
                 {
                     lightAreaId = devArea;
@@ -251,35 +250,11 @@ namespace Loupedeck.HomeAssistantPlugin
                     continue;
 
                 areaLights.Add(entityId);
-
-                // Get capabilities for this light
-                if (state.TryGetProperty("attributes", out var attrs))
-                {
-                    var caps = this.GetLightCapabilities(attrs);
-                    allCaps.Add(caps);
-                }
-            }
-
-            // Calculate common capabilities (intersection of all lights)
-            LightCaps commonCaps;
-            if (allCaps.Any())
-            {
-                var commonOnOff = allCaps.All(c => c.OnOff);
-                var commonBrightness = allCaps.All(c => c.Brightness);
-                var commonColorTemp = allCaps.All(c => c.ColorTemp);
-                var commonColorHs = allCaps.All(c => c.ColorHs);
-                
-                commonCaps = new LightCaps(commonOnOff, commonBrightness, commonColorTemp, commonColorHs);
-            }
-            else
-            {
-                commonCaps = new LightCaps(false, false, false, false);
             }
 
             PluginLog.Info($"{LogPrefix} Found {areaLights.Count} lights in area '{areaId}': {String.Join(", ", areaLights)}");
-            PluginLog.Info($"{LogPrefix} Common capabilities: onoff={commonCaps.OnOff} brightness={commonCaps.Brightness} colorTemp={commonCaps.ColorTemp} colorHs={commonCaps.ColorHs}");
 
-            return (areaLights, commonCaps);
+            return areaLights;
         }
 
         protected override Boolean RunCommand(ActionEditorActionParameters ps)
@@ -305,8 +280,8 @@ namespace Loupedeck.HomeAssistantPlugin
                 selectedArea = selectedArea.Trim();
                 PluginLog.Info($"{LogPrefix} Processing area: {selectedArea}");
 
-                // Get lights in the area and their common capabilities
-                var (areaLights, commonCaps) = this.GetAreaLightsAndCapabilities(selectedArea);
+                // Get lights in the area
+                var areaLights = this.GetAreaLights(selectedArea);
 
                 if (!areaLights.Any())
                 {
@@ -332,7 +307,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     try
                     {
-                        success &= this.ProcessSingleLight(entityId, commonCaps, brightness, temperature, hue, saturation, whiteLevel);
+                        success &= this.ProcessSingleLight(entityId, brightness, temperature, hue, saturation, whiteLevel);
                     }
                     catch (Exception ex)
                     {
@@ -390,11 +365,10 @@ namespace Loupedeck.HomeAssistantPlugin
             return null;
         }
 
-        private Boolean ProcessSingleLight(String entityId, LightCaps caps, Int32? brightness, Int32? temperature,
+        private Boolean ProcessSingleLight(String entityId, Int32? brightness, Int32? temperature,
             Double? hue, Double? saturation, Int32? whiteLevel)
         {
             PluginLog.Info($"{LogPrefix} Processing light: {entityId}");
-            PluginLog.Info($"{LogPrefix} Light capabilities: onoff={caps.OnOff} brightness={caps.Brightness} colorTemp={caps.ColorTemp} colorHs={caps.ColorHs}");
             PluginLog.Info($"{LogPrefix} Input parameters: brightness={brightness} temperature={temperature}K hue={hue}° saturation={saturation}% whiteLevel={whiteLevel}");
 
             // If no parameters specified, just toggle
@@ -413,31 +387,27 @@ namespace Loupedeck.HomeAssistantPlugin
                 return ok;
             }
 
-            // Build service call data based on available parameters and capabilities
+            // Build service call data - send all requested parameters and let HA ignore unsupported ones
             var serviceData = new Dictionary<String, Object>();
 
-            // Add brightness if supported and specified
-            if (brightness.HasValue && caps.Brightness)
+            // Add brightness if specified
+            if (brightness.HasValue)
             {
                 var bri = HSBHelper.Clamp(brightness.Value, 1, 255); // Ensure at least 1 for turn_on
                 serviceData["brightness"] = bri;
                 PluginLog.Info($"{LogPrefix} Added brightness: {brightness.Value} -> {bri} (clamped 1-255)");
             }
-            else if (whiteLevel.HasValue && caps.Brightness)
+            else if (whiteLevel.HasValue)
             {
                 // White level as fallback brightness
                 var bri = HSBHelper.Clamp(whiteLevel.Value, 1, 255);
                 serviceData["brightness"] = bri;
                 PluginLog.Info($"{LogPrefix} Added white level as brightness: {whiteLevel.Value} -> {bri} (clamped 1-255)");
             }
-            else if (brightness.HasValue && !caps.Brightness)
-            {
-                PluginLog.Warning($"{LogPrefix} Brightness {brightness.Value} requested but not supported by {entityId}");
-            }
 
             // Add color controls - prioritize temperature over HS to avoid conflicts
             // (HA doesn't allow both color_temp and hs_color in the same call)
-            if (temperature.HasValue && caps.ColorTemp)
+            if (temperature.HasValue)
             {
                 var kelvin = HSBHelper.Clamp(temperature.Value, 2000, 6500);
                 var mired = ColorTemp.KelvinToMired(kelvin);
@@ -449,20 +419,12 @@ namespace Loupedeck.HomeAssistantPlugin
                     PluginLog.Info($"{LogPrefix} Skipping HS color because color temperature was specified (HA doesn't allow both)");
                 }
             }
-            else if (hue.HasValue && saturation.HasValue && caps.ColorHs)
+            else if (hue.HasValue && saturation.HasValue)
             {
                 var h = HSBHelper.Wrap360(hue.Value);
                 var s = HSBHelper.Clamp(saturation.Value, 0, 100);
                 serviceData["hs_color"] = new Double[] { h, s };
                 PluginLog.Info($"{LogPrefix} Added hs_color: hue {hue.Value}° -> {h}°, saturation {saturation.Value}% -> {s}%");
-            }
-            else if (temperature.HasValue && !caps.ColorTemp)
-            {
-                PluginLog.Warning($"{LogPrefix} Color temperature {temperature.Value}K requested but not supported by {entityId}");
-            }
-            else if ((hue.HasValue || saturation.HasValue) && !caps.ColorHs)
-            {
-                PluginLog.Warning($"{LogPrefix} Hue/Saturation requested but not supported by {entityId}");
             }
 
             JsonElement? data = null;
@@ -472,7 +434,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 var dataJson = JsonSerializer.Serialize(data);
                 PluginLog.Info($"{LogPrefix} Built service data: {dataJson}");
                 
-                // Use turn_on when we have specific parameters (like the dynamic folder does)
+                // Use turn_on when we have specific parameters
                 var (ok, err) = this._client.CallServiceAsync("light", "turn_on", entityId, data, CancellationToken.None)
                     .GetAwaiter().GetResult();
                 PluginLog.Info($"{LogPrefix} HA SERVICE CALL: domain=light service=turn_on entity_id={entityId} data={dataJson} -> ok={ok} err='{err}'");
@@ -486,8 +448,8 @@ namespace Loupedeck.HomeAssistantPlugin
             }
             else
             {
-                // No valid parameters, just toggle
-                PluginLog.Info($"{LogPrefix} No valid parameters after capability check, using simple toggle for '{entityId}'");
+                // No parameters, just toggle
+                PluginLog.Info($"{LogPrefix} No parameters provided, using simple toggle for '{entityId}'");
                 var (ok, err) = this._client.CallServiceAsync("light", "toggle", entityId, null, CancellationToken.None)
                     .GetAwaiter().GetResult();
                 PluginLog.Info($"{LogPrefix} HA SERVICE CALL: domain=light service=toggle entity_id={entityId} data=null -> ok={ok} err='{err}'");
