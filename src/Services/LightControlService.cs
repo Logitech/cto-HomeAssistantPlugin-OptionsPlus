@@ -106,85 +106,79 @@ namespace Loupedeck.HomeAssistantPlugin
 
         public async Task<Boolean> TurnOnAsync(String entityId, JsonElement? data = null, CancellationToken ct = default)
         {
-            var hasData = data.HasValue;
-            PluginLog.Debug(() => $"[LightControlService] TurnOnAsync - entity: {entityId}, hasData: {hasData}");
-
             try
             {
-                var startTime = DateTime.UtcNow;
-                var (ok, error) = await this._ha.CallServiceAsync("light", "turn_on", entityId, data, ct).ConfigureAwait(false);
-                var elapsed = DateTime.UtcNow - startTime;
-
+                var dataStr = data?.ToString() ?? "null";
+                PluginLog.Info($"[light] Sending turn_on command to {entityId} with data: {dataStr}");
+                
+                var (ok, err) = await this._ha.CallServiceAsync("light", "turn_on", entityId, data, ct).ConfigureAwait(false);
+                
                 if (ok)
                 {
-                    PluginLog.Info(() => $"[LightControlService] TurnOnAsync SUCCESS - {entityId} turned on in {elapsed.TotalMilliseconds:F0}ms");
+                    PluginLog.Info($"[light] turn_on -> {entityId} OK");
                 }
                 else
                 {
-                    PluginLog.Warning(() => $"[LightControlService] TurnOnAsync FAILED - {entityId} failed in {elapsed.TotalMilliseconds:F0}ms: {error}");
+                    PluginLog.Warning($"[light] turn_on failed for {entityId}: {err}");
                 }
-
+                
                 return ok;
             }
             catch (Exception ex)
             {
-                PluginLog.Error(ex, $"[LightControlService] TurnOnAsync EXCEPTION - {entityId}");
+                PluginLog.Warning(ex, $"[light] TurnOnAsync exception for {entityId}");
                 return false;
             }
         }
 
         public async Task<Boolean> TurnOffAsync(String entityId, CancellationToken ct = default)
         {
-            PluginLog.Info($"[LightControlService] TurnOffAsync - entity: {entityId}");
-
             try
             {
-                var startTime = DateTime.UtcNow;
-                var (ok, error) = await this._ha.CallServiceAsync("light", "turn_off", entityId, null, ct).ConfigureAwait(false);
-                var elapsed = DateTime.UtcNow - startTime;
-
+                PluginLog.Info($"[light] Sending turn_off command to {entityId}");
+                
+                var (ok, err) = await this._ha.CallServiceAsync("light", "turn_off", entityId, null, ct).ConfigureAwait(false);
+                
                 if (ok)
                 {
-                    PluginLog.Info(() => $"[LightControlService] TurnOffAsync SUCCESS - {entityId} turned off in {elapsed.TotalMilliseconds:F0}ms");
+                    PluginLog.Info($"[light] turn_off -> {entityId} OK");
                 }
                 else
                 {
-                    PluginLog.Warning(() => $"[LightControlService] TurnOffAsync FAILED - {entityId} failed in {elapsed.TotalMilliseconds:F0}ms: {error}");
+                    PluginLog.Warning($"[light] turn_off failed for {entityId}: {err}");
                 }
-
+                
                 return ok;
             }
             catch (Exception ex)
             {
-                PluginLog.Error(ex, $"[LightControlService] TurnOffAsync EXCEPTION - {entityId}");
+                PluginLog.Warning(ex, $"[light] TurnOffAsync exception for {entityId}");
                 return false;
             }
         }
 
         public async Task<Boolean> ToggleAsync(String entityId, CancellationToken ct = default)
         {
-            PluginLog.Info($"[LightControlService] ToggleAsync - entity: {entityId}");
-
             try
             {
-                var startTime = DateTime.UtcNow;
-                var (ok, error) = await this._ha.CallServiceAsync("light", "toggle", entityId, null, ct).ConfigureAwait(false);
-                var elapsed = DateTime.UtcNow - startTime;
-
+                PluginLog.Info($"[light] Sending toggle command to {entityId}");
+                
+                var (ok, err) = await this._ha.CallServiceAsync("light", "toggle", entityId, null, ct).ConfigureAwait(false);
+                
                 if (ok)
                 {
-                    PluginLog.Info(() => $"[LightControlService] ToggleAsync SUCCESS - {entityId} toggled in {elapsed.TotalMilliseconds:F0}ms");
+                    PluginLog.Info($"[light] toggle -> {entityId} OK");
                 }
                 else
                 {
-                    PluginLog.Warning(() => $"[LightControlService] ToggleAsync FAILED - {entityId} failed in {elapsed.TotalMilliseconds:F0}ms: {error}");
+                    PluginLog.Warning($"[light] toggle failed for {entityId}: {err}");
                 }
-
+                
                 return ok;
             }
             catch (Exception ex)
             {
-                PluginLog.Error(ex, $"[LightControlService] ToggleAsync EXCEPTION - {entityId}");
+                PluginLog.Warning(ex, $"[light] ToggleAsync exception for {entityId}");
                 return false;
             }
         }
