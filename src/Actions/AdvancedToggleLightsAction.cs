@@ -297,10 +297,19 @@ namespace Loupedeck.HomeAssistantPlugin
             return null;
         }
 
-        private Boolean ProcessSingleLight(String entityId, LightCaps caps, Int32? brightness, Int32? temperature, 
+        private Boolean ProcessSingleLight(String entityId, LightCaps caps, Int32? brightness, Int32? temperature,
             Double? hue, Double? saturation, Int32? whiteLevel)
         {
             PluginLog.Info($"{LogPrefix} Processing light: {entityId}");
+
+            // If no parameters specified, just toggle
+            if (!brightness.HasValue && !temperature.HasValue && !hue.HasValue && !saturation.HasValue && !whiteLevel.HasValue)
+            {
+                var (ok, err) = this._client.CallServiceAsync("light", "toggle", entityId, null, CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                PluginLog.Info($"{LogPrefix} call_service light.toggle '{entityId}' -> ok={ok} err='{err}'");
+                return ok;
+            }
 
             // Build service call data based on available parameters and capabilities
             var serviceData = new Dictionary<String, Object>();
@@ -308,45 +317,51 @@ namespace Loupedeck.HomeAssistantPlugin
             // Add brightness if supported and specified
             if (brightness.HasValue && caps.Brightness)
             {
-                serviceData["brightness"] = brightness.Value;
+                var bri = HSBHelper.Clamp(brightness.Value, 1, 255); // Ensure at least 1 for turn_on
+                serviceData["brightness"] = bri;
+            }
+            else if (whiteLevel.HasValue && caps.Brightness)
+            {
+                // White level as fallback brightness
+                var bri = HSBHelper.Clamp(whiteLevel.Value, 1, 255);
+                serviceData["brightness"] = bri;
             }
 
-            // Add color temperature if supported and specified
+            // Add color temperature if supported and specified (convert Kelvin to mireds)
             if (temperature.HasValue && caps.ColorTemp)
             {
                 var kelvin = HSBHelper.Clamp(temperature.Value, 2000, 6500);
-                serviceData["color_temp_kelvin"] = kelvin;
+                var mired = ColorTemp.KelvinToMired(kelvin);
+                serviceData["color_temp"] = mired;
             }
 
             // Add hue/saturation if supported and specified
             if (hue.HasValue && saturation.HasValue && caps.ColorHs)
             {
-                serviceData["hs_color"] = new Double[] { hue.Value, saturation.Value };
-            }
-
-            // Add white level if supported and specified
-            if (whiteLevel.HasValue && caps.Brightness)
-            {
-                // White level can be treated as brightness for basic lights
-                if (!brightness.HasValue)
-                {
-                    serviceData["brightness"] = whiteLevel.Value;
-                }
+                var h = HSBHelper.Wrap360(hue.Value);
+                var s = HSBHelper.Clamp(saturation.Value, 0, 100);
+                serviceData["hs_color"] = new Double[] { h, s };
             }
 
             JsonElement? data = null;
             if (serviceData.Any())
             {
                 data = JsonSerializer.SerializeToElement(serviceData);
+                
+                // Use turn_on when we have specific parameters (like the dynamic folder does)
+                var (ok, err) = this._client.CallServiceAsync("light", "turn_on", entityId, data, CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                PluginLog.Info($"{LogPrefix} call_service light.turn_on '{entityId}' with {serviceData.Count} params -> ok={ok} err='{err}'");
+                return ok;
             }
-
-            // Toggle the light with the specified parameters
-            var (ok, err) = this._client.CallServiceAsync("light", "toggle", entityId, data, CancellationToken.None)
-                .GetAwaiter().GetResult();
-
-            PluginLog.Info($"{LogPrefix} call_service light.toggle '{entityId}' with {serviceData.Count} params -> ok={ok} err='{err}'");
-            
-            return ok;
+            else
+            {
+                // No valid parameters, just toggle
+                var (ok, err) = this._client.CallServiceAsync("light", "toggle", entityId, null, CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                PluginLog.Info($"{LogPrefix} call_service light.toggle '{entityId}' -> ok={ok} err='{err}'");
+                return ok;
+            }
         }
 
         private void OnListboxItemsRequested(Object sender, ActionEditorListboxItemsRequestedEventArgs e)
