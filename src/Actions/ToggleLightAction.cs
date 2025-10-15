@@ -11,7 +11,7 @@ namespace Loupedeck.HomeAssistantPlugin
     public sealed class ToggleLightAction : ActionEditorCommand
     {
         private const String LogPrefix = "[ToggleLight]";
-        private HaWebSocketClient _client;
+        private HaWebSocketClient? _client;
 
         private const String ControlLight = "ha_light";
         private readonly IconService _icons;
@@ -82,7 +82,7 @@ namespace Loupedeck.HomeAssistantPlugin
             try
             {
                 PluginLog.Info($"{LogPrefix} Connecting to HA… url='{baseUrl}'");
-                var (ok, msg) = await this._client.ConnectAndAuthenticateAsync(
+                var (ok, msg) = await this._client!.ConnectAndAuthenticateAsync(
                     baseUrl, token, TimeSpan.FromSeconds(8), CancellationToken.None
                 ).ConfigureAwait(false);
 
@@ -118,7 +118,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 PluginLog.Info($"{LogPrefix} Press: entity='{entityId}'");
 
                 // Send toggle command
-                var (ok, err) = this._client.CallServiceAsync("light", "toggle", entityId, data: null, CancellationToken.None)
+                var (ok, err) = this._client!.CallServiceAsync("light", "toggle", entityId, data: null, CancellationToken.None)
                     .GetAwaiter().GetResult();
                 PluginLog.Info($"{LogPrefix} call_service light.toggle '{entityId}' -> ok={ok} err='{err}'");
                 return ok;
@@ -160,7 +160,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     return;
                 }
 
-                var (ok, json, error) = this._client.RequestAsync("get_states", CancellationToken.None)
+                var (ok, json, error) = this._client!.RequestAsync("get_states", CancellationToken.None)
                     .GetAwaiter().GetResult();
                 PluginLog.Info($"{LogPrefix} get_states ok={ok} error='{error}' bytes={json?.Length ?? 0}");
 

@@ -9,22 +9,22 @@ namespace Loupedeck.HomeAssistantPlugin
 
     public sealed class HaEventListener : IDisposable
     {
-        private ClientWebSocket _ws;
-        private CancellationTokenSource _cts;
-        private Task _loop;
+        private ClientWebSocket? _ws;
+        private CancellationTokenSource? _cts;
+        private Task? _loop;
         private Int32 _nextId = 1;
 
-        public event Action<String, Int32?> BrightnessChanged; // (entityId, brightness 0..255 or null)
-        public event Action<String, Int32?, Int32?, Int32?, Int32?> ColorTempChanged;
+        public event Action<String, Int32?>? BrightnessChanged; // (entityId, brightness 0..255 or null)
+        public event Action<String, Int32?, Int32?, Int32?, Int32?>? ColorTempChanged;
         // args: (entityId, mired, kelvin, min_mireds, max_mireds)
 
 
 
-        public event Action<String, Double?, Double?> HsColorChanged; // (entityId, hue 0..360, sat 0..100)
-        public event Action<String, Int32?, Int32?, Int32?> RgbColorChanged;
-        public event Action<String, Double?, Double?, Int32?> XyColorChanged;
+        public event Action<String, Double?, Double?>? HsColorChanged; // (entityId, hue 0..360, sat 0..100)
+        public event Action<String, Int32?, Int32?, Int32?>? RgbColorChanged;
+        public event Action<String, Double?, Double?, Int32?>? XyColorChanged;
 
-        public event Action<String, Boolean> ScriptRunningChanged; // (entityId, isRunning)
+        public event Action<String, Boolean>? ScriptRunningChanged; // (entityId, isRunning)
 
 
 
@@ -347,7 +347,16 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
-        public void Dispose() => _ = this.SafeCloseAsync();
+        public void Dispose()
+        {
+            try
+            {
+                this._cts?.Cancel();
+                this._ws?.Dispose();
+                this._ws = null;
+            }
+            catch { /* Ignore disposal exceptions */ }
+        }
 
         // --- helpers ---
         private static Uri BuildWebSocketUri(String baseUrl)
@@ -363,6 +372,11 @@ namespace Loupedeck.HomeAssistantPlugin
 
         private async Task<String> ReceiveTextAsync(CancellationToken ct)
         {
+            if (this._ws == null)
+            {
+                throw new InvalidOperationException("WebSocket is not initialized");
+            }
+
             var buffer = new ArraySegment<Byte>(new Byte[8192]);
             var sb = new StringBuilder();
             WebSocketReceiveResult result;
@@ -374,18 +388,26 @@ namespace Loupedeck.HomeAssistantPlugin
                     throw new WebSocketException("Server closed");
                 }
 
-                sb.Append(Encoding.UTF8.GetString(buffer.Array, 0, result.Count));
+                if (buffer.Array != null)
+                {
+                    sb.Append(Encoding.UTF8.GetString(buffer.Array, 0, result.Count));
+                }
             } while (!result.EndOfMessage);
             return sb.ToString();
         }
 
         private Task SendTextAsync(String text, CancellationToken ct)
         {
+            if (this._ws == null)
+            {
+                throw new InvalidOperationException("WebSocket is not initialized");
+            }
+
             var bytes = Encoding.UTF8.GetBytes(text);
             return this._ws.SendAsync(new ArraySegment<Byte>(bytes), WebSocketMessageType.Text, true, ct);
         }
 
-        private static String ReadType(String json)
+        private static String? ReadType(String json)
         {
             using var doc = JsonDocument.Parse(json);
             return doc.RootElement.TryGetProperty("type", out var t) ? t.GetString() : null;
