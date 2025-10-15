@@ -74,7 +74,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private enum ViewLevel { Root, Area, Device }
         private ViewLevel _level = ViewLevel.Root;
 
-        private String _currentAreaId = null; // when in Area view
+        private String? _currentAreaId = null; // when in Area view
 
         // Area data
         private readonly Dictionary<String, String> _areaIdToName =
@@ -86,7 +86,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private const String UnassignedAreaId = "!unassigned";
         private const String UnassignedAreaName = "(No area)";
 
-        private String _currentEntityId = null;
+        private String? _currentEntityId = null;
 
         // action parameter prefixes
         private const String PfxDevice = "device:"; // device:<entity_id>
@@ -805,7 +805,10 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 if (this._level == ViewLevel.Device)
                 {
-                    this._lightSvc.CancelPending(this._currentEntityId);
+                    if (!String.IsNullOrEmpty(this._currentEntityId))
+                    {
+                        this._lightSvc.CancelPending(this._currentEntityId);
+                    }
                     this._inDeviceView = false;
                     this._currentEntityId = null;
                     this._level = ViewLevel.Area;
@@ -966,6 +969,8 @@ namespace Loupedeck.HomeAssistantPlugin
         public override Boolean Load()
         {
             PluginLog.Info("DynamicFolder.Load()");
+            PluginLog.Info($"Folder.Name = {this.Name}, CommandName = {CommandName}, AdjustmentName = {AdjustmentName}");
+
             HealthBus.HealthChanged += this.OnHealthChanged;
 
 
@@ -1287,7 +1292,7 @@ namespace Loupedeck.HomeAssistantPlugin
                                    ? fn.GetString() ?? entityId
                                    : entityId;
 
-                    String deviceId = null, deviceName = "", mf = "", model = "";
+                    String? deviceId = null, deviceName = "", mf = "", model = "";
                     // --- Capabilities (centralized) ---
                     var caps = this._capSvc.ForLight(attrs);
                     this._capsByEntity[entityId] = caps;
@@ -1308,7 +1313,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     }
 
                     // --- Area resolution (entity area wins; else device area; else Unassigned)  <-- NEW
-                    String areaId = null;
+                    String? areaId = null;
                     if (entityArea.TryGetValue(entityId, out var ea))
                     {
                         areaId = ea;
@@ -1625,60 +1630,44 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
-        private void OnHaXyColorChanged(String entityId, Double? x, Double? y, Int32? bri)
-        {
-            if (!entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
+        private void OnHaXyColorChanged(string entityId, double? x, double? y, int? bri)
+{
+    if (!entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
+        return;
 
-            if (!x.HasValue || !y.HasValue)
-            {
-                return;
-            }
+    // Bind to non-nullable locals or bail out
+    if (x is not double xv || y is not double yv)
+        return;
 
-            if (this.ShouldIgnoreFrame(entityId, "xy_color"))
-            {
-                return;
-            }
+    if (this.ShouldIgnoreFrame(entityId, "xy_color"))
+        return;
 
-            PluginLog.Verbose($"[OnHaXyColorChanged] eid={entityId} xy=[{x?.ToString("F4")},{y?.ToString("F4")}] bri={bri}");
+    PluginLog.Verbose($"[OnHaXyColorChanged] eid={entityId} xy=[{xv.ToString("F4")},{yv.ToString("F4")}] bri={bri}");
 
+    // Pick a luminance for XY->RGB: prefer event bri, else cached, else mid
+    var baseB = this._hsbByEntity.TryGetValue(entityId, out var old) ? old.B : 128;
+    var usedB = HSBHelper.Clamp(bri ?? baseB, 0, 255);
 
-            // Pick a luminance for XY->RGB: prefer event bri, else cached, else mid
-            var baseB = this._hsbByEntity.TryGetValue(entityId, out var old) ? old.B : 128;
-            var usedB = HSBHelper.Clamp(bri ?? baseB, 0, 255);
+    var (R, G, B) = ColorConv.XyBriToRgb(xv, yv, usedB);
+    var (h, s) = HSBHelper.RgbToHs(R, G, B);
+    h = HSBHelper.Wrap360(h);
+    s = HSBHelper.Clamp(s, 0, 100);
 
-            var (R, G, B) = ColorConv.XyBriToRgb(x.Value, y.Value, usedB);
-            var (h, s) = HSBHelper.RgbToHs(R, G, B);
-            h = HSBHelper.Wrap360(h);
-            s = HSBHelper.Clamp(s, 0, 100);
+    var cur = this._hsbByEntity.TryGetValue(entityId, out var curHsb) ? curHsb : (0, 100.0, 128);
+    var hsChanged  = Math.Abs(cur.H - h) >= HueEps || Math.Abs(cur.S - s) >= SatEps;
+    var briChanged = bri.HasValue && usedB != cur.B;
 
-            // Compare with old to avoid churn
-            var cur = this._hsbByEntity.TryGetValue(entityId, out var curHsb) ? curHsb : (0, 100.0, 128);
-            var hsChanged = Math.Abs(cur.H - h) >= HueEps || Math.Abs(cur.S - s) >= SatEps;
-            var briChanged = bri.HasValue && usedB != cur.B;
+    if (!hsChanged && !briChanged) return;
 
-            if (!hsChanged && !briChanged)
-            {
-                return;
-            }
+    this._hsbByEntity[entityId] = (h, s, briChanged ? usedB : cur.B);
 
-            this._hsbByEntity[entityId] = (h, s, briChanged ? usedB : cur.B);
+    if (this._inDeviceView && string.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
+    {
+        if (hsChanged) { this.AdjustmentValueChanged(AdjHue); this.AdjustmentValueChanged(AdjSat); }
+        if (briChanged) this.AdjustmentValueChanged(AdjBri);
+    }
+}
 
-            if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
-            {
-                if (hsChanged)
-                {
-                    this.AdjustmentValueChanged(AdjHue);
-                    this.AdjustmentValueChanged(AdjSat);
-                }
-                if (briChanged)
-                {
-                    this.AdjustmentValueChanged(AdjBri);
-                }
-            }
-        }
 
 
         private void MarkCommandSent(String entityId) => this._lastCmdAt[entityId] = DateTime.UtcNow;
@@ -1710,8 +1699,9 @@ namespace Loupedeck.HomeAssistantPlugin
 
         private void SetCachedTempMired(String entityId, Int32? minM, Int32? maxM, Int32 curMired)
         {
-            var min = minM ?? (this._tempMiredByEntity.TryGetValue(entityId, out var old) ? old.Min : DefaultMinMireds);
-            var max = maxM ?? (this._tempMiredByEntity.TryGetValue(entityId, out var old2) ? old2.Max : DefaultMaxMireds);
+            var existing = this._tempMiredByEntity.TryGetValue(entityId, out var temp) ? temp : (Min: DefaultMinMireds, Max: DefaultMaxMireds, Cur: DefaultWarmMired);
+            var min = minM ?? existing.Min;
+            var max = maxM ?? existing.Max;
             var cur = HSBHelper.Clamp(curMired, min, max);
             this._tempMiredByEntity[entityId] = (min, max, cur);
         }
