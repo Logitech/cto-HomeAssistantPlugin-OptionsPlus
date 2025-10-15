@@ -13,8 +13,8 @@ namespace Loupedeck.HomeAssistantPlugin
     {
         private const String LogPrefix = "[RunScript]";
 
-        private HaWebSocketClient _client;
-        private HaEventListener _events;
+        private HaWebSocketClient? _client;
+        private HaEventListener? _events;
 
         private const String ItemLoading = "!loading";
         private const String ItemNone = "!none";
@@ -134,13 +134,19 @@ namespace Loupedeck.HomeAssistantPlugin
             await _haConnectGate.WaitAsync().ConfigureAwait(false);
             try
             {
-                if (this._client.IsAuthenticated)
+                if (this._client?.IsAuthenticated == true)
                 {
                     PluginLog.Info($"{LogPrefix} EnsureHaReady: authenticated after gate");
                     return true;
                 }
 
                 PluginLog.Info($"{LogPrefix} Connecting to HA… url='{baseUrl}'");
+                if (this._client == null)
+                {
+                    PluginLog.Warning($"{LogPrefix} EnsureHaReady: Client is null");
+                    return false;
+                }
+
                 var (ok, msg) = await this._client.ConnectAndAuthenticateAsync(
                     baseUrl, token, TimeSpan.FromSeconds(8), CancellationToken.None
                 ).ConfigureAwait(false);
@@ -155,9 +161,16 @@ namespace Loupedeck.HomeAssistantPlugin
                 // Subscribe to events (script running updates, etc.)
                 try
                 {
-                    var subOk = await this._events.ConnectAndSubscribeAsync(baseUrl, token, CancellationToken.None)
-                                             .ConfigureAwait(false);
-                    PluginLog.Info($"{LogPrefix} Event subscription success={subOk}");
+                    if (this._events != null)
+                    {
+                        var subOk = await this._events.ConnectAndSubscribeAsync(baseUrl, token, CancellationToken.None)
+                                                 .ConfigureAwait(false);
+                        PluginLog.Info($"{LogPrefix} Event subscription success={subOk}");
+                    }
+                    else
+                    {
+                        PluginLog.Warning($"{LogPrefix} Event listener is null, skipping subscription");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -210,6 +223,12 @@ namespace Loupedeck.HomeAssistantPlugin
                 // Toggle path (no variables)
                 if (preferToggle)
                 {
+                    if (this._client == null)
+                    {
+                        PluginLog.Warning($"{LogPrefix} Client is null, cannot toggle script");
+                        return false;
+                    }
+                    
                     var (ok, err) = this._client.CallServiceAsync("script", "toggle", entityId, data: null, CancellationToken.None)
                                            .GetAwaiter().GetResult();
                     PluginLog.Info($"{LogPrefix} call_service script.toggle '{entityId}' -> ok={ok} err='{err}'");
@@ -222,6 +241,12 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 if (isRunning)
                 {
+                    if (this._client == null)
+                    {
+                        PluginLog.Warning($"{LogPrefix} Client is null, cannot turn off script");
+                        return false;
+                    }
+                    
                     var (ok, err) = this._client.CallServiceAsync("script", "turn_off", entityId, data: null, CancellationToken.None)
                                            .GetAwaiter().GetResult();
                     PluginLog.Info($"{LogPrefix} call_service script.turn_off '{entityId}' -> ok={ok} err='{err}'");
@@ -249,6 +274,12 @@ namespace Loupedeck.HomeAssistantPlugin
                     }
                 }
 
+                if (this._client == null)
+                {
+                    PluginLog.Warning($"{LogPrefix} Client is null, cannot turn on script");
+                    return false;
+                }
+                
                 var (ok2, err2) = this._client.CallServiceAsync("script", "turn_on", entityId, serviceData, CancellationToken.None)
                                          .GetAwaiter().GetResult();
                 PluginLog.Info($"{LogPrefix} call_service script.turn_on '{entityId}' data={SafeJson(serviceData)} -> ok={ok2} err='{err2}'");
@@ -362,6 +393,12 @@ namespace Loupedeck.HomeAssistantPlugin
                     return false;
                 }
 
+                if (this._client == null)
+                {
+                    PluginLog.Warning($"{LogPrefix} RefreshScriptsCacheAsync: Client is null");
+                    return false;
+                }
+                
                 var (ok, json, error) = await this._client.RequestAsync("get_states", ct).ConfigureAwait(false);
                 if (!ok || String.IsNullOrEmpty(json))
                 {

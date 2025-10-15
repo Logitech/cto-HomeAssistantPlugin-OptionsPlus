@@ -5,13 +5,27 @@ namespace Loupedeck.HomeAssistantPlugin
     // Must be public and at namespace scope for extension methods to work across files
     public static class JsonExt
     {
-        public static String GetPropertyOrDefault(this JsonElement el, String name)
+        public static String? GetPropertyOrDefault(this JsonElement el, String name)
         {
-            return el.ValueKind != JsonValueKind.Object
-                ? null
-                : !el.TryGetProperty(name, out var v)
-                ? null
-                : v.ValueKind == JsonValueKind.Null ? null : v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+            // Return null if the element is not an object
+            if (el.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            // Return null if the property doesn't exist
+            if (!el.TryGetProperty(name, out var property))
+            {
+                return null;
+            }
+
+            // Handle different JSON value types
+            return property.ValueKind switch
+            {
+                JsonValueKind.Null => null,
+                JsonValueKind.String => property.GetString(),
+                _ => null // Return null for non-string, non-null values (numbers, booleans, objects, arrays)
+            };
         }
     }
 }

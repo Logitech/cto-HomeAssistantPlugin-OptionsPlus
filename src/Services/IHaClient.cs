@@ -10,8 +10,8 @@ namespace Loupedeck.HomeAssistantPlugin
     {
         Boolean IsAuthenticated { get; }
         Task<(Boolean ok, String message)> ConnectAndAuthenticateAsync(String baseUrl, String token, TimeSpan timeout, CancellationToken ct);
-        Task<(Boolean ok, String resultJson, String errorMessage)> RequestAsync(String type, CancellationToken ct);
-        Task<(Boolean ok, String error)> CallServiceAsync(String domain, String service, String entityId, JsonElement? data, CancellationToken ct);
+        Task<(Boolean ok, String? resultJson, String? errorMessage)> RequestAsync(String type, CancellationToken ct);
+        Task<(Boolean ok, String? error)> CallServiceAsync(String domain, String service, String entityId, JsonElement? data, CancellationToken ct);
         Task<Boolean> EnsureConnectedAsync(TimeSpan timeout, CancellationToken ct);
         Task SafeCloseAsync();
     }
@@ -24,9 +24,9 @@ namespace Loupedeck.HomeAssistantPlugin
         public Boolean IsAuthenticated => this._inner.IsAuthenticated;
         public Task<(Boolean ok, String message)> ConnectAndAuthenticateAsync(String baseUrl, String token, TimeSpan timeout, CancellationToken ct)
             => this._inner.ConnectAndAuthenticateAsync(baseUrl, token, timeout, ct);
-        public Task<(Boolean ok, String resultJson, String errorMessage)> RequestAsync(String type, CancellationToken ct)
+        public Task<(Boolean ok, String? resultJson, String? errorMessage)> RequestAsync(String type, CancellationToken ct)
             => this._inner.RequestAsync(type, ct);
-        public Task<(Boolean ok, String error)> CallServiceAsync(String domain, String service, String entityId, JsonElement? data, CancellationToken ct)
+        public Task<(Boolean ok, String? error)> CallServiceAsync(String domain, String service, String entityId, JsonElement? data, CancellationToken ct)
             => this._inner.CallServiceAsync(domain, service, entityId, data, ct);
         public Task<Boolean> EnsureConnectedAsync(TimeSpan timeout, CancellationToken ct)
             => this._inner.EnsureConnectedAsync(timeout, ct);

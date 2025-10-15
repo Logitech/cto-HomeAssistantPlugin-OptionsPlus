@@ -11,7 +11,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private static HealthState _state = HealthState.Error;
         private static String _lastMessage = "Not authenticated";
 
-        public static event EventHandler HealthChanged;
+        public static event EventHandler? HealthChanged;
 
         public static HealthState State { get { lock (_gate) { return _state; } } }
         public static String LastMessage { get { lock (_gate) { return _lastMessage; } } }

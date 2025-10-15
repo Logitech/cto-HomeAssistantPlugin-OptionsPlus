@@ -1181,6 +1181,21 @@ namespace Loupedeck.HomeAssistantPlugin
                 }
 
                 // ---- Parse results ----
+                // Validate JSON strings before parsing to prevent null reference exceptions
+                if (String.IsNullOrEmpty(statesJson))
+                {
+                    PluginLog.Warning("get_states returned null or empty JSON");
+                    HealthBus.Error("get_states returned invalid data");
+                    return false;
+                }
+                
+                if (String.IsNullOrEmpty(servicesJson))
+                {
+                    PluginLog.Warning("get_services returned null or empty JSON");
+                    HealthBus.Error("get_services returned invalid data");
+                    return false;
+                }
+
                 // states: array of { entity_id, state, attributes{friendly_name,...}, ...}
                 using var statesDoc = JsonDocument.Parse(statesJson);
                 // services: object { domain: { service: { fields, target, response } } }
@@ -1188,16 +1203,16 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
                 JsonElement entArray = default, devArray = default, areaArray = default;
-                if (okEnt)
+                if (okEnt && !String.IsNullOrEmpty(entJson))
                 {
                     entArray = JsonDocument.Parse(entJson).RootElement;
                 }
 
-                if (okDev)
+                if (okDev && !String.IsNullOrEmpty(devJson))
                 {
                     devArray = JsonDocument.Parse(devJson).RootElement;
                 }
-                if (okArea)
+                if (okArea && !String.IsNullOrEmpty(areaJson))
                 {
                     areaArray = JsonDocument.Parse(areaJson).RootElement;
                 }

@@ -9,14 +9,14 @@ namespace Loupedeck.HomeAssistantPlugin
 
     public sealed class HaWebSocketClient : IDisposable
     {
-        private ClientWebSocket _ws;
+        private ClientWebSocket? _ws;
         private readonly Object _gate = new();
         private Int32 _nextId = 1;
         public Boolean IsAuthenticated { get; private set; }
-        public Uri EndpointUri { get; private set; }
+        public Uri? EndpointUri { get; private set; }
 
-        private String _lastBaseUrl;
-        private String _lastAccessToken;
+        private String? _lastBaseUrl;
+        private String? _lastAccessToken;
 
 
         public async Task<(Boolean ok, String message)> ConnectAndAuthenticateAsync(
@@ -142,7 +142,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
 
-        public async Task<(Boolean ok, String resultJson, String errorMessage)> RequestAsync(
+        public async Task<(Boolean ok, String? resultJson, String? errorMessage)> RequestAsync(
         String type, CancellationToken ct)
         {
             if (!this.IsAuthenticated)
@@ -194,7 +194,7 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
-        public async Task<(Boolean ok, String error)> CallServiceAsync(
+        public async Task<(Boolean ok, String? error)> CallServiceAsync(
     String domain, String service, String entityId, JsonElement? data, CancellationToken ct)
         {
             try
@@ -310,6 +310,11 @@ namespace Loupedeck.HomeAssistantPlugin
 
         private async Task<String> ReceiveTextAsync(CancellationToken ct)
         {
+            if (this._ws == null)
+            {
+                throw new InvalidOperationException("WebSocket is not initialized");
+            }
+
             var buffer = new ArraySegment<Byte>(new Byte[8192]);
             var sb = new StringBuilder();
             WebSocketReceiveResult result;
@@ -321,24 +326,32 @@ namespace Loupedeck.HomeAssistantPlugin
                     throw new WebSocketException("Server closed connection");
                 }
 
-                sb.Append(Encoding.UTF8.GetString(buffer.Array, 0, result.Count));
+                if (buffer.Array != null)
+                {
+                    sb.Append(Encoding.UTF8.GetString(buffer.Array, buffer.Offset, result.Count));
+                }
             } while (!result.EndOfMessage);
             return sb.ToString();
         }
 
         private Task SendTextAsync(String text, CancellationToken ct)
         {
+            if (this._ws == null)
+            {
+                throw new InvalidOperationException("WebSocket is not initialized");
+            }
+
             var bytes = Encoding.UTF8.GetBytes(text);
             return this._ws.SendAsync(new ArraySegment<Byte>(bytes), WebSocketMessageType.Text, true, ct);
         }
 
-        private static String ReadType(String json)
+        private static String? ReadType(String json)
         {
             using var doc = JsonDocument.Parse(json);
             return doc.RootElement.TryGetProperty("type", out var t) ? t.GetString() : null;
         }
 
-        private static String ReadField(String json, String name)
+        private static String? ReadField(String json, String name)
         {
             using var doc = JsonDocument.Parse(json);
             return doc.RootElement.TryGetProperty(name, out var v) ? v.GetString() : null;
