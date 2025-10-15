@@ -2,6 +2,7 @@ namespace Loupedeck.HomeAssistantPlugin
 {
     using System;
     using System.Threading;
+    using System.Threading.Tasks;
 
     using Loupedeck;
 
@@ -104,14 +105,20 @@ namespace Loupedeck.HomeAssistantPlugin
                         return;
                     }
 
-                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
-                    var client = new HaWebSocketClient();
-                    var (ok, msg) = client.ConnectAndAuthenticateAsync(baseUrl, token, TimeSpan.FromSeconds(8), cts.Token)
-                                          .GetAwaiter().GetResult();
-                    _ = client.SafeCloseAsync();
+                    // Immediate feedback
+                    this.Plugin.OnPluginStatusChanged(PluginStatus.Warning, "Testing connection...");
 
-                    this.Plugin.OnPluginStatusChanged(ok ? PluginStatus.Normal : PluginStatus.Error,
-                        ok ? "HA auth OK." : msg ?? "Auth failed.");
+                    Task.Run(async () =>
+                    {
+                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+                        var client = new HaWebSocketClient();
+                        var (ok, msg) = await client.ConnectAndAuthenticateAsync(baseUrl, token, TimeSpan.FromSeconds(8), cts.Token);
+                        await client.SafeCloseAsync();
+                        
+                        // Update UI on completion
+                        this.Plugin.OnPluginStatusChanged(ok ? PluginStatus.Normal : PluginStatus.Error,
+                            ok ? "HA auth OK." : msg ?? "Auth failed.");
+                    });
                 }
             }
             catch (Exception ex)
