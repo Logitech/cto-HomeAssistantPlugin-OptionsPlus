@@ -41,7 +41,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
         private readonly HaWebSocketClient _client = new();
 
-        private CancellationTokenSource _cts;
+        private CancellationTokenSource _cts = new();
 
         private readonly Dictionary<String, LightItem> _lightsByEntity = new();
 
@@ -130,7 +130,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private const Int32 MaxPctPerEvent = 10;  // cap huge coalesced diffs to keep UI sane
 
         private readonly HaEventListener _events = new();
-        private CancellationTokenSource _eventsCts;
+        private CancellationTokenSource _eventsCts = new();
 
 
 
@@ -398,7 +398,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 return TilePainter.IconOrGlyph(bb, this._icons.Get(IconId.Hue), "H", padPct: 8, font: 56);
             }
 
-            return null;
+            return base.GetAdjustmentImage(actionParameter, imageSize);
         }
 
 
@@ -723,7 +723,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 return this._areaIdToName.TryGetValue(areaId, out var name) ? name : areaId;
             }
 
-            return actionParameter.StartsWith(PfxActOff, StringComparison.OrdinalIgnoreCase) ? "Off" : null;
+            return actionParameter.StartsWith(PfxActOff, StringComparison.OrdinalIgnoreCase) ? "Off" : actionParameter;
         }
 
         private Int32 GetEffectiveBrightnessForDisplay(String entityId)
@@ -733,7 +733,6 @@ namespace Loupedeck.HomeAssistantPlugin
                 ? 0
                 : this._hsbByEntity.TryGetValue(entityId, out var hsb) ? hsb.B : 0;
         }
-
 
         // Paint the tile: green when OK, red on error
         public override BitmapImage GetCommandImage(String actionParameter, PluginImageSize imageSize)
@@ -787,8 +786,8 @@ namespace Loupedeck.HomeAssistantPlugin
                 return this._icons.Get(IconId.BulbOff);
             }
 
-            // Retry: no custom image
-            return null;
+            // Fallback for any unhandled cases - return a default icon
+            return this._icons.Get(IconId.Bulb);
         }
 
 
@@ -1012,7 +1011,7 @@ namespace Loupedeck.HomeAssistantPlugin
             return true;
         }
 
-        private void OnHealthChanged(Object sender, EventArgs e)
+        private void OnHealthChanged(Object? sender, EventArgs e)
         {
             try
             {
@@ -1036,7 +1035,7 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 PluginLog.Warning("Missing ha.baseUrl setting");
                 HealthBus.Error("Missing Base URL");
-                this.Plugin.OnPluginStatusChanged(PluginStatus.Error, "Set Home Assistant Base URL in plugin settings.", null);
+                this.Plugin.OnPluginStatusChanged(PluginStatus.Error, "Set Home Assistant Base URL in plugin settings.");
                 return false;
             }
 
@@ -1045,7 +1044,7 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 PluginLog.Warning("Missing ha.token setting");
                 HealthBus.Error("Missing Token");
-                this.Plugin.OnPluginStatusChanged(PluginStatus.Error, "Set Home Assistant Long-Lived Token in plugin settings.", null);
+                this.Plugin.OnPluginStatusChanged(PluginStatus.Error, "Set Home Assistant Long-Lived Token in plugin settings.");
                 return false;
             }
 
@@ -1058,7 +1057,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 if (ok)
                 {
                     HealthBus.Ok("Auth OK");
-                    this.Plugin.OnPluginStatusChanged(PluginStatus.Normal, "Connected to Home Assistant.", null);
+                    this.Plugin.OnPluginStatusChanged(PluginStatus.Normal, "Connected to Home Assistant.");
 
 
 
@@ -1114,14 +1113,14 @@ namespace Loupedeck.HomeAssistantPlugin
                 }
 
                 HealthBus.Error(msg ?? "Auth failed");
-                this.Plugin.OnPluginStatusChanged(PluginStatus.Error, msg, null);
+                this.Plugin.OnPluginStatusChanged(PluginStatus.Error, msg);
                 return false;
             }
             catch (Exception ex)
             {
                 PluginLog.Error(ex, "AuthenticateSync failed");
                 HealthBus.Error("Auth error");
-                this.Plugin.OnPluginStatusChanged(PluginStatus.Error, "Auth error. See plugin logs.", null);
+                this.Plugin.OnPluginStatusChanged(PluginStatus.Error, "Auth error. See plugin logs.");
                 return false;
             }
         }
@@ -1630,19 +1629,25 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
-        private void OnHaXyColorChanged(string entityId, double? x, double? y, int? bri)
+        private void OnHaXyColorChanged(String entityId, Double? x, Double? y, Int32? bri)
 {
     if (!entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
-        return;
+            {
+                return;
+            }
 
-    // Bind to non-nullable locals or bail out
-    if (x is not double xv || y is not double yv)
-        return;
+            // Bind to non-nullable locals or bail out
+            if (x is not Double xv || y is not Double yv)
+            {
+                return;
+            }
 
-    if (this.ShouldIgnoreFrame(entityId, "xy_color"))
-        return;
+            if (this.ShouldIgnoreFrame(entityId, "xy_color"))
+            {
+                return;
+            }
 
-    PluginLog.Verbose($"[OnHaXyColorChanged] eid={entityId} xy=[{xv.ToString("F4")},{yv.ToString("F4")}] bri={bri}");
+            PluginLog.Verbose($"[OnHaXyColorChanged] eid={entityId} xy=[{xv.ToString("F4")},{yv.ToString("F4")}] bri={bri}");
 
     // Pick a luminance for XY->RGB: prefer event bri, else cached, else mid
     var baseB = this._hsbByEntity.TryGetValue(entityId, out var old) ? old.B : 128;
@@ -1657,22 +1662,28 @@ namespace Loupedeck.HomeAssistantPlugin
     var hsChanged  = Math.Abs(cur.H - h) >= HueEps || Math.Abs(cur.S - s) >= SatEps;
     var briChanged = bri.HasValue && usedB != cur.B;
 
-    if (!hsChanged && !briChanged) return;
+    if (!hsChanged && !briChanged)
+            {
+                return;
+            }
 
-    this._hsbByEntity[entityId] = (h, s, briChanged ? usedB : cur.B);
+            this._hsbByEntity[entityId] = (h, s, briChanged ? usedB : cur.B);
 
-    if (this._inDeviceView && string.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
+    if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
     {
         if (hsChanged) { this.AdjustmentValueChanged(AdjHue); this.AdjustmentValueChanged(AdjSat); }
-        if (briChanged) this.AdjustmentValueChanged(AdjBri);
-    }
+        if (briChanged)
+                {
+                    this.AdjustmentValueChanged(AdjBri);
+                }
+            }
 }
 
 
 
         private void MarkCommandSent(String entityId) => this._lastCmdAt[entityId] = DateTime.UtcNow;
 
-        private Boolean ShouldIgnoreFrame(String entityId, String reasonForLog = null)
+        private Boolean ShouldIgnoreFrame(String entityId, String? reasonForLog = null)
         {
             if (this._lastCmdAt.TryGetValue(entityId, out var t))
             {

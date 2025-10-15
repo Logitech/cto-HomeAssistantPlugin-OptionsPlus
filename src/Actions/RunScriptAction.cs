@@ -265,7 +265,7 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
-        private void OnListboxItemsRequested(Object sender, ActionEditorListboxItemsRequestedEventArgs e)
+        private void OnListboxItemsRequested(Object? sender, ActionEditorListboxItemsRequestedEventArgs e)
         {
             if (!e.ControlName.EqualsNoCase(ControlScript))
             {
@@ -323,7 +323,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
 
-        private void OnActionEditorControlValueChanged(Object _, ActionEditorControlValueChangedEventArgs ce)
+        private void OnActionEditorControlValueChanged(Object? _, ActionEditorControlValueChangedEventArgs ce)
         {
             if (!ce.ControlName.EqualsNoCase(ControlScript))
             {

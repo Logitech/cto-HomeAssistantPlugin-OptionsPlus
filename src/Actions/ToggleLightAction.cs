@@ -134,7 +134,7 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
-        private void OnListboxItemsRequested(Object sender, ActionEditorListboxItemsRequestedEventArgs e)
+        private void OnListboxItemsRequested(Object? sender, ActionEditorListboxItemsRequestedEventArgs e)
         {
             if (!e.ControlName.EqualsNoCase(ControlLight))
             {

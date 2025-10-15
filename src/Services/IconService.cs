@@ -33,8 +33,28 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
-        public BitmapImage? Get(String id)
-            => this._cache.TryGetValue(id, out var img) ? img : null;
+        public BitmapImage Get(String id)
+        {
+            if (this._cache.TryGetValue(id, out var img) && img != null)
+            {
+                return img;
+            }
+            
+            // Return fallback icon when requested icon is not found
+            return CreateFallbackIcon();
+        }
+
+        /// <summary>
+        /// Creates a simple fallback icon when requested icons are not found.
+        /// </summary>
+        private static BitmapImage CreateFallbackIcon()
+        {
+            // Use a standard 80x80 size for fallback icons
+            using var bb = new BitmapBuilder(80, 80);
+            bb.Clear(new BitmapColor(64, 64, 64)); // Dark gray background
+            bb.DrawText("?", fontSize: 32, color: new BitmapColor(255, 255, 255)); // White question mark
+            return bb.ToImage();
+        }
     }
 
     /// <summary>String constants for icons (keeps callsites typo-safe).</summary>

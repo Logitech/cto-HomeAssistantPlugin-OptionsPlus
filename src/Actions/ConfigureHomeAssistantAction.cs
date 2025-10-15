@@ -40,7 +40,7 @@ namespace Loupedeck.HomeAssistantPlugin
         // This action is just a config surface, not something to "run"
         protected override Boolean RunCommand(ActionEditorActionParameters _) => true;
 
-        private void OnActionEditorStarted(Object sender, ActionEditorStartedEventArgs e)
+        private void OnActionEditorStarted(Object? sender, ActionEditorStartedEventArgs e)
         {
             // Reflect current config in the editor header
             if (this.Plugin.TryGetPluginSetting(HomeAssistantPlugin.SettingBaseUrl, out var baseUrl) &&
@@ -62,7 +62,7 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
-        private void OnControlValueChanged(Object sender, ActionEditorControlValueChangedEventArgs e)
+        private void OnControlValueChanged(Object? sender, ActionEditorControlValueChangedEventArgs e)
         {
             try
             {
