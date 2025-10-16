@@ -3,8 +3,8 @@ namespace Loupedeck.HomeAssistantPlugin
 {
     using System;
     using System.Collections.Generic;
-    using System.Text.Json;
     using System.Linq;
+    using System.Text.Json;
 
     /// <summary>
     /// Capability model for HA lights.
@@ -16,12 +16,12 @@ namespace Loupedeck.HomeAssistantPlugin
     public readonly record struct LightCaps(Boolean OnOff, Boolean Brightness, Boolean ColorTemp, Boolean ColorHs)
     {
         const String HS = "hs", RGB = "rgb", XY = "xy", RGBW = "rgbw", RGBWW = "rgbww", CT = "color_temp", BR = "brightness", ONOFF = "onoff", WHITE = "white";
-        
+
         public static LightCaps FromAttributes(JsonElement attrs)
         {
             var startTime = DateTime.UtcNow;
             PluginLog.Verbose("[LightCaps] FromAttributes() called - parsing light capabilities from JSON attributes");
-            
+
             Boolean onoff = false, bri = false, ctemp = false, color = false;
 
             try
@@ -31,7 +31,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     scm.ValueKind == JsonValueKind.Array)
                 {
                     PluginLog.Verbose("[LightCaps] Found supported_color_modes array in attributes");
-                    
+
                     var modes = new HashSet<String>(StringComparer.OrdinalIgnoreCase);
                     foreach (var m in scm.EnumerateArray())
                     {
@@ -51,18 +51,18 @@ namespace Loupedeck.HomeAssistantPlugin
 
                     // Brightness is implied by many color modes in HA; be liberal:
                     bri = modes.Contains(BR) || modes.Contains(WHITE) || color || ctemp;
-                    
+
                     PluginLog.Verbose($"[LightCaps] Capabilities from color modes - OnOff: {onoff}, Brightness: {bri}, ColorTemp: {ctemp}, Color: {color}");
                 }
                 else
                 {
                     PluginLog.Verbose("[LightCaps] No supported_color_modes found - using heuristic fallback detection");
-                    
+
                     // Heuristic fallback when supported_color_modes is missing
                     if (attrs.ValueKind == JsonValueKind.Object)
                     {
                         bri = attrs.TryGetProperty("brightness", out _);
-                        
+
                         ctemp = attrs.TryGetProperty("min_mireds", out _) ||
                                 attrs.TryGetProperty("max_mireds", out _) ||
                                 attrs.TryGetProperty("color_temp", out _) ||
@@ -73,13 +73,28 @@ namespace Loupedeck.HomeAssistantPlugin
                                 attrs.TryGetProperty("xy_color", out _);
 
                         onoff = !bri && !ctemp && !color; // if no other signal, consider on/off only
-                        
+
                         var detectedProps = new List<String>();
-                        if (bri) detectedProps.Add("brightness");
-                        if (ctemp) detectedProps.Add("color_temp");
-                        if (color) detectedProps.Add("color");
-                        if (onoff) detectedProps.Add("onoff");
-                        
+                        if (bri)
+                        {
+                            detectedProps.Add("brightness");
+                        }
+
+                        if (ctemp)
+                        {
+                            detectedProps.Add("color_temp");
+                        }
+
+                        if (color)
+                        {
+                            detectedProps.Add("color");
+                        }
+
+                        if (onoff)
+                        {
+                            detectedProps.Add("onoff");
+                        }
+
                         PluginLog.Info($"[LightCaps] Heuristic detection found properties: [{String.Join(", ", detectedProps)}]");
                         PluginLog.Verbose($"[LightCaps] Capabilities from heuristic - OnOff: {onoff}, Brightness: {bri}, ColorTemp: {ctemp}, Color: {color}");
                     }
@@ -91,7 +106,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 var result = new LightCaps(onoff, bri, ctemp, color);
                 var elapsed = (DateTime.UtcNow - startTime).TotalMilliseconds;
-                
+
                 PluginLog.Info($"[LightCaps] Capability analysis completed in {elapsed:F1}ms - Result: {result}");
                 return result;
             }
@@ -99,7 +114,7 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 var elapsed = (DateTime.UtcNow - startTime).TotalMilliseconds;
                 PluginLog.Error($"[LightCaps] Exception during capability parsing after {elapsed:F1}ms: {ex.Message}");
-                
+
                 // Return safe defaults on error
                 var fallback = new LightCaps(true, false, false, false);
                 PluginLog.Warning($"[LightCaps] Returning fallback capabilities: {fallback}");

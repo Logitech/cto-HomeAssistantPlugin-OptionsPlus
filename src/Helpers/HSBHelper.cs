@@ -87,7 +87,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 if (Math.Abs(hDeg - H) > 0.01 || Math.Abs(sPct - S * 100) > 0.01 || Math.Abs(bPct - V * 100) > 0.01)
                 {
-                    PluginLog.Verbose($"[HSBHelper] Input normalized: H:{hDeg:F1}->{H:F1}, S:{sPct:F1}->{S*100:F1}, B:{bPct:F1}->{V*100:F1}");
+                    PluginLog.Verbose($"[HSBHelper] Input normalized: H:{hDeg:F1}->{H:F1}, S:{sPct:F1}->{S * 100:F1}, B:{bPct:F1}->{V * 100:F1}");
                 }
 
                 var C = V * S; // Chroma

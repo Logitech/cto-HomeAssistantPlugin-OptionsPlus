@@ -9,21 +9,18 @@ namespace Loupedeck.HomeAssistantPlugin
     /// </summary>
     internal sealed class CapabilityService
     {
-        public CapabilityService()
-        {
-            PluginLog.Info("[CapabilityService] Service initialized - ready to analyze device capabilities");
-        }
+        public CapabilityService() => PluginLog.Info("[CapabilityService] Service initialized - ready to analyze device capabilities");
 
         public LightCaps ForLight(JsonElement attributes)
         {
             var startTime = DateTime.UtcNow;
             PluginLog.Verbose("[CapabilityService] ForLight() called - analyzing light device capabilities");
-            
+
             try
             {
                 var result = LightCaps.FromAttributes(attributes);
                 var elapsed = (DateTime.UtcNow - startTime).TotalMilliseconds;
-                
+
                 PluginLog.Info($"[CapabilityService] Light capability analysis completed in {elapsed:F1}ms - Result: {result}");
                 return result;
             }
@@ -31,7 +28,7 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 var elapsed = (DateTime.UtcNow - startTime).TotalMilliseconds;
                 PluginLog.Error($"[CapabilityService] Exception during light capability analysis after {elapsed:F1}ms: {ex.Message}");
-                
+
                 // Return safe defaults on error
                 var fallback = new LightCaps(true, false, false, false);
                 PluginLog.Warning($"[CapabilityService] Returning fallback light capabilities: {fallback}");

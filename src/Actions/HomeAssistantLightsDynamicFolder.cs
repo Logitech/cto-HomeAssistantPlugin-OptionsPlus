@@ -968,7 +968,7 @@ namespace Loupedeck.HomeAssistantPlugin
         public override Boolean Load()
         {
             PluginLog.Info("DynamicFolder.Load()");
-            PluginLog.Info($"Folder.Name = {this.Name}, CommandName = {CommandName}, AdjustmentName = {AdjustmentName}");
+            PluginLog.Info($"Folder.Name = {this.Name}, CommandName = {this.CommandName}, AdjustmentName = {this.AdjustmentName}");
 
             HealthBus.HealthChanged += this.OnHealthChanged;
 
@@ -1188,7 +1188,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     HealthBus.Error("get_states returned invalid data");
                     return false;
                 }
-                
+
                 if (String.IsNullOrEmpty(servicesJson))
                 {
                     PluginLog.Warning("get_services returned null or empty JSON");
@@ -1645,8 +1645,8 @@ namespace Loupedeck.HomeAssistantPlugin
         }
 
         private void OnHaXyColorChanged(String entityId, Double? x, Double? y, Int32? bri)
-{
-    if (!entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
@@ -1664,35 +1664,36 @@ namespace Loupedeck.HomeAssistantPlugin
 
             PluginLog.Verbose($"[OnHaXyColorChanged] eid={entityId} xy=[{xv.ToString("F4")},{yv.ToString("F4")}] bri={bri}");
 
-    // Pick a luminance for XY->RGB: prefer event bri, else cached, else mid
-    var baseB = this._hsbByEntity.TryGetValue(entityId, out var old) ? old.B : 128;
-    var usedB = HSBHelper.Clamp(bri ?? baseB, 0, 255);
+            // Pick a luminance for XY->RGB: prefer event bri, else cached, else mid
+            var baseB = this._hsbByEntity.TryGetValue(entityId, out var old) ? old.B : 128;
+            var usedB = HSBHelper.Clamp(bri ?? baseB, 0, 255);
 
-    var (R, G, B) = ColorConv.XyBriToRgb(xv, yv, usedB);
-    var (h, s) = HSBHelper.RgbToHs(R, G, B);
-    h = HSBHelper.Wrap360(h);
-    s = HSBHelper.Clamp(s, 0, 100);
+            var (R, G, B) = ColorConv.XyBriToRgb(xv, yv, usedB);
+            var (h, s) = HSBHelper.RgbToHs(R, G, B);
+            h = HSBHelper.Wrap360(h);
+            s = HSBHelper.Clamp(s, 0, 100);
 
-    var cur = this._hsbByEntity.TryGetValue(entityId, out var curHsb) ? curHsb : (0, 100.0, 128);
-    var hsChanged  = Math.Abs(cur.H - h) >= HueEps || Math.Abs(cur.S - s) >= SatEps;
-    var briChanged = bri.HasValue && usedB != cur.B;
+            var cur = this._hsbByEntity.TryGetValue(entityId, out var curHsb) ? curHsb : (0, 100.0, 128);
+            var hsChanged = Math.Abs(cur.H - h) >= HueEps || Math.Abs(cur.S - s) >= SatEps;
+            var briChanged = bri.HasValue && usedB != cur.B;
 
-    if (!hsChanged && !briChanged)
+            if (!hsChanged && !briChanged)
             {
                 return;
             }
 
             this._hsbByEntity[entityId] = (h, s, briChanged ? usedB : cur.B);
 
-    if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
-    {
-        if (hsChanged) { this.AdjustmentValueChanged(AdjHue); this.AdjustmentValueChanged(AdjSat); }
-        if (briChanged)
+            if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
+            {
+                if (hsChanged)
+                { this.AdjustmentValueChanged(AdjHue); this.AdjustmentValueChanged(AdjSat); }
+                if (briChanged)
                 {
                     this.AdjustmentValueChanged(AdjBri);
                 }
             }
-}
+        }
 
 
 

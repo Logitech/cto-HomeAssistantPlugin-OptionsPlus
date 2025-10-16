@@ -25,7 +25,7 @@ namespace Loupedeck.HomeAssistantPlugin
             lock (this._gate)
             {
                 var isNewEntry = !this._map.TryGetValue(key, out var entry);
-                
+
                 if (isNewEntry)
                 {
                     PluginLog.Verbose($"[DebouncedSender] Set NEW - key: {key}, value: {value}, delay: {this._delayMs}ms");
@@ -96,7 +96,7 @@ namespace Loupedeck.HomeAssistantPlugin
         public void Dispose()
         {
             PluginLog.Verbose($"[DebouncedSender] Dispose - Cleaning up {this._map.Count} pending entries");
-            
+
             lock (this._gate)
             {
                 try
@@ -108,7 +108,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
                     var count = this._map.Count;
                     this._map.Clear();
-                    
+
                     PluginLog.Verbose($"[DebouncedSender] Dispose completed - Disposed {count} entries");
                 }
                 catch (Exception ex)

@@ -228,7 +228,7 @@ namespace Loupedeck.HomeAssistantPlugin
                         PluginLog.Warning($"{LogPrefix} Client is null, cannot toggle script");
                         return false;
                     }
-                    
+
                     var (ok, err) = this._client.CallServiceAsync("script", "toggle", entityId, data: null, CancellationToken.None)
                                            .GetAwaiter().GetResult();
                     PluginLog.Info($"{LogPrefix} call_service script.toggle '{entityId}' -> ok={ok} err='{err}'");
@@ -246,7 +246,7 @@ namespace Loupedeck.HomeAssistantPlugin
                         PluginLog.Warning($"{LogPrefix} Client is null, cannot turn off script");
                         return false;
                     }
-                    
+
                     var (ok, err) = this._client.CallServiceAsync("script", "turn_off", entityId, data: null, CancellationToken.None)
                                            .GetAwaiter().GetResult();
                     PluginLog.Info($"{LogPrefix} call_service script.turn_off '{entityId}' -> ok={ok} err='{err}'");
@@ -279,7 +279,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     PluginLog.Warning($"{LogPrefix} Client is null, cannot turn on script");
                     return false;
                 }
-                
+
                 var (ok2, err2) = this._client.CallServiceAsync("script", "turn_on", entityId, serviceData, CancellationToken.None)
                                          .GetAwaiter().GetResult();
                 PluginLog.Info($"{LogPrefix} call_service script.turn_on '{entityId}' data={SafeJson(serviceData)} -> ok={ok2} err='{err2}'");
@@ -398,7 +398,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     PluginLog.Warning($"{LogPrefix} RefreshScriptsCacheAsync: Client is null");
                     return false;
                 }
-                
+
                 var (ok, json, error) = await this._client.RequestAsync("get_states", ct).ConfigureAwait(false);
                 if (!ok || String.IsNullOrEmpty(json))
                 {

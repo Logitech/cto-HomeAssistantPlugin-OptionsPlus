@@ -60,7 +60,7 @@ namespace Loupedeck.HomeAssistantPlugin
             Boolean changed;
             HealthState previousState;
             String previousMessage;
-            
+
             lock (_gate)
             {
                 previousState = _state;
@@ -69,7 +69,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 _state = state;
                 _lastMessage = message;
             }
-            
+
             if (changed)
             {
                 PluginLog.Info($"[HealthBus] Health state changed: {previousState}->'{previousMessage}' => {state}->'{message}'");
@@ -88,9 +88,9 @@ namespace Loupedeck.HomeAssistantPlugin
                 var handler = Volatile.Read(ref HealthChanged);
                 var subscriberCount = handler?.GetInvocationList()?.Length ?? 0;
                 PluginLog.Verbose($"[HealthBus] Raising HealthChanged event to {subscriberCount} subscribers");
-                
+
                 handler?.Invoke(null, EventArgs.Empty);
-                
+
                 PluginLog.Verbose($"[HealthBus] HealthChanged event raised successfully");
             }
             catch (Exception ex)
