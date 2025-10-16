@@ -9,10 +9,43 @@ namespace Loupedeck.HomeAssistantPlugin
 
     public sealed class HaEventListener : IDisposable
     {
+        // ====================================================================
+        // CONSTANTS - Home Assistant Event Listener Configuration
+        // ====================================================================
+
+        // --- Message ID Constants ---
+        private const Int32 InitialMessageId = 1;                     // Initial message ID for WebSocket communication
+
+        // --- Color Value Constants ---
+        private const Double KelvinMiredConversionFactor = 1_000_000.0; // Conversion factor: Kelvin × Mired = 1,000,000
+        private const Int32 MinSafeTemperatureValue = 1;               // Minimum safe temperature value to prevent division by zero
+
+        // --- Brightness Constants ---
+        private const Int32 MinBrightnessValue = 0;                    // Minimum brightness value (off)
+        private const Int32 MaxBrightnessValue = 255;                  // Maximum brightness value (full brightness)
+        private const Int32 BrightnessOffValue = 0;                    // Brightness value when light is off
+
+        // --- Color Array Length Constants ---
+        private const Int32 HsColorArrayMinLength = 2;                 // Minimum length for HS color arrays [hue, saturation]
+        private const Int32 RgbColorArrayMinLength = 3;                // Minimum length for RGB color arrays [red, green, blue]
+        private const Int32 XyColorArrayMinLength = 2;                 // Minimum length for XY color arrays [x, y]
+
+        // --- Color Component Array Indices ---
+        private const Int32 HueArrayIndex = 0;                         // Array index for hue component in HS color
+        private const Int32 SaturationArrayIndex = 1;                  // Array index for saturation component in HS color
+        private const Int32 RedArrayIndex = 0;                         // Array index for red component in RGB color
+        private const Int32 GreenArrayIndex = 1;                       // Array index for green component in RGB color
+        private const Int32 BlueArrayIndex = 2;                        // Array index for blue component in RGB color
+        private const Int32 XCoordinateIndex = 0;                      // Array index for X coordinate in XY color
+        private const Int32 YCoordinateIndex = 1;                      // Array index for Y coordinate in XY color
+
+        // --- Buffer Constants ---
+        private const Int32 WebSocketBufferSize = 8192;                // Buffer size for WebSocket receive operations
+
         private ClientWebSocket? _ws;
         private CancellationTokenSource? _cts;
         private Task? _loop;
-        private Int32 _nextId = 1;
+        private Int32 _nextId = InitialMessageId;
 
         public event Action<String, Int32?>? BrightnessChanged; // (entityId, brightness 0..255 or null)
         public event Action<String, Int32?, Int32?, Int32?, Int32?>? ColorTempChanged;
@@ -122,7 +155,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private async Task ReceiveLoopAsync(CancellationToken ct)
         {
             // Local helper to compute Kelvin when HA only gives mireds
-            static Int32 MiredToKelvinSafe(Int32 m) => (Int32)Math.Round(1_000_000.0 / Math.Max(1, m));
+            static Int32 MiredToKelvinSafe(Int32 m) => (Int32)Math.Round(KelvinMiredConversionFactor / Math.Max(MinSafeTemperatureValue, m));
 
             try
             {
@@ -191,7 +224,7 @@ namespace Loupedeck.HomeAssistantPlugin
                             // Brightness 0..255
                             if (attrs.TryGetProperty("brightness", out var br) && br.ValueKind == JsonValueKind.Number)
                             {
-                                bri = HSBHelper.Clamp(br.GetInt32(), 0, 255);
+                                bri = HSBHelper.Clamp(br.GetInt32(), MinBrightnessValue, MaxBrightnessValue);
                             }
 
                             // Color temperature (mireds + (optional) kelvin, plus bounds)
@@ -214,39 +247,39 @@ namespace Loupedeck.HomeAssistantPlugin
 
                             // HS color (Hue/Saturation)
                             if (attrs.TryGetProperty("hs_color", out var hs) &&
-                                hs.ValueKind == JsonValueKind.Array && hs.GetArrayLength() >= 2)
+                                hs.ValueKind == JsonValueKind.Array && hs.GetArrayLength() >= HsColorArrayMinLength)
                             {
-                                if (hs[0].ValueKind == JsonValueKind.Number)
+                                if (hs[HueArrayIndex].ValueKind == JsonValueKind.Number)
                                 {
-                                    hue = hs[0].GetDouble(); // 0..360
+                                    hue = hs[HueArrayIndex].GetDouble(); // 0..360
                                 }
 
-                                if (hs[1].ValueKind == JsonValueKind.Number)
+                                if (hs[SaturationArrayIndex].ValueKind == JsonValueKind.Number)
                                 {
-                                    sat = hs[1].GetDouble(); // 0..100
+                                    sat = hs[SaturationArrayIndex].GetDouble(); // 0..100
                                 }
                             }
 
                             // NEW: RGB color
                             if (attrs.TryGetProperty("rgb_color", out var rgb) &&
-                                rgb.ValueKind == JsonValueKind.Array && rgb.GetArrayLength() >= 3 &&
-                                rgb[0].ValueKind == JsonValueKind.Number &&
-                                rgb[1].ValueKind == JsonValueKind.Number &&
-                                rgb[2].ValueKind == JsonValueKind.Number)
+                                rgb.ValueKind == JsonValueKind.Array && rgb.GetArrayLength() >= RgbColorArrayMinLength &&
+                                rgb[RedArrayIndex].ValueKind == JsonValueKind.Number &&
+                                rgb[GreenArrayIndex].ValueKind == JsonValueKind.Number &&
+                                rgb[BlueArrayIndex].ValueKind == JsonValueKind.Number)
                             {
-                                rgbR = rgb[0].GetInt32();
-                                rgbG = rgb[1].GetInt32();
-                                rgbB = rgb[2].GetInt32();
+                                rgbR = rgb[RedArrayIndex].GetInt32();
+                                rgbG = rgb[GreenArrayIndex].GetInt32();
+                                rgbB = rgb[BlueArrayIndex].GetInt32();
                             }
 
                             // NEW: XY color
                             if (attrs.TryGetProperty("xy_color", out var xy) &&
-                                xy.ValueKind == JsonValueKind.Array && xy.GetArrayLength() >= 2 &&
-                                xy[0].ValueKind == JsonValueKind.Number &&
-                                xy[1].ValueKind == JsonValueKind.Number)
+                                xy.ValueKind == JsonValueKind.Array && xy.GetArrayLength() >= XyColorArrayMinLength &&
+                                xy[XCoordinateIndex].ValueKind == JsonValueKind.Number &&
+                                xy[YCoordinateIndex].ValueKind == JsonValueKind.Number)
                             {
-                                xyX = xy[0].GetDouble();
-                                xyY = xy[1].GetDouble();
+                                xyX = xy[XCoordinateIndex].GetDouble();
+                                xyY = xy[YCoordinateIndex].GetDouble();
                                 // brightness is taken from 'bri' above if present; if not present, handler can fallback
                             }
                         }
@@ -286,7 +319,7 @@ namespace Loupedeck.HomeAssistantPlugin
                             // If light is OFF, normalize brightness to 0 (HA often omits brightness then)
                             if (String.Equals(stStr, "off", StringComparison.OrdinalIgnoreCase))
                             {
-                                bri = 0;
+                                bri = BrightnessOffValue;
                                 // For temp/hs when OFF: leave as-is (null) so UI can keep last known;
                                 // some lights don't report those attributes while off.
                             }
@@ -301,7 +334,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
                     if (!ctMired.HasValue && ctKelvin.HasValue && ctKelvin.Value > 0)
                     {
-                        ctMired = (Int32)Math.Round(1_000_000.0 / ctKelvin.Value);
+                        ctMired = (Int32)Math.Round(KelvinMiredConversionFactor / ctKelvin.Value);
                     }
 
                     var hasHs = hue.HasValue && sat.HasValue;
@@ -427,7 +460,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 throw new InvalidOperationException("WebSocket is not initialized");
             }
 
-            var buffer = new ArraySegment<Byte>(new Byte[8192]);
+            var buffer = new ArraySegment<Byte>(new Byte[WebSocketBufferSize]);
             var sb = new StringBuilder();
             WebSocketReceiveResult result;
             do

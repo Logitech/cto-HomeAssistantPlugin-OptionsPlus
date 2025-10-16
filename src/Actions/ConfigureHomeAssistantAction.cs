@@ -8,6 +8,14 @@ namespace Loupedeck.HomeAssistantPlugin
 
     public sealed class ConfigureHomeAssistantAction : ActionEditorCommand
     {
+        // ====================================================================
+        // CONSTANTS - Configure Home Assistant Action Configuration
+        // ====================================================================
+
+        // --- Connection Configuration ---
+        private const Int32 DefaultHomeAssistantPort = 8123;          // Default Home Assistant port
+        private const Int32 ConnectionTestTimeoutSeconds = 8;         // Timeout for connection testing
+
         private const String CtlBaseUrl = "BaseUrl";
         private const String CtlToken = "Token";
         private const String CtlTest = "Test";
@@ -21,7 +29,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
             this.ActionEditor.AddControlEx(
                 new ActionEditorTextbox(CtlBaseUrl, "Base URL (prefer wss for enhanced security):")
-                    .SetPlaceholder("wss://homeassistant.local:8123/"));
+                    .SetPlaceholder($"wss://homeassistant.local:{DefaultHomeAssistantPort}/"));
 
             this.ActionEditor.AddControlEx(
                 new ActionEditorTextbox(CtlToken, "Long-Lived Token:")
@@ -110,9 +118,9 @@ namespace Loupedeck.HomeAssistantPlugin
 
                     Task.Run(async () =>
                     {
-                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(ConnectionTestTimeoutSeconds));
                         var client = new HaWebSocketClient();
-                        var (ok, msg) = await client.ConnectAndAuthenticateAsync(baseUrl, token, TimeSpan.FromSeconds(8), cts.Token);
+                        var (ok, msg) = await client.ConnectAndAuthenticateAsync(baseUrl, token, TimeSpan.FromSeconds(ConnectionTestTimeoutSeconds), cts.Token);
                         await client.SafeCloseAsync();
 
                         // Update UI on completion

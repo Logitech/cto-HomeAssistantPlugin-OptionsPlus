@@ -93,41 +93,127 @@ namespace Loupedeck.HomeAssistantPlugin
         private const String PfxActOn = "act:on:"; // act:on:<entity_id>
         private const String PfxActOff = "act:off:"; // act:off:<entity_id>
 
+        // ====================================================================
+        // CONSTANTS - All magic numbers extracted to named constants with documentation
+        // ====================================================================
+
+        // --- RGB and Color Value Constants ---
+        private const Int32 RgbMinValue = 0;                    // Minimum RGB component value
+        private const Int32 RgbMaxValue = 255;                  // Maximum RGB component value
+        private const Int32 InvalidColorMarker = -1;            // Marker for invalid color calculations
+        private const Int32 DefaultGrayValue = 64;              // Default gray color for inactive states
+        private const Int32 BlackColorValue = 0;                // Black color (off state)
+        private const Int32 WhiteColorValue = 255;              // White color value
+
+        // --- Brightness and Percentage Constants ---
+        private const Double PercentageScale = 100.0;          // Scale factor for percentage calculations
+        private const Double BrightnessScale = 255.0;          // Scale factor for brightness calculations
+        private const Int32 MidBrightness = 128;               // Mid-range brightness value
+        private const Int32 MinBrightness = 1;                 // Minimum non-zero brightness
+        private const Int32 MaxBrightness = 255;               // Maximum brightness value
+        private const Int32 BrightnessOff = 0;                 // Brightness value for off state
+
+        // --- Default HSB Color Values ---
+        private const Double DefaultHue = 0;                   // Default hue value (red)
+        private const Double DefaultSaturation = 100;          // Default saturation (full color)
+        private const Double MinSaturation = 0;                // Minimum saturation (grayscale)
+        private const Double MaxSaturation = 100;              // Maximum saturation (full color)
+        private const Double FullColorValue = 100.0;           // Full value for HSB color rendering
+
+        // --- Color Change Detection Thresholds ---
+        private const Double HueEps = 0.5;                     // Threshold for hue change detection (degrees)
+        private const Double SatEps = 0.5;                     // Threshold for saturation change detection (percent)
+
+        // --- UI Display Constants ---
+        private const Int32 UiPaddingSmall = 8;                // Small padding for UI elements
+        private const Int32 UiPaddingMedium = 10;              // Medium padding for UI elements
+        private const Int32 FontSizeSmall = 22;                // Small font size for UI text
+        private const Int32 FontSizeMedium = 56;               // Medium font size for icons
+        private const Int32 FontSizeLarge = 58;                // Large font size for icons
+        private const Int32 UiColorRed = 30;                   // Red component for UI colors
+        private const Int32 UiColorGreen = 220;                // Green component for UI colors
+        private const Int32 UiColorBlue = 30;                  // Blue component for UI colors
+        private const Int32 WheelCounterReset = 0;             // Reset value for wheel counter
+
+        // --- Status Colors ---
+        private const Int32 StatusOkRed = 0;                   // Online status red component
+        private const Int32 StatusOkGreen = 160;               // Online status green component
+        private const Int32 StatusOkBlue = 60;                 // Online status blue component
+        private const Int32 StatusErrorRed = 200;              // Error status red component
+        private const Int32 StatusErrorGreen = 30;             // Error status green component
+        private const Int32 StatusErrorBlue = 30;              // Error status blue component
+
+        // --- sRGB to Linear Conversion Constants (IEC 61966-2-1) ---
+        private const Double SrgbLinearThreshold = 0.04045;    // Threshold for sRGB to linear conversion
+        private const Double SrgbLinearDivisor = 12.92;        // Divisor for linear portion of sRGB conversion
+        private const Double SrgbGammaOffset = 0.055;          // Offset for gamma correction in sRGB
+        private const Double SrgbGammaMultiplier = 1.055;      // Multiplier for gamma correction in sRGB
+        private const Double SrgbGammaExponent = 2.4;          // Gamma exponent for sRGB conversion
+        private const Double LinearSrgbThreshold = 0.0031308;  // Threshold for linear to sRGB conversion
+
+        // --- Kelvin to RGB Conversion Constants ---
+        private const Int32 MinKelvinRange = 1800;             // Minimum Kelvin temperature for household lamps
+        private const Int32 MaxKelvinRange = 6500;             // Maximum Kelvin temperature for household lamps
+        private const Double KelvinScaleFactor = 100.0;        // Scale factor for Kelvin calculations
+        private const Double KelvinThreshold = 66.0;           // Threshold for different Kelvin calculation methods
+        private const Double KelvinLowThreshold = 19.0;        // Low threshold for blue component calculation
+        private const Double KelvinRedMax = 255.0;             // Maximum red value for low Kelvin
+        private const Double KelvinGreenCoeff1 = 99.4708025861; // Green coefficient 1 for Kelvin conversion
+        private const Double KelvinGreenOffset1 = 161.1195681661; // Green offset 1 for Kelvin conversion
+        private const Double KelvinBlueCoeff = 138.5177312231;  // Blue coefficient for Kelvin conversion
+        private const Double KelvinBlueOffset1 = 10.0;         // Blue offset 1 for Kelvin conversion
+        private const Double KelvinBlueOffset2 = 305.0447927307; // Blue offset 2 for Kelvin conversion
+        private const Double KelvinRedCoeff = 329.698727446;    // Red coefficient for high Kelvin
+        private const Double KelvinRedExp = -0.1332047592;      // Red exponent for high Kelvin
+        private const Double KelvinGreenCoeff2 = 288.1221695283; // Green coefficient 2 for high Kelvin
+        private const Double KelvinGreenExp = -0.0755148492;    // Green exponent for high Kelvin
+        private const Double KelvinHighOffset = 60.0;          // Offset for high Kelvin calculations
+        private const Double KelvinBlueMax = 255.0;            // Maximum blue value for high Kelvin
+
+        // --- Color Array Constants ---
+        private const Int32 HsColorArrayLength = 2;            // Expected length for HS color arrays
+        private const Int32 RgbColorArrayLength = 3;           // Expected length for RGB color arrays
+        private const Int32 HueArrayIndex = 0;                 // Array index for hue component
+        private const Int32 SaturationArrayIndex = 1;          // Array index for saturation component
+        private const Int32 RedArrayIndex = 0;                 // Array index for red component
+        private const Int32 GreenArrayIndex = 1;               // Array index for green component
+        private const Int32 BlueArrayIndex = 2;                // Array index for blue component
+
+        // --- Network and Timing Constants ---
+        private const Int32 AuthTimeoutSeconds = 60;           // Authentication timeout in seconds
+        private static readonly TimeSpan EchoSuppressWindow = TimeSpan.FromSeconds(3); // Echo suppression window
+
         // --- WHEEL: constants & state
-        private const String AdjBri = "adj:bri";     // brightness wheel
-        private Int32 _wheelCounter = 0;                 // just for display/log when not in device view
-        private const Int32 WheelStepPercent = 1;        // 1% per tick
+        private const String AdjBri = "adj:bri";               // brightness wheel
+        private Int32 _wheelCounter = 0;                       // just for display/log when not in device view
+        private const Int32 WheelStepPercent = 1;              // 1% per tick
 
         // ---- COLOR TEMP state (mirrors brightness pattern) ----
-        private const String AdjTemp = "adj:ha-temp";   // wheel id
-        private const Int32 TempStepMireds = 2;        // step per tick (≈smooth)
-        private const Int32 MaxMiredsPerEvent = 60;     // cap coalesced burst
-        private const Int32 DefaultMinMireds = 153;     // ~6500K
-        private const Int32 DefaultMaxMireds = 500;     // ~2000K
-        private const Int32 DefaultWarmMired = 370;     // ~2700K (UI fallback)
+        private const String AdjTemp = "adj:ha-temp";          // wheel id
+        private const Int32 TempStepMireds = 2;                // step per tick (≈smooth)
+        private const Int32 MaxMiredsPerEvent = 60;            // cap coalesced burst
+        private const Int32 DefaultMinMireds = 153;            // ~6500K
+        private const Int32 DefaultMaxMireds = 500;            // ~2000K
+        private const Int32 DefaultWarmMired = 370;            // ~2700K (UI fallback)
 
         // ===== HUE control (rotation-only) =====
-        private const String AdjHue = "adj:ha-hue";   // wheel id
-
-        private const Int32 HueStepDegPerTick = 1;      // 1° per tick feels smooth
-        private const Int32 MaxHueDegPerEvent = 30;     // cap coalesced bursts
+        private const String AdjHue = "adj:ha-hue";           // wheel id
+        private const Int32 HueStepDegPerTick = 1;             // 1° per tick feels smooth
+        private const Int32 MaxHueDegPerEvent = 30;            // cap coalesced bursts
 
         // ===== SATURATION control =====
         private const String AdjSat = "adj:ha-sat";
-
-        private const Int32 SatStepPctPerTick = 1;   // feels smooth
-        private const Int32 MaxSatPctPerEvent = 15;  // cap burst coalesce
-
-
+        private const Int32 SatStepPctPerTick = 1;             // feels smooth
+        private const Int32 MaxSatPctPerEvent = 15;            // cap burst coalesce
 
         // Per-entity cache: (Min, Max, Current) in Mireds
         private readonly Dictionary<String, (Int32 Min, Int32 Max, Int32 Cur)> _tempMiredByEntity =
             new(StringComparer.OrdinalIgnoreCase);
 
         // Tune these if you want
-        private const Int32 SendDebounceMs = 10; // how long to wait after the last tick before sending
-        private const Int32 ReconcileIdleMs = 500; // idle pause before doing a single get_states as truth
-        private const Int32 MaxPctPerEvent = 10;  // cap huge coalesced diffs to keep UI sane
+        private const Int32 SendDebounceMs = 10;               // how long to wait after the last tick before sending
+        private const Int32 ReconcileIdleMs = 500;             // idle pause before doing a single get_states as truth
+        private const Int32 MaxPctPerEvent = 10;               // cap huge coalesced diffs to keep UI sane
 
         private readonly HaEventListener _events = new();
         private CancellationTokenSource _eventsCts = new();
@@ -144,7 +230,6 @@ namespace Loupedeck.HomeAssistantPlugin
         private readonly Dictionary<String, DateTime> _lastCmdAt =
             new(StringComparer.OrdinalIgnoreCase);
 
-        private static readonly TimeSpan EchoSuppressWindow = TimeSpan.FromSeconds(3);
 
 
 
@@ -173,7 +258,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                 {
                     var effB = this.GetEffectiveBrightnessForDisplay(this._currentEntityId);
-                    var pct = (Int32)Math.Round(effB * 100.0 / 255.0);
+                    var pct = (Int32)Math.Round(effB * PercentageScale / BrightnessScale);
                     return $"{pct}%";
                 }
 
@@ -184,7 +269,7 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 return this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId) &&
                     this._hsbByEntity.TryGetValue(this._currentEntityId, out var hsb)
-                    ? $"{(Int32)Math.Round(HSBHelper.Clamp(hsb.S, 0, 100))}%"
+                    ? $"{(Int32)Math.Round(HSBHelper.Clamp(hsb.S, MinSaturation, MaxSaturation))}%"
                     : "—%";
             }
 
@@ -220,56 +305,56 @@ namespace Loupedeck.HomeAssistantPlugin
 
         // --- sRGB <-> linear helpers (IEC 61966-2-1) ---
         private static Double SrgbToLinear01(Double c)
-            => (c <= 0.04045) ? (c / 12.92) : Math.Pow((c + 0.055) / 1.055, 2.4);
+            => (c <= SrgbLinearThreshold) ? (c / SrgbLinearDivisor) : Math.Pow((c + SrgbGammaOffset) / SrgbGammaMultiplier, SrgbGammaExponent);
 
         private static Double LinearToSrgb01(Double c)
         {
             c = Math.Max(0.0, Math.Min(1.0, c));
-            return (c <= 0.0031308) ? (12.92 * c) : (1.055 * Math.Pow(c, 1.0 / 2.4) - 0.055);
+            return (c <= LinearSrgbThreshold) ? (SrgbLinearDivisor * c) : (SrgbGammaMultiplier * Math.Pow(c, 1.0 / SrgbGammaExponent) - SrgbGammaOffset);
         }
 
         // --- Kelvin (blackbody) -> sRGB, using Tanner Helland / Neil Bartlett coeffs ---
         private static (Int32 R, Int32 G, Int32 B) KelvinToSrgb(Int32 kelvin)
         {
             // Clamp to a sensible household lamp range to avoid cartoonish extremes
-            var K = HSBHelper.Clamp(kelvin, 1800, 6500) / 100.0; // Temp in hundreds of K
+            var K = HSBHelper.Clamp(kelvin, MinKelvinRange, MaxKelvinRange) / KelvinScaleFactor; // Temp in hundreds of K
             Double r, g, b;
 
-            if (K <= 66.0)
+            if (K <= KelvinThreshold)
             {
-                r = 255.0;
-                g = 99.4708025861 * Math.Log(K) - 161.1195681661;
-                b = (K <= 19.0) ? 0.0 : 138.5177312231 * Math.Log(K - 10.0) - 305.0447927307;
+                r = KelvinRedMax;
+                g = KelvinGreenCoeff1 * Math.Log(K) - KelvinGreenOffset1;
+                b = (K <= KelvinLowThreshold) ? BlackColorValue : KelvinBlueCoeff * Math.Log(K - KelvinBlueOffset1) - KelvinBlueOffset2;
             }
             else
             {
-                r = 329.698727446 * Math.Pow(K - 60.0, -0.1332047592);
-                g = 288.1221695283 * Math.Pow(K - 60.0, -0.0755148492);
-                b = 255.0;
+                r = KelvinRedCoeff * Math.Pow(K - KelvinHighOffset, KelvinRedExp);
+                g = KelvinGreenCoeff2 * Math.Pow(K - KelvinHighOffset, KelvinGreenExp);
+                b = KelvinBlueMax;
             }
 
-            var R = HSBHelper.Clamp((Int32)Math.Round(r), 0, 255);
-            var G = HSBHelper.Clamp((Int32)Math.Round(g), 0, 255);
-            var B = HSBHelper.Clamp((Int32)Math.Round(b), 0, 255);
+            var R = HSBHelper.Clamp((Int32)Math.Round(r), RgbMinValue, RgbMaxValue);
+            var G = HSBHelper.Clamp((Int32)Math.Round(g), RgbMinValue, RgbMaxValue);
+            var B = HSBHelper.Clamp((Int32)Math.Round(b), RgbMinValue, RgbMaxValue);
             return (R, G, B);
         }
 
         // Scale an sRGB color by brightness in *linear* light, then encode back to sRGB
         private static (Int32 R, Int32 G, Int32 B) ApplyBrightnessLinear((Int32 R, Int32 G, Int32 B) srgb, Int32 effB)
         {
-            var l = HSBHelper.Clamp(effB, 0, 255) / 255.0;     // 0..1
+            var l = HSBHelper.Clamp(effB, BrightnessOff, MaxBrightness) / BrightnessScale;     // 0..1
             if (l <= 0.0)
             {
-                return (0, 0, 0);
+                return (BlackColorValue, BlackColorValue, BlackColorValue);
             }
 
-            var lr = SrgbToLinear01(srgb.R / 255.0) * l;
-            var lg = SrgbToLinear01(srgb.G / 255.0) * l;
-            var lb = SrgbToLinear01(srgb.B / 255.0) * l;
+            var lr = SrgbToLinear01(srgb.R / BrightnessScale) * l;
+            var lg = SrgbToLinear01(srgb.G / BrightnessScale) * l;
+            var lb = SrgbToLinear01(srgb.B / BrightnessScale) * l;
 
-            var R = HSBHelper.Clamp((Int32)Math.Round(LinearToSrgb01(lr) * 255.0), 0, 255);
-            var G = HSBHelper.Clamp((Int32)Math.Round(LinearToSrgb01(lg) * 255.0), 0, 255);
-            var B = HSBHelper.Clamp((Int32)Math.Round(LinearToSrgb01(lb) * 255.0), 0, 255);
+            var R = HSBHelper.Clamp((Int32)Math.Round(LinearToSrgb01(lr) * BrightnessScale), RgbMinValue, RgbMaxValue);
+            var G = HSBHelper.Clamp((Int32)Math.Round(LinearToSrgb01(lg) * BrightnessScale), RgbMinValue, RgbMaxValue);
+            var B = HSBHelper.Clamp((Int32)Math.Round(LinearToSrgb01(lb) * BrightnessScale), RgbMinValue, RgbMaxValue);
             return (R, G, B);
         }
 
@@ -280,16 +365,16 @@ namespace Loupedeck.HomeAssistantPlugin
         {
             if (!this._inDeviceView || String.IsNullOrEmpty(this._currentEntityId))
             {
-                return (64, 64, 64);
+                return (DefaultGrayValue, DefaultGrayValue, DefaultGrayValue);
             }
 
             var eid = this._currentEntityId;
 
             // Effective brightness (0 if off)
             var effB = this.GetEffectiveBrightnessForDisplay(eid); // 0..255
-            if (effB <= 0)
+            if (effB <= BrightnessOff)
             {
-                return (0, 0, 0);
+                return (BlackColorValue, BlackColorValue, BlackColorValue);
             }
 
             var prefer = this._lookModeByEntity.TryGetValue(eid, out var pref) ? pref : LookMode.Hs;
@@ -299,14 +384,14 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 if (!this._hsbByEntity.TryGetValue(eid, out var hsb))
                 {
-                    return (-1, -1, -1);
+                    return (InvalidColorMarker, InvalidColorMarker, InvalidColorMarker);
                 }
 
                 // Get full-brightness sRGB from your HSV/HSB helper, then dim in linear space
                 var (sr, sg, sb) = HSBHelper.HsbToRgb(
                     HSBHelper.Wrap360(hsb.H),
-                    HSBHelper.Clamp(Math.Max(0, hsb.S), 0, 100),
-                    100.0 // full value; we'll apply brightness correctly afterwards
+                    HSBHelper.Clamp(Math.Max(MinSaturation, hsb.S), MinSaturation, MaxSaturation),
+                    FullColorValue // full value; we'll apply brightness correctly afterwards
                 );
 
                 // Optional: tiny desaturation at very low brightness for human-perception feel
@@ -322,7 +407,7 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 if (!this.TryGetCachedTempMired(eid, out var t))
                 {
-                    return (-1, -1, -1);
+                    return (InvalidColorMarker, InvalidColorMarker, InvalidColorMarker);
                 }
 
                 var k = ColorTemp.MiredToKelvin(t.Cur);
@@ -333,13 +418,13 @@ namespace Loupedeck.HomeAssistantPlugin
             (Int32 R, Int32 G, Int32 B) rgb;
 
             rgb = (prefer == LookMode.Hs) ? RenderFromHs() : RenderFromTemp();
-            if (rgb.R >= 0)
+            if (rgb.R >= RgbMinValue)
             {
                 return rgb;
             }
 
             rgb = (prefer == LookMode.Hs) ? RenderFromTemp() : RenderFromHs();
-            if (rgb.R >= 0)
+            if (rgb.R >= RgbMinValue)
             {
                 return rgb;
             }
@@ -355,23 +440,23 @@ namespace Loupedeck.HomeAssistantPlugin
         {
             if (actionParameter == AdjBri)
             {
-                var bri = 128;
+                var bri = MidBrightness;
                 if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                 {
                     bri = this.GetEffectiveBrightnessForDisplay(this._currentEntityId);
                 }
 
-                var pct = (Int32)Math.Round(bri * 100.0 / 255.0);
+                var pct = (Int32)Math.Round(bri * PercentageScale / BrightnessScale);
 
                 Int32 r, g, b;
-                if (bri <= 0)
-                { r = g = b = 0; }
+                if (bri <= BrightnessOff)
+                { r = g = b = BlackColorValue; }
                 else
-                { r = Math.Min(30 + pct * 2, 255); g = Math.Min(30 + pct, 220); b = 30; }
+                { r = Math.Min(UiColorRed + pct * 2, RgbMaxValue); g = Math.Min(UiColorRed + pct, UiColorGreen); b = UiColorBlue; }
 
                 using var bb = new BitmapBuilder(imageSize);
                 bb.Clear(new BitmapColor(r, g, b));
-                return TilePainter.IconOrGlyph(bb, this._icons.Get(IconId.Brightness), "☀", padPct: 10, font: 58);
+                return TilePainter.IconOrGlyph(bb, this._icons.Get(IconId.Brightness), "☀", padPct: UiPaddingMedium, font: FontSizeLarge);
             }
 
             if (actionParameter == AdjSat)
@@ -379,7 +464,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 var (r, g, b) = this.GetSimulatedLightRgbForCurrentDevice();
                 using var bb = new BitmapBuilder(imageSize);
                 bb.Clear(new BitmapColor(r, g, b));
-                return TilePainter.IconOrGlyph(bb, this._icons.Get(IconId.Saturation), "S", padPct: 8, font: 56);
+                return TilePainter.IconOrGlyph(bb, this._icons.Get(IconId.Saturation), "S", padPct: UiPaddingSmall, font: FontSizeMedium);
             }
 
             if (actionParameter == AdjTemp)
@@ -387,7 +472,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 var (r, g, b) = this.GetSimulatedLightRgbForCurrentDevice();
                 using var bb = new BitmapBuilder(imageSize);
                 bb.Clear(new BitmapColor(r, g, b));
-                return TilePainter.IconOrGlyph(bb, this._icons.Get(IconId.Temperature), "⟷", padPct: 10, font: 58);
+                return TilePainter.IconOrGlyph(bb, this._icons.Get(IconId.Temperature), "⟷", padPct: UiPaddingMedium, font: FontSizeLarge);
             }
 
             if (actionParameter == AdjHue)
@@ -395,7 +480,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 var (r, g, b) = this.GetSimulatedLightRgbForCurrentDevice();
                 using var bb = new BitmapBuilder(imageSize);
                 bb.Clear(new BitmapColor(r, g, b));
-                return TilePainter.IconOrGlyph(bb, this._icons.Get(IconId.Hue), "H", padPct: 8, font: 56);
+                return TilePainter.IconOrGlyph(bb, this._icons.Get(IconId.Hue), "H", padPct: UiPaddingSmall, font: FontSizeMedium);
             }
 
             return base.GetAdjustmentImage(actionParameter, imageSize);
@@ -421,13 +506,13 @@ namespace Loupedeck.HomeAssistantPlugin
                         // current brightness from cache (fallback to mid)
                         var curB = this._hsbByEntity.TryGetValue(entityId, out var hsb)
                             ? hsb.B
-                            : 128;
+                            : MidBrightness;
 
                         // compute target absolutely (± WheelStepPercent per tick), with cap
                         var stepPct = diff * WheelStepPercent;
                         stepPct = Math.Sign(stepPct) * Math.Min(Math.Abs(stepPct), MaxPctPerEvent);
-                        var deltaB = (Int32)Math.Round(255.0 * stepPct / 100.0);
-                        var targetB = HSBHelper.Clamp(curB + deltaB, 0, 255);
+                        var deltaB = (Int32)Math.Round(BrightnessScale * stepPct / PercentageScale);
+                        var targetB = HSBHelper.Clamp(curB + deltaB, BrightnessOff, MaxBrightness);
 
                         // optimistic UI: update cache immediately → live value/image
                         this.SetCachedBrightness(entityId, targetB);
@@ -473,13 +558,13 @@ namespace Loupedeck.HomeAssistantPlugin
                     // Current HS from cache (fallbacks)
                     if (!this._hsbByEntity.TryGetValue(eid, out var hsb))
                     {
-                        hsb = (0, 100, 128);
+                        hsb = (DefaultHue, DefaultSaturation, MidBrightness);
                     }
 
                     // Compute step with cap and clamp 0..100
                     var step = diff * SatStepPctPerTick;
                     step = Math.Sign(step) * Math.Min(Math.Abs(step), MaxSatPctPerEvent);
-                    var newS = HSBHelper.Clamp(hsb.S + step, 0, 100);
+                    var newS = HSBHelper.Clamp(hsb.S + step, MinSaturation, MaxSaturation);
 
                     // Optimistic UI
                     this._hsbByEntity[eid] = (hsb.H, newS, hsb.B);
@@ -488,7 +573,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     this.AdjustmentValueChanged(AdjTemp);
 
 
-                    var curH = this._hsbByEntity.TryGetValue(eid, out var hsb3) ? hsb3.H : 0;
+                    var curH = this._hsbByEntity.TryGetValue(eid, out var hsb3) ? hsb3.H : DefaultHue;
                     this.MarkCommandSent(eid);
                     this._lightSvc.SetHueSat(eid, curH, newS);
 
@@ -510,7 +595,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     // Current HS from cache (fallbacks)
                     if (!this._hsbByEntity.TryGetValue(eid, out var hsb))
                     {
-                        hsb = (0, 100, 128); // default to vivid color, mid brightness
+                        hsb = (DefaultHue, DefaultSaturation, MidBrightness); // default to vivid color, mid brightness
                     }
 
                     // Compute step with cap; wrap 0..360
@@ -524,7 +609,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     this.AdjustmentValueChanged(AdjSat);
                     this.AdjustmentValueChanged(AdjTemp); // temp tile also reflects effB
 
-                    var curS = this._hsbByEntity.TryGetValue(eid, out var hsb2) ? hsb2.S : 100;
+                    var curS = this._hsbByEntity.TryGetValue(eid, out var hsb2) ? hsb2.S : DefaultSaturation;
                     this.MarkCommandSent(eid);
                     this._lightSvc.SetHueSat(eid, newH, curS);
 
@@ -730,8 +815,8 @@ namespace Loupedeck.HomeAssistantPlugin
         {
             // If we know it’s OFF, show 0; otherwise show cached B
             return this._isOnByEntity.TryGetValue(entityId, out var on) && !on
-                ? 0
-                : this._hsbByEntity.TryGetValue(entityId, out var hsb) ? hsb.B : 0;
+                ? BrightnessOff
+                : this._hsbByEntity.TryGetValue(entityId, out var hsb) ? hsb.B : BrightnessOff;
         }
 
         // Paint the tile: green when OK, red on error
@@ -758,8 +843,8 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     var okImg = this._icons.Get(IconId.Online);
                     var issueImg = this._icons.Get(IconId.Issue);
-                    TilePainter.Background(bb, ok ? okImg : issueImg, ok ? new BitmapColor(0, 160, 60) : new BitmapColor(200, 30, 30));
-                    bb.DrawText(ok ? "ONLINE" : "ISSUE", fontSize: 22, color: new BitmapColor(255, 255, 255));
+                    TilePainter.Background(bb, ok ? okImg : issueImg, ok ? new BitmapColor(StatusOkRed, StatusOkGreen, StatusOkBlue) : new BitmapColor(StatusErrorRed, StatusErrorGreen, StatusErrorBlue));
+                    bb.DrawText(ok ? "ONLINE" : "ISSUE", fontSize: FontSizeSmall, color: new BitmapColor(WhiteColorValue, WhiteColorValue, WhiteColorValue));
                     return bb.ToImage();
                 }
             }
@@ -871,12 +956,12 @@ namespace Loupedeck.HomeAssistantPlugin
                     this._inDeviceView = true;
                     this._level = ViewLevel.Device;
                     this._currentEntityId = entityId;
-                    this._wheelCounter = 0; // avoids showing previous ticks anywhere
+                    this._wheelCounter = WheelCounterReset; // avoids showing previous ticks anywhere
 
                     // Brightness cache always OK
                     if (!this._hsbByEntity.ContainsKey(entityId))
                     {
-                        this._hsbByEntity[entityId] = (0, 0, 0);
+                        this._hsbByEntity[entityId] = (DefaultHue, MinSaturation, BrightnessOff);
                     }
 
                     // Only keep/seed temp cache if device supports it
@@ -926,7 +1011,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 var caps = this.GetCaps(entityId);
                 if (caps.Brightness && this._hsbByEntity.TryGetValue(entityId, out var hsb))
                 {
-                    var bri = HSBHelper.Clamp(Math.Max(1, hsb.B), 1, 255);
+                    var bri = HSBHelper.Clamp(Math.Max(MinBrightness, hsb.B), MinBrightness, MaxBrightness);
                     data = JsonSerializer.SerializeToElement(new { brightness = bri });
                 }
                 this.MarkCommandSent(entityId);
@@ -1051,7 +1136,7 @@ namespace Loupedeck.HomeAssistantPlugin
             try
             {
                 var (ok, msg) = this._client
-                    .ConnectAndAuthenticateAsync(baseUrl, token, TimeSpan.FromSeconds(60), this._cts.Token)
+                    .ConnectAndAuthenticateAsync(baseUrl, token, TimeSpan.FromSeconds(AuthTimeoutSeconds), this._cts.Token)
                     .GetAwaiter().GetResult();
 
                 if (ok)
@@ -1359,21 +1444,21 @@ namespace Loupedeck.HomeAssistantPlugin
 
                     if (hasAttrBri)
                     {
-                        bri = HSBHelper.Clamp(brEl.GetInt32(), 0, 255);
+                        bri = HSBHelper.Clamp(brEl.GetInt32(), BrightnessOff, MaxBrightness);
                     }
                     else if (!isOn) // OFF and no brightness attribute: keep last-known if any
                     {
-                        bri = this._hsbByEntity.TryGetValue(entityId, out var oldBri) ? oldBri.B : 0;
+                        bri = this._hsbByEntity.TryGetValue(entityId, out var oldBri) ? oldBri.B : BrightnessOff;
                     }
                     else
                     {
                         // ON but no brightness attribute → reasonable fallback
-                        bri = 128;
+                        bri = MidBrightness;
                     }
 
 
                     // Optional HS seed (doesn’t matter for brightness UI, but nice to keep)
-                    Double h = 0, sat = 0;
+                    Double h = DefaultHue, sat = MinSaturation;
                     Int32 minM = DefaultMinMireds, maxM = DefaultMaxMireds, curM = DefaultWarmMired;
                     if (attrs.ValueKind == JsonValueKind.Object)
                     {
@@ -1402,21 +1487,21 @@ namespace Loupedeck.HomeAssistantPlugin
                         }
 
                         if (attrs.TryGetProperty("hs_color", out var hs) &&
-                            hs.ValueKind == JsonValueKind.Array && hs.GetArrayLength() >= 2 &&
-                            hs[0].ValueKind == JsonValueKind.Number && hs[1].ValueKind == JsonValueKind.Number)
+                            hs.ValueKind == JsonValueKind.Array && hs.GetArrayLength() >= HsColorArrayLength &&
+                            hs[HueArrayIndex].ValueKind == JsonValueKind.Number && hs[SaturationArrayIndex].ValueKind == JsonValueKind.Number)
                         {
-                            h = HSBHelper.Wrap360(hs[0].GetDouble());
-                            sat = HSBHelper.Clamp(hs[1].GetDouble(), 0, 100);
+                            h = HSBHelper.Wrap360(hs[HueArrayIndex].GetDouble());
+                            sat = HSBHelper.Clamp(hs[SaturationArrayIndex].GetDouble(), MinSaturation, MaxSaturation);
                         }
                         else if (attrs.TryGetProperty("rgb_color", out var rgb) &&
-                                 rgb.ValueKind == JsonValueKind.Array && rgb.GetArrayLength() >= 3 &&
-                                 rgb[0].ValueKind == JsonValueKind.Number &&
-                                 rgb[1].ValueKind == JsonValueKind.Number &&
-                                 rgb[2].ValueKind == JsonValueKind.Number)
+                                 rgb.ValueKind == JsonValueKind.Array && rgb.GetArrayLength() >= RgbColorArrayLength &&
+                                 rgb[RedArrayIndex].ValueKind == JsonValueKind.Number &&
+                                 rgb[GreenArrayIndex].ValueKind == JsonValueKind.Number &&
+                                 rgb[BlueArrayIndex].ValueKind == JsonValueKind.Number)
                         {
-                            var (hh, ss) = HSBHelper.RgbToHs(rgb[0].GetInt32(), rgb[1].GetInt32(), rgb[2].GetInt32());
+                            var (hh, ss) = HSBHelper.RgbToHs(rgb[RedArrayIndex].GetInt32(), rgb[GreenArrayIndex].GetInt32(), rgb[BlueArrayIndex].GetInt32());
                             h = HSBHelper.Wrap360(hh);
-                            sat = HSBHelper.Clamp(ss, 0, 100);
+                            sat = HSBHelper.Clamp(ss, MinSaturation, MaxSaturation);
                         }
                     }
                     this._hsbByEntity[entityId] = (h, sat, bri); // 👈 ALWAYS set B now
@@ -1486,8 +1571,8 @@ namespace Loupedeck.HomeAssistantPlugin
         {
             PluginLog.Verbose($"[SetCachedBrightness] eid={entityId} bri={bri}");
             this._hsbByEntity[entityId] = this._hsbByEntity.TryGetValue(entityId, out var hsb)
-                ? ((Double H, Double S, Int32 B))(hsb.H, hsb.S, HSBHelper.Clamp(bri, 0, 255))
-                : ((Double H, Double S, Int32 B))(0, 0, HSBHelper.Clamp(bri, 0, 255));
+                ? ((Double H, Double S, Int32 B))(hsb.H, hsb.S, HSBHelper.Clamp(bri, BrightnessOff, MaxBrightness))
+                : ((Double H, Double S, Int32 B))(DefaultHue, MinSaturation, HSBHelper.Clamp(bri, BrightnessOff, MaxBrightness));
         }
 
 
@@ -1507,7 +1592,7 @@ namespace Loupedeck.HomeAssistantPlugin
             // Update ON/OFF state from brightness signal:
             if (bri.HasValue)
             {
-                if (bri.Value <= 0)
+                if (bri.Value <= BrightnessOff)
                 {
                     // OFF → don't change cached B, just mark state off
                     this._isOnByEntity[entityId] = false;
@@ -1516,7 +1601,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     // ON → update cached B and mark on
                     this._isOnByEntity[entityId] = true;
-                    this.SetCachedBrightness(entityId, HSBHelper.Clamp(bri.Value, 0, 255));
+                    this.SetCachedBrightness(entityId, HSBHelper.Clamp(bri.Value, BrightnessOff, MaxBrightness));
                 }
             }
 
@@ -1581,12 +1666,12 @@ namespace Loupedeck.HomeAssistantPlugin
             if (this._hsbByEntity.TryGetValue(entityId, out var hsb))
             {
                 var H = h.HasValue ? HSBHelper.Wrap360(h.Value) : hsb.H;
-                var S = s.HasValue ? HSBHelper.Clamp(s.Value, 0, 100) : hsb.S;
+                var S = s.HasValue ? HSBHelper.Clamp(s.Value, MinSaturation, MaxSaturation) : hsb.S;
                 this._hsbByEntity[entityId] = (H, S, hsb.B);
             }
             else
             {
-                this._hsbByEntity[entityId] = (HSBHelper.Wrap360(h ?? 0), HSBHelper.Clamp(s ?? 100, 0, 100), 128);
+                this._hsbByEntity[entityId] = (HSBHelper.Wrap360(h ?? DefaultHue), HSBHelper.Clamp(s ?? DefaultSaturation, MinSaturation, MaxSaturation), MidBrightness);
             }
 
             if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
@@ -1598,9 +1683,7 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
-        // Small thresholds to avoid UI churn on tiny float changes
-        private const Double HueEps = 0.5;     // degrees
-        private const Double SatEps = 0.5;     // percent
+        // Small thresholds to avoid UI churn on tiny float changes (already defined above)
 
         private void OnHaRgbColorChanged(String entityId, Int32? r, Int32? g, Int32? b)
         {
@@ -1624,9 +1707,9 @@ namespace Loupedeck.HomeAssistantPlugin
 
             var (h, s) = HSBHelper.RgbToHs(r.Value, g.Value, b.Value);
             h = HSBHelper.Wrap360(h);
-            s = HSBHelper.Clamp(s, 0, 100);
+            s = HSBHelper.Clamp(s, MinSaturation, MaxSaturation);
 
-            var cur = this._hsbByEntity.TryGetValue(entityId, out var old) ? old : (0, 100.0, 128);
+            var cur = this._hsbByEntity.TryGetValue(entityId, out var old) ? old : ((Double H, Double S, Int32 B))(DefaultHue, DefaultSaturation, MidBrightness);
             var changed = Math.Abs(cur.H - h) >= HueEps || Math.Abs(cur.S - s) >= SatEps;
 
             if (!changed)
@@ -1665,15 +1748,15 @@ namespace Loupedeck.HomeAssistantPlugin
             PluginLog.Verbose($"[OnHaXyColorChanged] eid={entityId} xy=[{xv.ToString("F4")},{yv.ToString("F4")}] bri={bri}");
 
             // Pick a luminance for XY->RGB: prefer event bri, else cached, else mid
-            var baseB = this._hsbByEntity.TryGetValue(entityId, out var old) ? old.B : 128;
-            var usedB = HSBHelper.Clamp(bri ?? baseB, 0, 255);
+            var baseB = this._hsbByEntity.TryGetValue(entityId, out var old) ? old.B : MidBrightness;
+            var usedB = HSBHelper.Clamp(bri ?? baseB, BrightnessOff, MaxBrightness);
 
             var (R, G, B) = ColorConv.XyBriToRgb(xv, yv, usedB);
             var (h, s) = HSBHelper.RgbToHs(R, G, B);
             h = HSBHelper.Wrap360(h);
-            s = HSBHelper.Clamp(s, 0, 100);
+            s = HSBHelper.Clamp(s, MinSaturation, MaxSaturation);
 
-            var cur = this._hsbByEntity.TryGetValue(entityId, out var curHsb) ? curHsb : (0, 100.0, 128);
+            var cur = this._hsbByEntity.TryGetValue(entityId, out var curHsb) ? curHsb : ((Double H, Double S, Int32 B))(DefaultHue, DefaultSaturation, MidBrightness);
             var hsChanged = Math.Abs(cur.H - h) >= HueEps || Math.Abs(cur.S - s) >= SatEps;
             var briChanged = bri.HasValue && usedB != cur.B;
 

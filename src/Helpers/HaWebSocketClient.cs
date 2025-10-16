@@ -9,9 +9,23 @@ namespace Loupedeck.HomeAssistantPlugin
 
     public sealed class HaWebSocketClient : IAsyncDisposable, IDisposable
     {
+        // ====================================================================
+        // CONSTANTS - WebSocket Client Configuration
+        // ====================================================================
+
+        // --- Connection Constants ---
+        private const Int32 InitialMessageId = 1;                     // Initial message ID for WebSocket communication
+        private const Int32 HealthCheckTimeoutSeconds = 5;            // Timeout for health check operations
+        private const Int32 ReconnectionTimeoutSeconds = 8;           // Timeout for reconnection attempts
+        private const Int32 PongResponseDelayMs = 100;                // Delay to wait for pong response after ping
+
+        // --- Buffer and Logging Constants ---
+        private const Int32 WebSocketBufferSize = 8192;               // Buffer size for WebSocket receive operations
+        private const Int32 LogDataTruncationLength = 200;            // Length at which to truncate data for logging
+
         private ClientWebSocket? _ws;
         private readonly Object _gate = new();
-        private Int32 _nextId = 1;
+        private Int32 _nextId = InitialMessageId;
         public Boolean IsAuthenticated { get; private set; }
         public Uri? EndpointUri { get; private set; }
 
@@ -213,13 +227,13 @@ namespace Loupedeck.HomeAssistantPlugin
             try
             {
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                cts.CancelAfter(TimeSpan.FromSeconds(5)); // Short timeout for health check
+                cts.CancelAfter(TimeSpan.FromSeconds(HealthCheckTimeoutSeconds)); // Short timeout for health check
 
                 var healthStart = DateTime.UtcNow;
                 await this.SendPingAsync(cts.Token).ConfigureAwait(false);
 
                 // Wait briefly for a pong response (optional - ping is fire-and-forget in HA)
-                await Task.Delay(100, cts.Token).ConfigureAwait(false);
+                await Task.Delay(PongResponseDelayMs, cts.Token).ConfigureAwait(false);
 
                 var healthTime = DateTime.UtcNow - healthStart;
                 PluginLog.Info($"[WS] Connection reuse successful - Health check passed in {healthTime.TotalMilliseconds:F0}ms");
@@ -308,7 +322,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 try
                 {
                     var dataStr = data.Value.GetRawText();
-                    var truncatedData = dataStr.Length > 200 ? dataStr.Substring(0, 200) + "..." : dataStr;
+                    var truncatedData = dataStr.Length > LogDataTruncationLength ? dataStr.Substring(0, LogDataTruncationLength) + "..." : dataStr;
                     PluginLog.Verbose($"[WS] Service data: {truncatedData}");
                 }
                 catch (Exception ex)
@@ -323,7 +337,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 if (this._ws == null || this._ws.State != WebSocketState.Open || !this.IsAuthenticated)
                 {
                     PluginLog.Verbose($"[WS] Connection check failed - State: {this._ws?.State}, Authenticated: {this.IsAuthenticated}, attempting reconnect...");
-                    var re = await this.EnsureConnectedAsync(TimeSpan.FromSeconds(8), ct).ConfigureAwait(false);
+                    var re = await this.EnsureConnectedAsync(TimeSpan.FromSeconds(ReconnectionTimeoutSeconds), ct).ConfigureAwait(false);
                     if (!re)
                     {
                         PluginLog.Warning($"[WS] CallServiceAsync failed - Could not establish connection for {domain}.{service}");
@@ -506,7 +520,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 throw new InvalidOperationException("WebSocket is not initialized");
             }
 
-            var buffer = new ArraySegment<Byte>(new Byte[8192]);
+            var buffer = new ArraySegment<Byte>(new Byte[WebSocketBufferSize]);
             var sb = new StringBuilder();
             WebSocketReceiveResult result;
             do

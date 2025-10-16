@@ -11,6 +11,22 @@ namespace Loupedeck.HomeAssistantPlugin
 
     public sealed class RunScriptAction : ActionEditorCommand
     {
+        // ====================================================================
+        // CONSTANTS - Run Script Action Configuration
+        // ====================================================================
+
+        // --- Semaphore Configuration ---
+        private const Int32 SemaphoreInitialCount = 1;                // Initial semaphore count
+        private const Int32 SemaphoreMaxCount = 1;                    // Maximum semaphore count
+
+        // --- Timeout Constants ---
+        private const Int32 QuickTimeoutSeconds = 4;                  // Quick timeout for non-critical operations
+        private const Int32 ExtendedTimeoutSeconds = 6;               // Extended timeout for refresh operations
+        private const Int32 ConnectionTimeoutSeconds = 8;             // Connection timeout for Home Assistant
+
+        // --- Example Placeholder Values ---
+        private const Int32 ExampleMinutesValue = 5;                  // Example minutes value for placeholder
+
         private const String LogPrefix = "[RunScript]";
 
         private HaWebSocketClient? _client;
@@ -24,7 +40,7 @@ namespace Loupedeck.HomeAssistantPlugin
     new(StringComparer.OrdinalIgnoreCase);
 
         private static volatile Boolean _scriptsLoadedOnce = false;
-        private static readonly SemaphoreSlim _scriptsRefreshGate = new(1, 1);
+        private static readonly SemaphoreSlim _scriptsRefreshGate = new(SemaphoreInitialCount, SemaphoreMaxCount);
 
         private const String ControlScript = "ha_script";
         private const String ControlVarsJson = "ha_vars_json";
@@ -39,7 +55,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
         // Gate to avoid concurrent connect races
-        private static readonly SemaphoreSlim _haConnectGate = new(1, 1);
+        private static readonly SemaphoreSlim _haConnectGate = new(SemaphoreInitialCount, SemaphoreMaxCount);
 
         public RunScriptAction()
         {
@@ -51,7 +67,7 @@ namespace Loupedeck.HomeAssistantPlugin
             this.ActionEditor.AddControlEx(new ActionEditorListbox(ControlScript, "Script"));
             this.ActionEditor.AddControlEx(
                 new ActionEditorTextbox(ControlVarsJson, "Variables (JSON)")
-                    .SetPlaceholder("{\"minutes\":5,\"who\":\"guest\"}")
+                    .SetPlaceholder($"{{\"minutes\":{ExampleMinutesValue},\"who\":\"guest\"}}")
             );
             this.ActionEditor.AddControlEx(
                 new ActionEditorCheckbox(ControlUseToggle, "Prefer script.toggle (no variables)")
@@ -70,7 +86,7 @@ namespace Loupedeck.HomeAssistantPlugin
             // Fire-and-forget prefetch with a short timeout to be ready for the first open
             this.ActionEditor.Started += async (_, __) =>
                 {
-                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(QuickTimeoutSeconds));
                     _ = this.RefreshScriptsCacheAsync(cts.Token); // fire-and-forget
                 };
         }
@@ -87,7 +103,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 this._events = p.HaEvents;
 
                 // Fire-and-forget prefetch with a short timeout to be ready for the first open
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(QuickTimeoutSeconds));
                 _ = this.RefreshScriptsCacheAsync(cts.Token);
 
                 if (this._events != null)
@@ -148,7 +164,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 }
 
                 var (ok, msg) = await this._client.ConnectAndAuthenticateAsync(
-                    baseUrl, token, TimeSpan.FromSeconds(8), CancellationToken.None
+                    baseUrl, token, TimeSpan.FromSeconds(ConnectionTimeoutSeconds), CancellationToken.None
                 ).ConfigureAwait(false);
 
                 PluginLog.Info($"{LogPrefix} Auth result ok={ok} msg='{msg}'");
@@ -340,7 +356,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 // Kick a background load with a short timeout; UI stays responsive
                 Task.Run(async () =>
                 {
-                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(QuickTimeoutSeconds));
                     var ok = await this.RefreshScriptsCacheAsync(cts.Token).ConfigureAwait(false);
                     PluginLog.Info($"{LogPrefix} Background prefetch after list request ok={ok}");
                 });
@@ -370,7 +386,7 @@ namespace Loupedeck.HomeAssistantPlugin
             // Try a refresh in the background; user can reopen the list to see results
             Task.Run(async () =>
             {
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(6));
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(ExtendedTimeoutSeconds));
                 var ok = await this.RefreshScriptsCacheAsync(cts.Token).ConfigureAwait(false);
 
                 // Give immediate feedback; reopening the dropdown will re-query and hit the cache
