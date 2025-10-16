@@ -6,10 +6,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
     public class HomeAssistantApplication : ClientApplication
     {
-        public HomeAssistantApplication()
-        {
-            PluginLog.Verbose("[HomeAssistantApplication] Constructor called - initializing ClientApplication");
-        }
+        public HomeAssistantApplication() => PluginLog.Verbose("[HomeAssistantApplication] Constructor called - initializing ClientApplication");
 
         // This method can be used to link the plugin to a Windows application.
         protected override String GetProcessName()

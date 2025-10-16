@@ -25,7 +25,7 @@ namespace Loupedeck.HomeAssistantPlugin
             Int32 brightnessDebounceMs, Int32 hsDebounceMs, Int32 tempDebounceMs)
         {
             PluginLog.Info($"[LightControlService] Constructor - Initializing with debounce timings: brightness={brightnessDebounceMs}ms, hs={hsDebounceMs}ms, temp={tempDebounceMs}ms");
-            
+
             this._ha = ha ?? throw new ArgumentNullException(nameof(ha));
             this._brightnessDebounceMs = brightnessDebounceMs;
             this._hsDebounceMs = hsDebounceMs;
@@ -36,7 +36,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 this._brightnessSender = new DebouncedSender<String, Int32>(this._brightnessDebounceMs, this.SendBrightnessAsync);
                 this._hsSender = new DebouncedSender<String, Hs>(this._hsDebounceMs, this.SendHsAsync);
                 this._tempSender = new DebouncedSender<String, Int32>(this._tempDebounceMs, this.SendTempAsync);
-                
+
                 PluginLog.Info("[LightControlService] Constructor completed - All debounced senders initialized");
             }
             catch (Exception ex)
@@ -88,13 +88,13 @@ namespace Loupedeck.HomeAssistantPlugin
         {
             var hasData = data.HasValue;
             PluginLog.Info($"[LightControlService] TurnOnAsync - entity: {entityId}, hasData: {hasData}");
-            
+
             try
             {
                 var startTime = DateTime.UtcNow;
                 var (ok, error) = await this._ha.CallServiceAsync("light", "turn_on", entityId, data, ct).ConfigureAwait(false);
                 var elapsed = DateTime.UtcNow - startTime;
-                
+
                 if (ok)
                 {
                     PluginLog.Info($"[LightControlService] TurnOnAsync SUCCESS - {entityId} turned on in {elapsed.TotalMilliseconds:F0}ms");
@@ -103,7 +103,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     PluginLog.Warning($"[LightControlService] TurnOnAsync FAILED - {entityId} failed in {elapsed.TotalMilliseconds:F0}ms: {error}");
                 }
-                
+
                 return ok;
             }
             catch (Exception ex)
@@ -116,13 +116,13 @@ namespace Loupedeck.HomeAssistantPlugin
         public async Task<Boolean> TurnOffAsync(String entityId, CancellationToken ct = default)
         {
             PluginLog.Info($"[LightControlService] TurnOffAsync - entity: {entityId}");
-            
+
             try
             {
                 var startTime = DateTime.UtcNow;
                 var (ok, error) = await this._ha.CallServiceAsync("light", "turn_off", entityId, null, ct).ConfigureAwait(false);
                 var elapsed = DateTime.UtcNow - startTime;
-                
+
                 if (ok)
                 {
                     PluginLog.Info($"[LightControlService] TurnOffAsync SUCCESS - {entityId} turned off in {elapsed.TotalMilliseconds:F0}ms");
@@ -131,7 +131,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     PluginLog.Warning($"[LightControlService] TurnOffAsync FAILED - {entityId} failed in {elapsed.TotalMilliseconds:F0}ms: {error}");
                 }
-                
+
                 return ok;
             }
             catch (Exception ex)
@@ -144,13 +144,13 @@ namespace Loupedeck.HomeAssistantPlugin
         public async Task<Boolean> ToggleAsync(String entityId, CancellationToken ct = default)
         {
             PluginLog.Info($"[LightControlService] ToggleAsync - entity: {entityId}");
-            
+
             try
             {
                 var startTime = DateTime.UtcNow;
                 var (ok, error) = await this._ha.CallServiceAsync("light", "toggle", entityId, null, ct).ConfigureAwait(false);
                 var elapsed = DateTime.UtcNow - startTime;
-                
+
                 if (ok)
                 {
                     PluginLog.Info($"[LightControlService] ToggleAsync SUCCESS - {entityId} toggled in {elapsed.TotalMilliseconds:F0}ms");
@@ -159,7 +159,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     PluginLog.Warning($"[LightControlService] ToggleAsync FAILED - {entityId} failed in {elapsed.TotalMilliseconds:F0}ms: {error}");
                 }
-                
+
                 return ok;
             }
             catch (Exception ex)
@@ -256,13 +256,13 @@ namespace Loupedeck.HomeAssistantPlugin
         public void Dispose()
         {
             PluginLog.Info("[LightControlService] Dispose - Cleaning up debounced senders");
-            
+
             try
             {
                 this._brightnessSender?.Dispose();
                 this._hsSender?.Dispose();
                 this._tempSender?.Dispose();
-                
+
                 PluginLog.Info("[LightControlService] Dispose completed successfully");
             }
             catch (Exception ex)

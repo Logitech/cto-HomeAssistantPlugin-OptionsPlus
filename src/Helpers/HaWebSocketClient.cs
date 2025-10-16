@@ -24,7 +24,7 @@ namespace Loupedeck.HomeAssistantPlugin
         {
             var startTime = DateTime.UtcNow;
             PluginLog.Info($"[WS] ConnectAndAuthenticateAsync START - baseUrl='{baseUrl}', timeout={timeout.TotalSeconds}s");
-            
+
             try
             {
                 if (String.IsNullOrWhiteSpace(baseUrl))
@@ -61,7 +61,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 PluginLog.Info($"[WS] Initiating WebSocket connection to {wsUri}...");
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 cts.CancelAfter(timeout);
-                
+
                 var connectStart = DateTime.UtcNow;
                 await this._ws.ConnectAsync(wsUri, cts.Token).ConfigureAwait(false);
                 var connectTime = DateTime.UtcNow - connectStart;
@@ -189,7 +189,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private async Task<Boolean> TryReuseExistingConnectionAsync(String baseUrl, String accessToken, CancellationToken ct)
         {
             PluginLog.Verbose("[WS] TryReuseExistingConnection - Checking connection reusability...");
-            
+
             // Check if we have a connection to the same endpoint with same credentials
             if (this._ws?.State != WebSocketState.Open || !this.IsAuthenticated)
             {
@@ -200,7 +200,7 @@ namespace Loupedeck.HomeAssistantPlugin
             // Check if the connection parameters match
             var urlMatch = String.Equals(this._lastBaseUrl, baseUrl, StringComparison.OrdinalIgnoreCase);
             var tokenMatch = String.Equals(this._lastAccessToken, accessToken, StringComparison.Ordinal);
-            
+
             if (!urlMatch || !tokenMatch)
             {
                 PluginLog.Verbose($"[WS] Connection not reusable - URL match: {urlMatch}, Token match: {tokenMatch}");
@@ -214,13 +214,13 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 cts.CancelAfter(TimeSpan.FromSeconds(5)); // Short timeout for health check
-                
+
                 var healthStart = DateTime.UtcNow;
                 await this.SendPingAsync(cts.Token).ConfigureAwait(false);
-                
+
                 // Wait briefly for a pong response (optional - ping is fire-and-forget in HA)
                 await Task.Delay(100, cts.Token).ConfigureAwait(false);
-                
+
                 var healthTime = DateTime.UtcNow - healthStart;
                 PluginLog.Info($"[WS] Connection reuse successful - Health check passed in {healthTime.TotalMilliseconds:F0}ms");
                 return true;
@@ -301,10 +301,9 @@ namespace Loupedeck.HomeAssistantPlugin
     String domain, String service, String entityId, JsonElement? data, CancellationToken ct)
         {
             var startTime = DateTime.UtcNow;
-            var hasData = data.HasValue;
-            PluginLog.Info($"[WS] CallServiceAsync START - {domain}.{service} -> {entityId}, hasData: {hasData}");
-            
-            if (hasData)
+            PluginLog.Info($"[WS] CallServiceAsync START - {domain}.{service} -> {entityId}, hasData: {data.HasValue}");
+
+            if (data.HasValue)
             {
                 try
                 {
@@ -317,7 +316,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     PluginLog.Verbose($"[WS] Could not log service data: {ex.Message}");
                 }
             }
-            
+
             try
             {
                 // Ensure we have a live, authed socket
@@ -349,7 +348,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 var json = JsonSerializer.Serialize(obj);
                 PluginLog.Verbose($"[WS] Sending call_service with id={id}");
-                
+
                 var sendStart = DateTime.UtcNow;
                 await this.SendTextAsync(json, ct).ConfigureAwait(false);
                 var sendTime = DateTime.UtcNow - sendStart;
@@ -376,7 +375,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     var responseTime = DateTime.UtcNow - responseStart;
                     var totalTime = DateTime.UtcNow - startTime;
                     var success = root.GetProperty("success").GetBoolean();
-                    
+
                     if (success)
                     {
                         PluginLog.Info($"[WS] CallServiceAsync SUCCESS - {domain}.{service} -> {entityId} completed in {totalTime.TotalMilliseconds:F0}ms (response: {responseTime.TotalMilliseconds:F0}ms)");
@@ -390,7 +389,7 @@ namespace Loupedeck.HomeAssistantPlugin
                         {
                             var code = errorElement.TryGetProperty("code", out var codeElement) ? codeElement.GetString() : null;
                             var message = errorElement.TryGetProperty("message", out var messageElement) ? messageElement.GetString() : null;
-                            
+
                             if (!String.IsNullOrEmpty(message))
                             {
                                 error = !String.IsNullOrEmpty(code) ? $"{code}: {message}" : message;
@@ -400,7 +399,7 @@ namespace Loupedeck.HomeAssistantPlugin
                                 error = $"Error code: {code}";
                             }
                         }
-                        
+
                         PluginLog.Warning($"[WS] CallServiceAsync FAILED - {domain}.{service} -> {entityId} failed in {totalTime.TotalMilliseconds:F0}ms: {error}");
                         PluginLog.Verbose($"[WS] Full error response: {root.GetRawText()}");
                         return (false, error);
@@ -441,7 +440,7 @@ namespace Loupedeck.HomeAssistantPlugin
         public async Task SafeCloseAsync()
         {
             PluginLog.Verbose($"[WS] SafeCloseAsync - Current state: {this._ws?.State}, Authenticated: {this.IsAuthenticated}");
-            
+
             try
             {
                 if (this._ws != null && this._ws.State == WebSocketState.Open)

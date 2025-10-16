@@ -13,14 +13,14 @@ namespace Loupedeck.HomeAssistantPlugin
         {
             var startTime = DateTime.UtcNow;
             PluginLog.Verbose($"[ColorConv] XyBriToRgb() called with x={x:F4}, y={y:F4}, brightness={brightness}");
-            
+
             try
             {
                 // Input validation and clamping
                 var originalX = x;
                 var originalY = y;
                 var originalBrightness = brightness;
-                
+
                 x = Math.Max(0.0001, Math.Min(0.9999, x));
                 y = Math.Max(0.0001, Math.Min(0.9999, y));
                 var Y = Math.Max(0, Math.Min(1, brightness / 255.0)); // relative luminance
@@ -35,7 +35,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 // xyY -> XYZ conversion
                 var X = Y / y * x;
                 var Z = Y / y * (1.0 - x - y);
-                
+
                 PluginLog.Verbose($"[ColorConv] XYZ color space: X={X:F4}, Y={Y:F4}, Z={Z:F4}");
 
                 // XYZ -> linear sRGB (D65) conversion
@@ -49,12 +49,12 @@ namespace Loupedeck.HomeAssistantPlugin
                 var rClipped = Math.Max(0, r);
                 var gClipped = Math.Max(0, g);
                 var bClipped = Math.Max(0, b);
-                
+
                 if (r != rClipped || g != gClipped || b != bClipped)
                 {
                     PluginLog.Verbose($"[ColorConv] Negative values clipped: r {r:F4}->{rClipped:F4}, g {g:F4}->{gClipped:F4}, b {b:F4}->{bClipped:F4}");
                 }
-                
+
                 r = rClipped;
                 g = gClipped;
                 b = bClipped;
@@ -81,17 +81,17 @@ namespace Loupedeck.HomeAssistantPlugin
                 var R = (Int32)Math.Round(255.0 * Math.Max(0, Math.Min(1, r)));
                 var G = (Int32)Math.Round(255.0 * Math.Max(0, Math.Min(1, g)));
                 var B = (Int32)Math.Round(255.0 * Math.Max(0, Math.Min(1, b)));
-                
+
                 var elapsed = (DateTime.UtcNow - startTime).TotalMilliseconds;
                 PluginLog.Info($"[ColorConv] Color conversion completed in {elapsed:F2}ms: xy({x:F4},{y:F4}) + bri({brightness}) -> RGB({R},{G},{B})");
-                
+
                 return (R, G, B);
             }
             catch (Exception ex)
             {
                 var elapsed = (DateTime.UtcNow - startTime).TotalMilliseconds;
                 PluginLog.Error($"[ColorConv] Exception during color conversion after {elapsed:F2}ms: {ex.Message}");
-                
+
                 // Return safe fallback - white at specified brightness
                 var fallbackValue = Math.Max(0, Math.Min(255, brightness));
                 PluginLog.Warning($"[ColorConv] Returning fallback RGB({fallbackValue},{fallbackValue},{fallbackValue})");

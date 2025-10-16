@@ -15,7 +15,7 @@ namespace Loupedeck.HomeAssistantPlugin
         public IconService(IDictionary<String, String> resourceMap)
         {
             PluginLog.Info($"[IconService] Constructor - Initializing with {resourceMap?.Count ?? 0} icon mappings");
-            
+
             if (resourceMap is null)
             {
                 PluginLog.Error("[IconService] Constructor failed - resourceMap is null");
@@ -70,7 +70,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 PluginLog.Verbose($"[IconService] Get SUCCESS - Found cached icon for id: '{id}'");
                 return img;
             }
-            
+
             PluginLog.Warning($"[IconService] Get FALLBACK - Icon not found for id: '{id}', returning fallback icon");
             return CreateFallbackIcon();
         }
@@ -81,7 +81,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private static BitmapImage CreateFallbackIcon()
         {
             PluginLog.Verbose("[IconService] CreateFallbackIcon - Generating fallback question mark icon");
-            
+
             try
             {
                 // Use a standard 80x80 size for fallback icons

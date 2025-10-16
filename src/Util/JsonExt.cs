@@ -28,12 +28,12 @@ namespace Loupedeck.HomeAssistantPlugin
                 JsonValueKind.String => property.GetString(),
                 _ => null // Return null for non-string, non-null values (numbers, booleans, objects, arrays)
             };
-            
+
             if (result == null && property.ValueKind != JsonValueKind.Null)
             {
                 PluginLog.Verbose($"[JsonExt] GetPropertyOrDefault - Property '{name}' exists but is not a string (ValueKind: {property.ValueKind})");
             }
-            
+
             return result;
         }
     }
