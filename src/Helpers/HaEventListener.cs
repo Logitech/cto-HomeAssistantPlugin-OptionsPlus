@@ -30,36 +30,55 @@ namespace Loupedeck.HomeAssistantPlugin
 
         public async Task<Boolean> ConnectAndSubscribeAsync(String baseUrl, String accessToken, CancellationToken ct)
         {
+            var startTime = DateTime.UtcNow;
+            PluginLog.Info($"[Events] ConnectAndSubscribeAsync START - baseUrl: '{baseUrl}'");
+            
             try
             {
                 var wsUri = BuildWebSocketUri(baseUrl);
+                PluginLog.Info($"[Events] Built WebSocket URI: {wsUri}");
+                
                 this._ws?.Dispose();
                 this._ws = new ClientWebSocket();
 
+                PluginLog.Verbose("[Events] Initiating WebSocket connection...");
+                var connectStart = DateTime.UtcNow;
                 await this._ws.ConnectAsync(wsUri, ct);
+                var connectTime = DateTime.UtcNow - connectStart;
+                PluginLog.Info($"[Events] WebSocket connected in {connectTime.TotalMilliseconds:F0}ms");
 
                 // 1) auth_required
+                PluginLog.Verbose("[Events] Waiting for auth_required message...");
                 var first = await this.ReceiveTextAsync(ct);
                 var type = ReadType(first);
+                PluginLog.Info($"[Events] First message received: type='{type}'");
+                
                 if (!String.Equals(type, "auth_required", StringComparison.OrdinalIgnoreCase))
                 {
+                    PluginLog.Error($"[Events] Authentication failed - Expected 'auth_required', got '{type}'");
                     return false;
                 }
 
                 // 2) auth
+                PluginLog.Verbose("[Events] Sending authentication...");
                 var auth = JsonSerializer.Serialize(new { type = "auth", access_token = accessToken });
                 await this.SendTextAsync(auth, ct);
 
                 // 3) auth_ok
+                PluginLog.Verbose("[Events] Waiting for auth response...");
                 var authReply = await this.ReceiveTextAsync(ct);
                 var authType = ReadType(authReply);
+                PluginLog.Info($"[Events] Auth response: type='{authType}'");
+                
                 if (!String.Equals(authType, "auth_ok", StringComparison.OrdinalIgnoreCase))
                 {
+                    PluginLog.Error($"[Events] Authentication failed - Got '{authType}' instead of 'auth_ok'");
                     return false;
                 }
 
                 // 4) subscribe_events: state_changed
                 var id = Interlocked.Increment(ref this._nextId);
+                PluginLog.Info($"[Events] Subscribing to state_changed events with id={id}...");
                 var sub = JsonSerializer.Serialize(new { id, type = "subscribe_events", event_type = "state_changed" });
                 await this.SendTextAsync(sub, ct);
 
@@ -68,10 +87,15 @@ namespace Loupedeck.HomeAssistantPlugin
                 using (var doc = JsonDocument.Parse(subReply))
                 {
                     var root = doc.RootElement;
-                    if (!(root.TryGetProperty("type", out var t) && t.GetString() == "result"
-                          && root.TryGetProperty("id", out var rid) && rid.GetInt32() == id
-                          && root.TryGetProperty("success", out var s) && s.GetBoolean()))
+                    var isResult = root.TryGetProperty("type", out var t) && t.GetString() == "result";
+                    var matchesId = root.TryGetProperty("id", out var rid) && rid.GetInt32() == id;
+                    var isSuccess = root.TryGetProperty("success", out var s) && s.GetBoolean();
+                    
+                    PluginLog.Info($"[Events] Subscription response - isResult: {isResult}, matchesId: {matchesId}, isSuccess: {isSuccess}");
+                    
+                    if (!(isResult && matchesId && isSuccess))
                     {
+                        PluginLog.Error($"[Events] Subscription failed - Response: {subReply}");
                         return false;
                     }
                 }
@@ -79,11 +103,15 @@ namespace Loupedeck.HomeAssistantPlugin
                 this._cts?.Cancel();
                 this._cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 this._loop = Task.Run(() => this.ReceiveLoopAsync(this._cts.Token));
+                
+                var totalTime = DateTime.UtcNow - startTime;
+                PluginLog.Info($"[Events] ConnectAndSubscribeAsync SUCCESS - Event listener ready in {totalTime.TotalMilliseconds:F0}ms");
                 return true;
             }
             catch (Exception ex)
             {
-                PluginLog.Warning(ex, "[events] connect/subscribe failed");
+                var elapsed = DateTime.UtcNow - startTime;
+                PluginLog.Error(ex, $"[Events] ConnectAndSubscribeAsync FAILED after {elapsed.TotalSeconds:F1}s");
                 await this.SafeCloseAsync();
                 return false;
             }
@@ -331,31 +359,53 @@ namespace Loupedeck.HomeAssistantPlugin
 
         public async Task SafeCloseAsync()
         {
+            PluginLog.Info($"[Events] SafeCloseAsync - Current state: {this._ws?.State}");
+            
             try
             {
+                PluginLog.Verbose("[Events] Canceling event processing loop...");
                 this._cts?.Cancel();
+                
                 if (this._ws?.State == WebSocketState.Open)
                 {
+                    PluginLog.Verbose("[Events] Closing WebSocket connection...");
+                    var closeStart = DateTime.UtcNow;
                     await this._ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Bye", CancellationToken.None);
+                    var closeTime = DateTime.UtcNow - closeStart;
+                    PluginLog.Info($"[Events] WebSocket closed in {closeTime.TotalMilliseconds:F0}ms");
+                }
+                else
+                {
+                    PluginLog.Verbose($"[Events] WebSocket not open (State: {this._ws?.State}), skipping close");
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                PluginLog.Warning(ex, "[Events] Error during SafeCloseAsync");
+            }
             finally
             {
                 this._ws?.Dispose();
                 this._ws = null;
+                PluginLog.Info("[Events] Event listener disposed and reset");
             }
         }
 
         public void Dispose()
         {
+            PluginLog.Info("[Events] Dispose - Cleaning up event listener");
+            
             try
             {
                 this._cts?.Cancel();
                 this._ws?.Dispose();
                 this._ws = null;
+                PluginLog.Info("[Events] Dispose completed successfully");
             }
-            catch { /* Ignore disposal exceptions */ }
+            catch (Exception ex)
+            {
+                PluginLog.Warning(ex, "[Events] Error during Dispose");
+            }
         }
 
         // --- helpers ---
