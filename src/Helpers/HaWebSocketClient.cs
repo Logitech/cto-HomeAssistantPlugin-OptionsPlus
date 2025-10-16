@@ -294,7 +294,32 @@ namespace Loupedeck.HomeAssistantPlugin
                     }
 
                     var success = root.GetProperty("success").GetBoolean();
-                    return success ? (true, null) : (false, "call_service failed");
+                    if (success)
+                    {
+                        return (true, null);
+                    }
+                    else
+                    {
+                        // Extract specific error details from the response
+                        var error = "call_service failed";
+                        if (root.TryGetProperty("error", out var errorElement))
+                        {
+                            var code = errorElement.TryGetProperty("code", out var codeElement) ? codeElement.GetString() : null;
+                            var message = errorElement.TryGetProperty("message", out var messageElement) ? messageElement.GetString() : null;
+                            
+                            if (!String.IsNullOrEmpty(message))
+                            {
+                                error = !String.IsNullOrEmpty(code) ? $"{code}: {message}" : message;
+                            }
+                            else if (!String.IsNullOrEmpty(code))
+                            {
+                                error = $"Error code: {code}";
+                            }
+                        }
+                        
+                        PluginLog.Warning($"Home Assistant call_service failed - Domain: {domain}, Service: {service}, Entity: {entityId}, Error: {error}");
+                        return (false, error);
+                    }
                 }
             }
             catch (OperationCanceledException)

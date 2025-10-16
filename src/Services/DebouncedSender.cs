@@ -65,8 +65,15 @@ namespace Loupedeck.HomeAssistantPlugin
             }
 
             try
-            { await this._send(key, value).ConfigureAwait(false); }
-            catch { /* swallow to keep UI responsive; caller should log in _send */ }
+            {
+                await this._send(key, value).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                // Log the exception instead of silently swallowing it
+                // Keep UI responsive by not rethrowing, but ensure visibility of errors
+                PluginLog.Warning(ex, $"DebouncedSender failed to send for key: {key}");
+            }
         }
 
         public void Dispose()
