@@ -7,7 +7,7 @@ namespace Loupedeck.HomeAssistantPlugin
     using System.Threading;
     using System.Threading.Tasks;
 
-    public sealed class HaWebSocketClient : IDisposable
+    public sealed class HaWebSocketClient : IAsyncDisposable, IDisposable
     {
         private ClientWebSocket? _ws;
         private readonly Object _gate = new();
@@ -34,6 +34,12 @@ namespace Loupedeck.HomeAssistantPlugin
                     return (false, "Access token is empty");
                 }
 
+                // Try to reuse existing connection first
+                if (await this.TryReuseExistingConnectionAsync(baseUrl, accessToken, ct).ConfigureAwait(false))
+                {
+                    return (true, "Connection reused");
+                }
+
                 var wsUri = BuildWebSocketUri(baseUrl);
                 this.EndpointUri = wsUri;
 
@@ -41,8 +47,6 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     this._ws?.Dispose();
                     this._ws = new ClientWebSocket();
-
-
                 }
 
                 PluginLog.Info($"Connecting to {wsUri}");
@@ -125,18 +129,66 @@ namespace Loupedeck.HomeAssistantPlugin
 
         public async Task<Boolean> EnsureConnectedAsync(TimeSpan timeout, CancellationToken ct)
         {
-            if (this._ws != null && this._ws.State == WebSocketState.Open && this.IsAuthenticated)
-            {
-                return true;
-            }
-
             if (String.IsNullOrWhiteSpace(this._lastBaseUrl) || String.IsNullOrWhiteSpace(this._lastAccessToken))
             {
                 return false;
             }
 
+            // Try to reuse existing connection with health check
+            if (await this.TryReuseExistingConnectionAsync(this._lastBaseUrl, this._lastAccessToken, ct).ConfigureAwait(false))
+            {
+                return true;
+            }
+
+            // If reuse failed, establish new connection
             var (ok, _) = await this.ConnectAndAuthenticateAsync(this._lastBaseUrl, this._lastAccessToken, timeout, ct);
             return ok;
+        }
+
+        private async Task<Boolean> TryReuseExistingConnectionAsync(String baseUrl, String accessToken, CancellationToken ct)
+        {
+            // Check if we have a connection to the same endpoint with same credentials
+            if (this._ws?.State != WebSocketState.Open || !this.IsAuthenticated)
+            {
+                return false;
+            }
+
+            // Check if the connection parameters match
+            if (!String.Equals(this._lastBaseUrl, baseUrl, StringComparison.OrdinalIgnoreCase) ||
+                !String.Equals(this._lastAccessToken, accessToken, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            // Test connection health with a ping
+            try
+            {
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(TimeSpan.FromSeconds(5)); // Short timeout for health check
+                
+                await this.SendPingAsync(cts.Token).ConfigureAwait(false);
+                
+                // Wait briefly for a pong response (optional - ping is fire-and-forget in HA)
+                await Task.Delay(100, cts.Token).ConfigureAwait(false);
+                
+                PluginLog.Info("Connection reuse: Existing connection is healthy");
+                return true;
+            }
+            catch (OperationCanceledException)
+            {
+                PluginLog.Info("Connection reuse: Health check timeout, connection may be stale");
+                return false;
+            }
+            catch (WebSocketException)
+            {
+                PluginLog.Info("Connection reuse: WebSocket error during health check");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Warning(ex, "Connection reuse: Unexpected error during health check");
+                return false;
+            }
         }
 
 
@@ -294,7 +346,20 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
-        public void Dispose() => _ = this.SafeCloseAsync();
+        // Implement IAsyncDisposable for proper async resource cleanup
+        public async ValueTask DisposeAsync()
+        {
+            await this.SafeCloseAsync().ConfigureAwait(false);
+            GC.SuppressFinalize(this);
+        }
+
+        // Synchronous dispose for backwards compatibility
+        public void Dispose()
+        {
+            // Use GetAwaiter().GetResult() to avoid deadlocks in sync contexts
+            this.SafeCloseAsync().GetAwaiter().GetResult();
+            GC.SuppressFinalize(this);
+        }
 
         // ---- helpers ----
 
