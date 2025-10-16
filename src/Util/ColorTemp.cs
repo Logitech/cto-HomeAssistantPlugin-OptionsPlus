@@ -4,14 +4,26 @@ namespace Loupedeck.HomeAssistantPlugin
 
     internal static class ColorTemp
     {
+        // ====================================================================
+        // CONSTANTS - Color Temperature Conversion Constants
+        // ====================================================================
+
+        // --- Kelvin-Mired Conversion Constants ---
+        private const Double KelvinMiredConversionFactor = 1_000_000.0;    // Conversion factor: Kelvin × Mired = 1,000,000
+        private const Int32 MinSafeTemperatureValue = 1;                   // Minimum safe value to prevent division by zero
+
+        // --- Fallback Temperature Values ---
+        private const Int32 FallbackKelvinWarmWhite = 2700;                // Safe fallback Kelvin temperature (warm white)
+        private const Int32 FallbackMiredWarmWhite = 370;                  // Safe fallback Mired value (~2700K warm white)
+
         public static Int32 MiredToKelvin(Int32 mired)
         {
             PluginLog.Verbose($"[ColorTemp] MiredToKelvin({mired}) called");
 
             try
             {
-                var safeMired = Math.Max(1, mired);
-                var result = (Int32)Math.Round(1_000_000.0 / safeMired);
+                var safeMired = Math.Max(MinSafeTemperatureValue, mired);
+                var result = (Int32)Math.Round(KelvinMiredConversionFactor / safeMired);
 
                 if (safeMired != mired)
                 {
@@ -24,7 +36,7 @@ namespace Loupedeck.HomeAssistantPlugin
             catch (Exception ex)
             {
                 PluginLog.Error($"[ColorTemp] Exception in MiredToKelvin({mired}): {ex.Message}");
-                return 2700; // Safe fallback - warm white
+                return FallbackKelvinWarmWhite; // Safe fallback - warm white
             }
         }
 
@@ -34,8 +46,8 @@ namespace Loupedeck.HomeAssistantPlugin
 
             try
             {
-                var safeKelvin = Math.Max(1, kelvin);
-                var result = (Int32)Math.Round(1_000_000.0 / safeKelvin);
+                var safeKelvin = Math.Max(MinSafeTemperatureValue, kelvin);
+                var result = (Int32)Math.Round(KelvinMiredConversionFactor / safeKelvin);
 
                 if (safeKelvin != kelvin)
                 {
@@ -48,7 +60,7 @@ namespace Loupedeck.HomeAssistantPlugin
             catch (Exception ex)
             {
                 PluginLog.Error($"[ColorTemp] Exception in KelvinToMired({kelvin}): {ex.Message}");
-                return 370; // Safe fallback - ~2700K warm white
+                return FallbackMiredWarmWhite; // Safe fallback - ~2700K warm white
             }
         }
     }

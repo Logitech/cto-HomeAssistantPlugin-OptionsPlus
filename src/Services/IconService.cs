@@ -9,6 +9,26 @@ namespace Loupedeck.HomeAssistantPlugin
     /// </summary>
     internal sealed class IconService
     {
+        // ====================================================================
+        // CONSTANTS - Icon Service Configuration
+        // ====================================================================
+
+        // --- Fallback Icon Dimensions ---
+        private const Int32 FallbackIconWidth = 80;                   // Width for fallback icons
+        private const Int32 FallbackIconHeight = 80;                  // Height for fallback icons
+        
+        // --- Fallback Icon Colors ---
+        private const Byte FallbackBackgroundRed = 64;                // Red component for dark gray background
+        private const Byte FallbackBackgroundGreen = 64;              // Green component for dark gray background
+        private const Byte FallbackBackgroundBlue = 64;               // Blue component for dark gray background
+        private const Byte FallbackTextRed = 255;                     // Red component for white text
+        private const Byte FallbackTextGreen = 255;                   // Green component for white text
+        private const Byte FallbackTextBlue = 255;                    // Blue component for white text
+        
+        // --- Fallback Icon Text Settings ---
+        private const Int32 FallbackFontSize = 32;                    // Font size for fallback question mark
+        private const String FallbackIconText = "?";                  // Text to display in fallback icon
+
         private readonly Dictionary<String, BitmapImage?> _cache = new(StringComparer.OrdinalIgnoreCase);
 
         /// <param name="resourceMap">logical id → embedded resource filename</param>
@@ -84,10 +104,10 @@ namespace Loupedeck.HomeAssistantPlugin
 
             try
             {
-                // Use a standard 80x80 size for fallback icons
-                using var bb = new BitmapBuilder(80, 80);
-                bb.Clear(new BitmapColor(64, 64, 64)); // Dark gray background
-                bb.DrawText("?", fontSize: 32, color: new BitmapColor(255, 255, 255)); // White question mark
+                // Use a standard size for fallback icons
+                using var bb = new BitmapBuilder(FallbackIconWidth, FallbackIconHeight);
+                bb.Clear(new BitmapColor(FallbackBackgroundRed, FallbackBackgroundGreen, FallbackBackgroundBlue)); // Dark gray background
+                bb.DrawText(FallbackIconText, fontSize: FallbackFontSize, color: new BitmapColor(FallbackTextRed, FallbackTextGreen, FallbackTextBlue)); // White question mark
                 return bb.ToImage();
             }
             catch (Exception ex)

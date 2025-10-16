@@ -10,6 +10,13 @@ namespace Loupedeck.HomeAssistantPlugin
 
     public sealed class ToggleLightAction : ActionEditorCommand
     {
+        // ====================================================================
+        // CONSTANTS - Toggle Light Action Configuration
+        // ====================================================================
+
+        // --- Connection Constants ---
+        private const Int32 ConnectionTimeoutSeconds = 8;              // Timeout for Home Assistant authentication
+
         private const String LogPrefix = "[ToggleLight]";
         private HaWebSocketClient? _client;
 
@@ -83,7 +90,7 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 PluginLog.Info($"{LogPrefix} Connecting to HA… url='{baseUrl}'");
                 var (ok, msg) = await this._client!.ConnectAndAuthenticateAsync(
-                    baseUrl, token, TimeSpan.FromSeconds(8), CancellationToken.None
+                    baseUrl, token, TimeSpan.FromSeconds(ConnectionTimeoutSeconds), CancellationToken.None
                 ).ConfigureAwait(false);
 
                 PluginLog.Info($"{LogPrefix} Auth result ok={ok} msg='{msg}'");

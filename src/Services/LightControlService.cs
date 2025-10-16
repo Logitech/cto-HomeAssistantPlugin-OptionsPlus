@@ -8,6 +8,24 @@ namespace Loupedeck.HomeAssistantPlugin
 
     internal sealed class LightControlService : IDisposable
     {
+        // ====================================================================
+        // CONSTANTS - Light Control Service Configuration
+        // ====================================================================
+
+        // --- Brightness Range Constants ---
+        private const Int32 MinBrightnessValue = 0;                    // Minimum brightness value (off)
+        private const Int32 MaxBrightnessValue = 255;                  // Maximum brightness value (full brightness)
+
+        // --- Saturation Range Constants ---
+        private const Double MinSaturationValue = 0.0;                 // Minimum saturation value (grayscale)
+        private const Double MaxSaturationValue = 100.0;               // Maximum saturation value (fully saturated)
+
+        // --- Color Temperature Constants ---
+        private const Int32 MinMiredValue = 1;                         // Minimum mired value to prevent division by zero
+
+        // --- Service Timeout Constants ---
+        private const Int32 ServiceCallTimeoutSeconds = 4;             // Timeout for Home Assistant service calls
+
         private readonly IHaClient _ha;
         private readonly Int32 _brightnessDebounceMs;
         private readonly Int32 _hsDebounceMs;
@@ -48,7 +66,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
         public void SetBrightness(String entityId, Int32 value)
         {
-            var clampedValue = HSBHelper.Clamp(value, 0, 255);
+            var clampedValue = HSBHelper.Clamp(value, MinBrightnessValue, MaxBrightnessValue);
             PluginLog.Verbose($"[LightControlService] SetBrightness - entity: {entityId}, value: {value} -> {clampedValue}");
             this._brightnessSender.Set(entityId, clampedValue);
         }
@@ -56,14 +74,14 @@ namespace Loupedeck.HomeAssistantPlugin
         public void SetHueSat(String entityId, Double h, Double s)
         {
             var wrappedH = HSBHelper.Wrap360(h);
-            var clampedS = HSBHelper.Clamp(s, 0, 100);
+            var clampedS = HSBHelper.Clamp(s, MinSaturationValue, MaxSaturationValue);
             PluginLog.Verbose($"[LightControlService] SetHueSat - entity: {entityId}, h: {h:F1} -> {wrappedH:F1}, s: {s:F1} -> {clampedS:F1}");
             this._hsSender.Set(entityId, new Hs(wrappedH, clampedS));
         }
 
         public void SetTempMired(String entityId, Int32 mired)
         {
-            var clampedMired = Math.Max(1, mired);
+            var clampedMired = Math.Max(MinMiredValue, mired);
             PluginLog.Verbose($"[LightControlService] SetTempMired - entity: {entityId}, mired: {mired} -> {clampedMired}");
             this._tempSender.Set(entityId, clampedMired);
         }
@@ -175,7 +193,7 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 if (!this._ha.IsAuthenticated)
                 { HealthBus.Error("Connection lost"); return; }
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(ServiceCallTimeoutSeconds));
                 var data = JsonSerializer.SerializeToElement(new { brightness = target });
                 var (ok, err) = await this._ha.CallServiceAsync("light", "turn_on", entityId, data, cts.Token).ConfigureAwait(false);
                 if (ok)
@@ -205,7 +223,7 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 if (!this._ha.IsAuthenticated)
                 { HealthBus.Error("Connection lost"); return; }
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(ServiceCallTimeoutSeconds));
 
                 var data = JsonSerializer.SerializeToElement(new { hs_color = new Object[] { hs.H, hs.S } });
                 var (ok, err) = await this._ha.CallServiceAsync("light", "turn_on", entityId, data, cts.Token).ConfigureAwait(false);
@@ -231,7 +249,7 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 if (!this._ha.IsAuthenticated)
                 { HealthBus.Error("Connection lost"); return; }
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(ServiceCallTimeoutSeconds));
 
                 var kelvin = ColorTemp.MiredToKelvin(mired);
                 var data = JsonSerializer.SerializeToElement(new { color_temp_kelvin = kelvin });
