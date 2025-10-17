@@ -9,7 +9,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
     using Loupedeck;
 
-    public sealed class RunScriptAction : ActionEditorCommand
+    public sealed class RunScriptAction : ActionEditorCommand, IDisposable
     {
         // ====================================================================
         // CONSTANTS - Run Script Action Configuration
@@ -36,11 +36,9 @@ namespace Loupedeck.HomeAssistantPlugin
         private const String ItemNone = "!none";
 
 
-        private static readonly ConcurrentDictionary<String, String> _scripts =
-    new(StringComparer.OrdinalIgnoreCase);
-
-        private static volatile Boolean _scriptsLoadedOnce = false;
-        private static readonly SemaphoreSlim _scriptsRefreshGate = new(SemaphoreInitialCount, SemaphoreMaxCount);
+        private readonly ConcurrentDictionary<String, String> _scripts;
+        private volatile Boolean _scriptsLoadedOnce;
+        private readonly SemaphoreSlim _scriptsRefreshGate;
 
         private const String ControlScript = "ha_script";
         private const String ControlVarsJson = "ha_vars_json";
@@ -49,16 +47,22 @@ namespace Loupedeck.HomeAssistantPlugin
         private readonly IconService _icons;
 
         // Cache "running" state of scripts (kept updated by HaEventListener)
-        private static readonly ConcurrentDictionary<String, Boolean> _isRunningCache =
-            new(StringComparer.OrdinalIgnoreCase);
-
-
+        private readonly ConcurrentDictionary<String, Boolean> _isRunningCache;
 
         // Gate to avoid concurrent connect races
-        private static readonly SemaphoreSlim _haConnectGate = new(SemaphoreInitialCount, SemaphoreMaxCount);
+        private readonly SemaphoreSlim _haConnectGate;
+
+        private Boolean _disposed = false;
 
         public RunScriptAction()
         {
+            // Initialize instance fields
+            this._scripts = new ConcurrentDictionary<String, String>(StringComparer.OrdinalIgnoreCase);
+            this._scriptsLoadedOnce = false;
+            this._scriptsRefreshGate = new SemaphoreSlim(SemaphoreInitialCount, SemaphoreMaxCount);
+            this._isRunningCache = new ConcurrentDictionary<String, Boolean>(StringComparer.OrdinalIgnoreCase);
+            this._haConnectGate = new SemaphoreSlim(SemaphoreInitialCount, SemaphoreMaxCount);
+
             this.Name = "HomeAssistant.RunScript";
             this.DisplayName = "HA: Run Script";
             this.GroupName = "Home Assistant";
@@ -496,6 +500,16 @@ namespace Loupedeck.HomeAssistantPlugin
                 return JsonSerializer.Serialize(elem);
             }
             catch { return "null"; }
+        }
+
+        public void Dispose()
+        {
+            if (!this._disposed)
+            {
+                this._scriptsRefreshGate?.Dispose();
+                this._haConnectGate?.Dispose();
+                this._disposed = true;
+            }
         }
     }
 }
