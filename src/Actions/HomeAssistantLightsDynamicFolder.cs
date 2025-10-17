@@ -1054,10 +1054,10 @@ namespace Loupedeck.HomeAssistantPlugin
                     PluginLog.Info("[LightsDynamicFolder] Load() - Initializing dependencies");
                     
                     this._ha = new HaClientAdapter(haPlugin.HaClient);
-                    this._dataService = new Services.HomeAssistantDataService(this._ha);
-                    this._dataParser = new Services.HomeAssistantDataParser(this._capSvc);
-                    this._lightStateManager = new Services.LightStateManager();
-                    this._registryService = new Services.RegistryService();
+                    this._dataService = new HomeAssistantDataService(this._ha);
+                    this._dataParser = new HomeAssistantDataParser(this._capSvc);
+                    this._lightStateManager = new LightStateManager();
+                    this._registryService = new RegistryService();
 
                     // Initialize light control service with debounce settings
                     const Int32 BrightnessDebounceMs = SendDebounceMs;
@@ -1253,12 +1253,30 @@ namespace Loupedeck.HomeAssistantPlugin
                 var (okStates, statesJson, errStates) = this._dataService.FetchStatesAsync(this._cts.Token).GetAwaiter().GetResult();
                 if (!okStates)
                 {
+                    PluginLog.Error($"Failed to fetch states: {errStates}");
+                    return false;
+                }
+
+                // Validate statesJson is not null even if fetch succeeded
+                if (String.IsNullOrEmpty(statesJson))
+                {
+                    PluginLog.Error("FetchStatesAsync succeeded but returned null or empty JSON data");
+                    HealthBus.Error("Invalid states data");
                     return false;
                 }
 
                 var (okServices, servicesJson, errServices) = this._dataService.FetchServicesAsync(this._cts.Token).GetAwaiter().GetResult();
                 if (!okServices)
                 {
+                    PluginLog.Error($"Failed to fetch services: {errServices}");
+                    return false;
+                }
+
+                // Validate servicesJson is not null even if fetch succeeded
+                if (String.IsNullOrEmpty(servicesJson))
+                {
+                    PluginLog.Error("FetchServicesAsync succeeded but returned null or empty JSON data");
+                    HealthBus.Error("Invalid services data");
                     return false;
                 }
 
@@ -1269,6 +1287,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 // Validate required JSON data using the parser
                 if (!this._dataParser.ValidateJsonData(statesJson, servicesJson))
                 {
+                    PluginLog.Error("JSON data validation failed");
                     return false;
                 }
 
@@ -1278,7 +1297,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 // Update the registry service
                 this._registryService.UpdateRegistries(registryData);
 
-                // Parse light states using the parser
+                // Parse light states using the parser - statesJson is now guaranteed to be non-null
                 var lights = this._dataParser.ParseLightStates(statesJson, registryData);
 
                 // Initialize light state manager with parsed lights
