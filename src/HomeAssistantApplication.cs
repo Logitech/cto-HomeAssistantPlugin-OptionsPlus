@@ -31,10 +31,8 @@ namespace Loupedeck.HomeAssistantPlugin
         }
 
         // Never matches any foreground app => plugin stays "general"
-        protected override Boolean IsProcessNameSupported(String processName)
-        {
-            PluginLog.Verbose($"[HomeAssistantApplication] IsProcessNameSupported('{processName}') called - returning false (no process matching)");
-            return false;
-        }
+        protected override Boolean IsProcessNameSupported(String processName) =>
+            //PluginLog.Verbose($"[HomeAssistantApplication] IsProcessNameSupported('{processName}') called - returning false (no process matching)");   //removed for performance
+            false;
     }
 }
