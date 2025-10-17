@@ -5,9 +5,9 @@ namespace Loupedeck.HomeAssistantPlugin
     using System.Text.Json;
     using System.Threading;
 
-
-
     using Loupedeck; // ensure this is present
+    using Loupedeck.HomeAssistantPlugin.Models;
+    using Loupedeck.HomeAssistantPlugin.Services;
 
     public class HomeAssistantLightsDynamicFolder : PluginDynamicFolder
     {
@@ -60,9 +60,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
         private LightCaps GetCaps(String eid) =>
-            this._capsByEntity.TryGetValue(eid, out var c)
-                ? c
-                : new LightCaps(true, false, false, false); // safe default: on/off + brightness
+            this._lightStateManager.GetCapabilities(eid);
 
 
 
@@ -662,6 +660,12 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
 
+        // New service dependencies
+        private readonly IHomeAssistantDataService _dataService;
+        private readonly IHomeAssistantDataParser _dataParser;
+        private readonly ILightStateManager _lightStateManager;
+        private readonly IRegistryService _registryService;
+
         public HomeAssistantLightsDynamicFolder()
         {
             this.DisplayName = "All Light Controls";
@@ -686,6 +690,12 @@ namespace Loupedeck.HomeAssistantPlugin
             // Wrap the raw client so the service can be unit-tested / mocked later
             this._ha = new HaClientAdapter(this._client);
 
+            // Initialize new services
+            this._dataService = new Services.HomeAssistantDataService(this._ha);
+            this._dataParser = new Services.HomeAssistantDataParser(this._capSvc);
+            this._lightStateManager = new Services.LightStateManager();
+            this._registryService = new Services.RegistryService();
+
             // If you want separate debounce timings per channel, split these constants.
             const Int32 BrightnessDebounceMs = SendDebounceMs;
             const Int32 HueSatDebounceMs = SendDebounceMs;
@@ -697,9 +707,6 @@ namespace Loupedeck.HomeAssistantPlugin
                 HueSatDebounceMs,
                 TempDebounceMs
             );
-
-
-
         }
 
         public override PluginDynamicFolderNavigation GetNavigationArea(DeviceType _) =>
@@ -811,13 +818,9 @@ namespace Loupedeck.HomeAssistantPlugin
             return actionParameter.StartsWith(PfxActOff, StringComparison.OrdinalIgnoreCase) ? "Off" : actionParameter;
         }
 
-        private Int32 GetEffectiveBrightnessForDisplay(String entityId)
-        {
-            // If we know it’s OFF, show 0; otherwise show cached B
-            return this._isOnByEntity.TryGetValue(entityId, out var on) && !on
-                ? BrightnessOff
-                : this._hsbByEntity.TryGetValue(entityId, out var hsb) ? hsb.B : BrightnessOff;
-        }
+        private Int32 GetEffectiveBrightnessForDisplay(String entityId) =>
+            // Use the service for getting effective brightness
+            this._lightStateManager.GetEffectiveBrightness(entityId);
 
         // Paint the tile: green when OK, red on error
         public override BitmapImage GetCommandImage(String actionParameter, PluginImageSize imageSize)
@@ -1216,97 +1219,40 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
 
-        private Boolean FetchLightsAndServices()
+        private Boolean ValidateJsonData(String? statesJson, String? servicesJson)
         {
+            if (String.IsNullOrEmpty(statesJson))
+            {
+                PluginLog.Warning("get_states returned null or empty JSON");
+                HealthBus.Error("get_states returned invalid data");
+                return false;
+            }
+
+            if (String.IsNullOrEmpty(servicesJson))
+            {
+                PluginLog.Warning("get_services returned null or empty JSON");
+                HealthBus.Error("get_services returned invalid data");
+                return false;
+            }
+
+            return true;
+        }
+
+        private (Dictionary<String, (String name, String mf, String model)> DeviceById,
+                 Dictionary<String, String> DeviceAreaById) ParseDeviceRegistry(Boolean ok, String? json)
+        {
+            var deviceById = new Dictionary<String, (String name, String mf, String model)>(StringComparer.OrdinalIgnoreCase);
+            var deviceAreaById = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
+
+            if (!ok || String.IsNullOrEmpty(json))
+            {
+                return (deviceById, deviceAreaById);
+            }
+
             try
             {
-                // 1) get_states
-                var (okStates, statesJson, errStates) = this._client.RequestAsync("get_states", this._cts.Token)
-                                                               .GetAwaiter().GetResult();
-                if (!okStates)
-                {
-                    PluginLog.Warning($"get_states failed: {errStates}");
-                    HealthBus.Error("get_states failed");
-                    return false;
-                }
-
-                // 2) get_services
-                var (okServices, servicesJson, errServices) = this._client.RequestAsync("get_services", this._cts.Token)
-                                                                     .GetAwaiter().GetResult();
-                if (!okServices)
-                {
-                    PluginLog.Warning($"get_services failed: {errServices}");
-                    HealthBus.Error("get_services failed");
-                    return false;
-                }
-
-                // 3) entity registry
-                var (okEnt, entJson, errEnt) = this._client.RequestAsync("config/entity_registry/list", this._cts.Token)
-                                                      .GetAwaiter().GetResult();
-                if (!okEnt)
-                {
-                    PluginLog.Warning($"entity_registry/list failed: {errEnt}");
-                    // Not fatal for basic operation, but helpful for device names
-                }
-
-                // 4) device registry
-                var (okDev, devJson, errDev) = this._client.RequestAsync("config/device_registry/list", this._cts.Token)
-                                                      .GetAwaiter().GetResult();
-                if (!okDev)
-                {
-                    PluginLog.Warning($"device_registry/list failed: {errDev}");
-                }
-
-                var (okArea, areaJson, errArea) = this._client
-            .RequestAsync("config/area_registry/list", this._cts.Token)
-            .GetAwaiter().GetResult();
-                if (!okArea)
-                {
-                    PluginLog.Warning($"area_registry/list failed: {errArea}");
-                }
-
-                // ---- Parse results ----
-                // Validate JSON strings before parsing to prevent null reference exceptions
-                if (String.IsNullOrEmpty(statesJson))
-                {
-                    PluginLog.Warning("get_states returned null or empty JSON");
-                    HealthBus.Error("get_states returned invalid data");
-                    return false;
-                }
-
-                if (String.IsNullOrEmpty(servicesJson))
-                {
-                    PluginLog.Warning("get_services returned null or empty JSON");
-                    HealthBus.Error("get_services returned invalid data");
-                    return false;
-                }
-
-                // states: array of { entity_id, state, attributes{friendly_name,...}, ...}
-                using var statesDoc = JsonDocument.Parse(statesJson);
-                // services: object { domain: { service: { fields, target, response } } }
-                using var servicesDoc = JsonDocument.Parse(servicesJson);
-
-
-                JsonElement entArray = default, devArray = default, areaArray = default;
-                if (okEnt && !String.IsNullOrEmpty(entJson))
-                {
-                    entArray = JsonDocument.Parse(entJson).RootElement;
-                }
-
-                if (okDev && !String.IsNullOrEmpty(devJson))
-                {
-                    devArray = JsonDocument.Parse(devJson).RootElement;
-                }
-                if (okArea && !String.IsNullOrEmpty(areaJson))
-                {
-                    areaArray = JsonDocument.Parse(areaJson).RootElement;
-                }
-
-                // Build device lookup by device_id AND device->area_id  <-- UPDATED
-                var deviceById = new Dictionary<String, (String name, String mf, String model)>(StringComparer.OrdinalIgnoreCase);
-                var deviceAreaById = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
-
-                if (okDev && devArray.ValueKind == JsonValueKind.Array)
+                var devArray = JsonDocument.Parse(json).RootElement;
+                if (devArray.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var dev in devArray.EnumerateArray())
                     {
@@ -1326,12 +1272,30 @@ namespace Loupedeck.HomeAssistantPlugin
                         }
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Warning(ex, "Failed to parse device registry");
+            }
 
-                // Build entity->device_id AND entity->area_id (direct from entity registry)  <-- UPDATED
-                var entityDevice = new Dictionary<String, (String deviceId, String originalName)>(StringComparer.OrdinalIgnoreCase);
-                var entityArea = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
+            return (deviceById, deviceAreaById);
+        }
 
-                if (okEnt && entArray.ValueKind == JsonValueKind.Array)
+        private (Dictionary<String, (String deviceId, String originalName)> EntityDevice,
+                 Dictionary<String, String> EntityArea) ParseEntityRegistry(Boolean ok, String? json)
+        {
+            var entityDevice = new Dictionary<String, (String deviceId, String originalName)>(StringComparer.OrdinalIgnoreCase);
+            var entityArea = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
+
+            if (!ok || String.IsNullOrEmpty(json))
+            {
+                return (entityDevice, entityArea);
+            }
+
+            try
+            {
+                var entArray = JsonDocument.Parse(json).RootElement;
+                if (entArray.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var ent in entArray.EnumerateArray())
                     {
@@ -1352,10 +1316,28 @@ namespace Loupedeck.HomeAssistantPlugin
                         }
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Warning(ex, "Failed to parse entity registry");
+            }
 
-                // Areas: area_id -> name  <-- NEW
-                this._areaIdToName.Clear();
-                if (okArea && areaArray.ValueKind == JsonValueKind.Array)
+            return (entityDevice, entityArea);
+        }
+
+        private void ParseAreaRegistry(Boolean ok, String? json)
+        {
+            this._areaIdToName.Clear();
+
+            if (!ok || String.IsNullOrEmpty(json))
+            {
+                return;
+            }
+
+            try
+            {
+                var areaArray = JsonDocument.Parse(json).RootElement;
+                if (areaArray.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var ar in areaArray.EnumerateArray())
                     {
@@ -1368,193 +1350,334 @@ namespace Loupedeck.HomeAssistantPlugin
                         }
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Warning(ex, "Failed to parse area registry");
+            }
+        }
 
-                // Filter lights from states and assemble LightItem
-                this._lightsByEntity.Clear();
-                this._hsbByEntity.Clear();
-                this._entityToAreaId.Clear();
+        private void ProcessLightStates(JsonDocument statesDoc,
+            (Dictionary<String, (String name, String mf, String model)> DeviceById,
+             Dictionary<String, String> DeviceAreaById) deviceLookup,
+            (Dictionary<String, (String deviceId, String originalName)> EntityDevice,
+             Dictionary<String, String> EntityArea) entityLookup)
+        {
+            // Clear existing data
+            this._lightsByEntity.Clear();
+            this._hsbByEntity.Clear();
+            this._entityToAreaId.Clear();
 
-                foreach (var st in statesDoc.RootElement.EnumerateArray())
+            var (deviceById, deviceAreaById) = deviceLookup;
+            var (entityDevice, entityArea) = entityLookup;
+
+            foreach (var st in statesDoc.RootElement.EnumerateArray())
+            {
+                var entityId = st.GetPropertyOrDefault("entity_id");
+                if (String.IsNullOrEmpty(entityId) || !entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
                 {
-                    var entityId = st.GetPropertyOrDefault("entity_id");
-                    if (String.IsNullOrEmpty(entityId) || !entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    var state = st.TryGetProperty("state", out var s) ? s.GetString() ?? "" : "";
-                    var attrs = st.TryGetProperty("attributes", out var a) ? a : default;
-                    var isOn = String.Equals(state, "on", StringComparison.OrdinalIgnoreCase);
-                    this._isOnByEntity[entityId] = isOn;
-
-                    var friendly = (attrs.ValueKind == JsonValueKind.Object && attrs.TryGetProperty("friendly_name", out var fn))
-                                   ? fn.GetString() ?? entityId
-                                   : entityId;
-
-                    String? deviceId = null, deviceName = "", mf = "", model = "";
-                    // --- Capabilities (centralized) ---
-                    var caps = this._capSvc.ForLight(attrs);
-                    this._capsByEntity[entityId] = caps;
-
-                    PluginLog.Info($"[Caps] {entityId} caps: onoff={caps.OnOff} bri={caps.Brightness} ctemp={caps.ColorTemp} color={caps.ColorHs}");
-
-
-
-                    if (entityDevice.TryGetValue(entityId, out var map) && !String.IsNullOrEmpty(map.deviceId))
-                    {
-                        deviceId = map.deviceId;
-                        if (deviceById.TryGetValue(deviceId, out var d))
-                        {
-                            deviceName = d.name;
-                            mf = d.mf;
-                            model = d.model;
-                        }
-                    }
-
-                    // --- Area resolution (entity area wins; else device area; else Unassigned)  <-- NEW
-                    String? areaId = null;
-                    if (entityArea.TryGetValue(entityId, out var ea))
-                    {
-                        areaId = ea;
-                    }
-                    else if (!String.IsNullOrEmpty(deviceId) && deviceAreaById.TryGetValue(deviceId, out var da))
-                    {
-                        areaId = da;
-                    }
-
-                    if (String.IsNullOrEmpty(areaId))
-                    {
-                        areaId = UnassignedAreaId;
-                    }
-
-                    this._entityToAreaId[entityId] = areaId;
-
-                    // --- Brightness: seed without clobbering last non-zero on OFF ---
-                    var bri = 0;
-
-                    JsonElement brEl = default;   // <-- initialize
-                    var hasAttrBri = false;
-
-                    if (attrs.ValueKind == JsonValueKind.Object &&
-                        attrs.TryGetProperty("brightness", out brEl) &&
-                        brEl.ValueKind == JsonValueKind.Number)
-                    {
-                        hasAttrBri = true;
-                    }
-
-                    if (hasAttrBri)
-                    {
-                        bri = HSBHelper.Clamp(brEl.GetInt32(), BrightnessOff, MaxBrightness);
-                    }
-                    else if (!isOn) // OFF and no brightness attribute: keep last-known if any
-                    {
-                        bri = this._hsbByEntity.TryGetValue(entityId, out var oldBri) ? oldBri.B : BrightnessOff;
-                    }
-                    else
-                    {
-                        // ON but no brightness attribute → reasonable fallback
-                        bri = MidBrightness;
-                    }
-
-
-                    // Optional HS seed (doesn’t matter for brightness UI, but nice to keep)
-                    Double h = DefaultHue, sat = MinSaturation;
-                    Int32 minM = DefaultMinMireds, maxM = DefaultMaxMireds, curM = DefaultWarmMired;
-                    if (attrs.ValueKind == JsonValueKind.Object)
-                    {
-
-                        if (attrs.TryGetProperty("min_mireds", out var v1) && v1.ValueKind == JsonValueKind.Number)
-                        {
-                            minM = v1.GetInt32();
-                        }
-
-                        if (attrs.TryGetProperty("max_mireds", out var v2) && v2.ValueKind == JsonValueKind.Number)
-                        {
-                            maxM = v2.GetInt32();
-                        }
-
-                        if (attrs.TryGetProperty("color_temp", out var v3) && v3.ValueKind == JsonValueKind.Number)
-                        {
-                            curM = HSBHelper.Clamp(v3.GetInt32(), minM, maxM);
-                        }
-                        else if (attrs.TryGetProperty("color_temp_kelvin", out var v4) && v4.ValueKind == JsonValueKind.Number)
-                        {
-                            curM = HSBHelper.Clamp(ColorTemp.KelvinToMired(v4.GetInt32()), minM, maxM);
-                        }
-                        else if (String.Equals(state, "off", StringComparison.OrdinalIgnoreCase))
-                        {
-                            curM = DefaultWarmMired;
-                        }
-
-                        if (attrs.TryGetProperty("hs_color", out var hs) &&
-                            hs.ValueKind == JsonValueKind.Array && hs.GetArrayLength() >= HsColorArrayLength &&
-                            hs[HueArrayIndex].ValueKind == JsonValueKind.Number && hs[SaturationArrayIndex].ValueKind == JsonValueKind.Number)
-                        {
-                            h = HSBHelper.Wrap360(hs[HueArrayIndex].GetDouble());
-                            sat = HSBHelper.Clamp(hs[SaturationArrayIndex].GetDouble(), MinSaturation, MaxSaturation);
-                        }
-                        else if (attrs.TryGetProperty("rgb_color", out var rgb) &&
-                                 rgb.ValueKind == JsonValueKind.Array && rgb.GetArrayLength() >= RgbColorArrayLength &&
-                                 rgb[RedArrayIndex].ValueKind == JsonValueKind.Number &&
-                                 rgb[GreenArrayIndex].ValueKind == JsonValueKind.Number &&
-                                 rgb[BlueArrayIndex].ValueKind == JsonValueKind.Number)
-                        {
-                            var (hh, ss) = HSBHelper.RgbToHs(rgb[RedArrayIndex].GetInt32(), rgb[GreenArrayIndex].GetInt32(), rgb[BlueArrayIndex].GetInt32());
-                            h = HSBHelper.Wrap360(hh);
-                            sat = HSBHelper.Clamp(ss, MinSaturation, MaxSaturation);
-                        }
-                    }
-                    this._hsbByEntity[entityId] = (h, sat, bri); // 👈 ALWAYS set B now
-                                                                 //_tempMiredByEntity[entityId] = (minM, maxM, curM);
-                                                                 // Only keep a temp cache if the light supports color temperature
-                    if (caps.ColorTemp)
-                    {
-                        this._tempMiredByEntity[entityId] = (minM, maxM, curM);
-                    }
-                    else
-                    {
-                        this._tempMiredByEntity.Remove(entityId);
-                    }
-
-                    var li = new LightItem(entityId, friendly, state, deviceId ?? "", deviceName, mf, model);
-                    this._lightsByEntity[entityId] = li;
-
-                    PluginLog.Info($"[Light] {entityId} | name='{friendly}' | state={state} | dev='{deviceName}' mf='{mf}' model='{model}' bri={bri} tempMired={curM} range=[{minM},{maxM}] area='{(this._areaIdToName.TryGetValue(areaId, out var an) ? an : areaId)}'");
+                    continue;
                 }
 
-                // Ensure a bucket exists for unassigned if any light landed there  <-- NEW
-                if (this._entityToAreaId.ContainsValue(UnassignedAreaId))
+                var state = st.TryGetProperty("state", out var s) ? s.GetString() ?? "" : "";
+                var attrs = st.TryGetProperty("attributes", out var a) ? a : default;
+                var isOn = String.Equals(state, "on", StringComparison.OrdinalIgnoreCase);
+                this._isOnByEntity[entityId] = isOn;
+
+                var friendly = (attrs.ValueKind == JsonValueKind.Object && attrs.TryGetProperty("friendly_name", out var fn))
+                               ? fn.GetString() ?? entityId
+                               : entityId;
+
+                String? deviceId = null, deviceName = "", mf = "", model = "";
+
+                // Get capabilities
+                var caps = this._capSvc.ForLight(attrs);
+                this._capsByEntity[entityId] = caps;
+
+                PluginLog.Info($"[Caps] {entityId} caps: onoff={caps.OnOff} bri={caps.Brightness} ctemp={caps.ColorTemp} color={caps.ColorHs}");
+
+                // Get device information
+                if (entityDevice.TryGetValue(entityId, out var map) && !String.IsNullOrEmpty(map.deviceId))
                 {
-                    this._areaIdToName[UnassignedAreaId] = UnassignedAreaName;
+                    deviceId = map.deviceId;
+                    if (deviceById.TryGetValue(deviceId, out var d))
+                    {
+                        deviceName = d.name;
+                        mf = d.mf;
+                        model = d.model;
+                    }
                 }
 
-                if (servicesDoc.RootElement.ValueKind == JsonValueKind.Object &&
-                    servicesDoc.RootElement.TryGetProperty("light", out var lightDomain) &&
-                    lightDomain.ValueKind == JsonValueKind.Object)
+                // Area resolution (entity area wins; else device area; else Unassigned)
+                String? areaId = null;
+                if (entityArea.TryGetValue(entityId, out var ea))
                 {
-                    foreach (var svc in lightDomain.EnumerateObject())
-                    {
-                        var svcName = svc.Name;             // e.g., turn_on, turn_off, toggle
-                        var svcDef = svc.Value;            // contains fields/target/response
-                        // Log a compact summary of fields
-                        var fields = "";
-                        if (svcDef.ValueKind == JsonValueKind.Object && svcDef.TryGetProperty("fields", out var f) && f.ValueKind == JsonValueKind.Object)
-                        {
-                            var names = new List<String>();
-                            foreach (var fld in f.EnumerateObject())
-                            {
-                                names.Add(fld.Name);
-                            }
+                    areaId = ea;
+                }
+                else if (!String.IsNullOrEmpty(deviceId) && deviceAreaById.TryGetValue(deviceId, out var da))
+                {
+                    areaId = da;
+                }
 
-                            fields = String.Join(", ", names);
-                        }
-                        PluginLog.Info($"[Service light.{svcName}] fields=[{fields}] target={(svcDef.TryGetProperty("target", out var t) ? "yes" : "no")}");
-                    }
+                if (String.IsNullOrEmpty(areaId))
+                {
+                    areaId = UnassignedAreaId;
+                }
+
+                this._entityToAreaId[entityId] = areaId;
+
+                // Process brightness
+                var bri = this.ProcessBrightness(attrs, isOn, entityId);
+
+                // Process color data
+                var (h, sat, minM, maxM, curM) = this.ProcessColorData(attrs, state, caps);
+
+                // Store HSB data
+                this._hsbByEntity[entityId] = (h, sat, bri);
+
+                // Store temperature data only if supported
+                if (caps.ColorTemp)
+                {
+                    this._tempMiredByEntity[entityId] = (minM, maxM, curM);
                 }
                 else
                 {
-                    PluginLog.Warning("No 'light' domain in get_services result.");
+                    this._tempMiredByEntity.Remove(entityId);
                 }
+
+                // Create light item
+                var li = new LightItem(entityId, friendly, state, deviceId ?? "", deviceName, mf, model);
+                this._lightsByEntity[entityId] = li;
+
+                PluginLog.Info($"[Light] {entityId} | name='{friendly}' | state={state} | dev='{deviceName}' mf='{mf}' model='{model}' bri={bri} tempMired={curM} range=[{minM},{maxM}] area='{(this._areaIdToName.TryGetValue(areaId, out var an) ? an : areaId)}'");
+            }
+
+            // Ensure a bucket exists for unassigned if any light landed there
+            if (this._entityToAreaId.ContainsValue(UnassignedAreaId))
+            {
+                this._areaIdToName[UnassignedAreaId] = UnassignedAreaName;
+            }
+        }
+
+        private Int32 ProcessBrightness(JsonElement attrs, Boolean isOn, String entityId)
+        {
+            var bri = 0;
+            JsonElement brEl = default;
+            var hasAttrBri = false;
+
+            if (attrs.ValueKind == JsonValueKind.Object &&
+                attrs.TryGetProperty("brightness", out brEl) &&
+                brEl.ValueKind == JsonValueKind.Number)
+            {
+                hasAttrBri = true;
+            }
+
+            if (hasAttrBri)
+            {
+                bri = HSBHelper.Clamp(brEl.GetInt32(), BrightnessOff, MaxBrightness);
+            }
+            else if (!isOn) // OFF and no brightness attribute: keep last-known if any
+            {
+                bri = this._hsbByEntity.TryGetValue(entityId, out var oldBri) ? oldBri.B : BrightnessOff;
+            }
+            else
+            {
+                // ON but no brightness attribute → reasonable fallback
+                bri = MidBrightness;
+            }
+
+            return bri;
+        }
+
+        private (Double h, Double sat, Int32 minM, Int32 maxM, Int32 curM) ProcessColorData(JsonElement attrs, String state, LightCaps caps)
+        {
+            Double h = DefaultHue, sat = MinSaturation;
+            Int32 minM = DefaultMinMireds, maxM = DefaultMaxMireds, curM = DefaultWarmMired;
+
+            if (attrs.ValueKind == JsonValueKind.Object)
+            {
+                // Process color temperature
+                if (attrs.TryGetProperty("min_mireds", out var v1) && v1.ValueKind == JsonValueKind.Number)
+                {
+                    minM = v1.GetInt32();
+                }
+
+                if (attrs.TryGetProperty("max_mireds", out var v2) && v2.ValueKind == JsonValueKind.Number)
+                {
+                    maxM = v2.GetInt32();
+                }
+
+                if (attrs.TryGetProperty("color_temp", out var v3) && v3.ValueKind == JsonValueKind.Number)
+                {
+                    curM = HSBHelper.Clamp(v3.GetInt32(), minM, maxM);
+                }
+                else if (attrs.TryGetProperty("color_temp_kelvin", out var v4) && v4.ValueKind == JsonValueKind.Number)
+                {
+                    curM = HSBHelper.Clamp(ColorTemp.KelvinToMired(v4.GetInt32()), minM, maxM);
+                }
+                else if (String.Equals(state, "off", StringComparison.OrdinalIgnoreCase))
+                {
+                    curM = DefaultWarmMired;
+                }
+
+                // Process HS color
+                if (attrs.TryGetProperty("hs_color", out var hs) &&
+                    hs.ValueKind == JsonValueKind.Array && hs.GetArrayLength() >= HsColorArrayLength &&
+                    hs[HueArrayIndex].ValueKind == JsonValueKind.Number && hs[SaturationArrayIndex].ValueKind == JsonValueKind.Number)
+                {
+                    h = HSBHelper.Wrap360(hs[HueArrayIndex].GetDouble());
+                    sat = HSBHelper.Clamp(hs[SaturationArrayIndex].GetDouble(), MinSaturation, MaxSaturation);
+                }
+                else if (attrs.TryGetProperty("rgb_color", out var rgb) &&
+                         rgb.ValueKind == JsonValueKind.Array && rgb.GetArrayLength() >= RgbColorArrayLength &&
+                         rgb[RedArrayIndex].ValueKind == JsonValueKind.Number &&
+                         rgb[GreenArrayIndex].ValueKind == JsonValueKind.Number &&
+                         rgb[BlueArrayIndex].ValueKind == JsonValueKind.Number)
+                {
+                    var (hh, ss) = HSBHelper.RgbToHs(rgb[RedArrayIndex].GetInt32(), rgb[GreenArrayIndex].GetInt32(), rgb[BlueArrayIndex].GetInt32());
+                    h = HSBHelper.Wrap360(hh);
+                    sat = HSBHelper.Clamp(ss, MinSaturation, MaxSaturation);
+                }
+            }
+
+            return (h, sat, minM, maxM, curM);
+        }
+
+        private void ProcessServices(JsonDocument servicesDoc)
+        {
+            if (servicesDoc.RootElement.ValueKind == JsonValueKind.Object &&
+                servicesDoc.RootElement.TryGetProperty("light", out var lightDomain) &&
+                lightDomain.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var svc in lightDomain.EnumerateObject())
+                {
+                    var svcName = svc.Name;             // e.g., turn_on, turn_off, toggle
+                    var svcDef = svc.Value;            // contains fields/target/response
+
+                    // Log a compact summary of fields
+                    var fields = "";
+                    if (svcDef.ValueKind == JsonValueKind.Object && svcDef.TryGetProperty("fields", out var f) && f.ValueKind == JsonValueKind.Object)
+                    {
+                        var names = new List<String>();
+                        foreach (var fld in f.EnumerateObject())
+                        {
+                            names.Add(fld.Name);
+                        }
+
+                        fields = String.Join(", ", names);
+                    }
+                    PluginLog.Info($"[Service light.{svcName}] fields=[{fields}] target={(svcDef.TryGetProperty("target", out var t) ? "yes" : "no")}");
+                }
+            }
+            else
+            {
+                PluginLog.Warning("No 'light' domain in get_services result.");
+            }
+        }
+
+        private (Boolean Success, String? Json, String? Error) FetchStates()
+        {
+            var (ok, json, error) = this._client.RequestAsync("get_states", this._cts.Token)
+                                                .GetAwaiter().GetResult();
+            if (!ok)
+            {
+                PluginLog.Warning($"get_states failed: {error}");
+                HealthBus.Error("get_states failed");
+            }
+            return (ok, json, error);
+        }
+
+        private (Boolean Success, String? Json, String? Error) FetchServices()
+        {
+            var (ok, json, error) = this._client.RequestAsync("get_services", this._cts.Token)
+                                                .GetAwaiter().GetResult();
+            if (!ok)
+            {
+                PluginLog.Warning($"get_services failed: {error}");
+                HealthBus.Error("get_services failed");
+            }
+            return (ok, json, error);
+        }
+
+        private (Boolean Success, String? Json, String? Error) FetchEntityRegistry()
+        {
+            var (ok, json, error) = this._client.RequestAsync("config/entity_registry/list", this._cts.Token)
+                                                .GetAwaiter().GetResult();
+            if (!ok)
+            {
+                PluginLog.Warning($"entity_registry/list failed: {error}");
+                // Not fatal for basic operation, but helpful for device names
+            }
+            return (ok, json, error);
+        }
+
+        private (Boolean Success, String? Json, String? Error) FetchDeviceRegistry()
+        {
+            var (ok, json, error) = this._client.RequestAsync("config/device_registry/list", this._cts.Token)
+                                                .GetAwaiter().GetResult();
+            if (!ok)
+            {
+                PluginLog.Warning($"device_registry/list failed: {error}");
+            }
+            return (ok, json, error);
+        }
+
+        private (Boolean Success, String? Json, String? Error) FetchAreaRegistry()
+        {
+            var (ok, json, error) = this._client.RequestAsync("config/area_registry/list", this._cts.Token)
+                                                .GetAwaiter().GetResult();
+            if (!ok)
+            {
+                PluginLog.Warning($"area_registry/list failed: {error}");
+            }
+            return (ok, json, error);
+        }
+
+        private Boolean FetchLightsAndServices()
+        {
+            try
+            {
+                // Fetch all required data from Home Assistant APIs using the data service
+                var (okStates, statesJson, errStates) = this._dataService.FetchStatesAsync(this._cts.Token).GetAwaiter().GetResult();
+                if (!okStates)
+                {
+                    return false;
+                }
+
+                var (okServices, servicesJson, errServices) = this._dataService.FetchServicesAsync(this._cts.Token).GetAwaiter().GetResult();
+                if (!okServices)
+                {
+                    return false;
+                }
+
+                var (okEnt, entJson, errEnt) = this._dataService.FetchEntityRegistryAsync(this._cts.Token).GetAwaiter().GetResult();
+                var (okDev, devJson, errDev) = this._dataService.FetchDeviceRegistryAsync(this._cts.Token).GetAwaiter().GetResult();
+                var (okArea, areaJson, errArea) = this._dataService.FetchAreaRegistryAsync(this._cts.Token).GetAwaiter().GetResult();
+
+                // Validate required JSON data using the parser
+                if (!this._dataParser.ValidateJsonData(statesJson, servicesJson))
+                {
+                    return false;
+                }
+
+                // Parse registry data using the parser
+                var registryData = this._dataParser.ParseRegistries(devJson, entJson, areaJson);
+
+                // Update the registry service
+                this._registryService.UpdateRegistries(registryData);
+
+                // Parse light states using the parser
+                var lights = this._dataParser.ParseLightStates(statesJson, registryData);
+
+                // Initialize light state manager with parsed lights
+                this._lightStateManager.InitializeLightStates(lights);
+
+                // Process services using the parser
+                this._dataParser.ProcessServices(servicesJson);
+
+                // Update our internal caches for compatibility with existing code
+                // TODO: Eventually remove these and use services directly
+                this.UpdateInternalCachesFromServices(lights, registryData);
 
                 HealthBus.Ok("Fetched lights/services");
                 return true;
@@ -1567,9 +1690,50 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
+        /// <summary>
+        /// Temporary compatibility method to update internal caches from services
+        /// TODO: Remove this once all code is refactored to use services directly
+        /// </summary>
+        private void UpdateInternalCachesFromServices(List<LightData> lights, ParsedRegistryData registryData)
+        {
+            // Clear existing data
+            this._lightsByEntity.Clear();
+            this._hsbByEntity.Clear();
+            this._entityToAreaId.Clear();
+            this._areaIdToName.Clear();
+
+            // Update from registry data
+            foreach (var (areaId, areaName) in registryData.AreaIdToName)
+            {
+                this._areaIdToName[areaId] = areaName;
+            }
+
+            // Update from light data
+            foreach (var light in lights)
+            {
+                var li = new LightItem(light.EntityId, light.FriendlyName, light.State,
+                                       light.DeviceId ?? "", light.DeviceName, light.Manufacturer, light.Model);
+                this._lightsByEntity[light.EntityId] = li;
+
+                this._hsbByEntity[light.EntityId] = (light.Hue, light.Saturation, light.Brightness);
+                this._entityToAreaId[light.EntityId] = light.AreaId;
+                this._isOnByEntity[light.EntityId] = light.IsOn;
+                this._capsByEntity[light.EntityId] = light.Capabilities;
+
+                if (light.Capabilities.ColorTemp)
+                {
+                    this._tempMiredByEntity[light.EntityId] = (light.MinMired, light.MaxMired, light.ColorTempMired);
+                }
+            }
+        }
+
         private void SetCachedBrightness(String entityId, Int32 bri)
         {
-            PluginLog.Verbose($"[SetCachedBrightness] eid={entityId} bri={bri}");
+            // Use the service for setting cached brightness
+            this._lightStateManager.SetCachedBrightness(entityId, bri);
+
+            // Also update the internal cache for backward compatibility
+            // TODO: Remove this once all code is refactored to use services
             this._hsbByEntity[entityId] = this._hsbByEntity.TryGetValue(entityId, out var hsb)
                 ? ((Double H, Double S, Int32 B))(hsb.H, hsb.S, HSBHelper.Clamp(bri, BrightnessOff, MaxBrightness))
                 : ((Double H, Double S, Int32 B))(DefaultHue, MinSaturation, HSBHelper.Clamp(bri, BrightnessOff, MaxBrightness));

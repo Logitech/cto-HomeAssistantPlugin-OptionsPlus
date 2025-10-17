@@ -16,7 +16,7 @@ namespace Loupedeck.HomeAssistantPlugin
         // --- Fallback Icon Dimensions ---
         private const Int32 FallbackIconWidth = 80;                   // Width for fallback icons
         private const Int32 FallbackIconHeight = 80;                  // Height for fallback icons
-        
+
         // --- Fallback Icon Colors ---
         private const Byte FallbackBackgroundRed = 64;                // Red component for dark gray background
         private const Byte FallbackBackgroundGreen = 64;              // Green component for dark gray background
@@ -24,7 +24,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private const Byte FallbackTextRed = 255;                     // Red component for white text
         private const Byte FallbackTextGreen = 255;                   // Green component for white text
         private const Byte FallbackTextBlue = 255;                    // Blue component for white text
-        
+
         // --- Fallback Icon Text Settings ---
         private const Int32 FallbackFontSize = 32;                    // Font size for fallback question mark
         private const String FallbackIconText = "?";                  // Text to display in fallback icon
