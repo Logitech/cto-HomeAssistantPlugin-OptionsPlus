@@ -39,7 +39,6 @@ namespace Loupedeck.HomeAssistantPlugin
         private const String CmdBack = "back"; // our own back
         private const String CmdArea = "area";
 
-        private readonly HaWebSocketClient _client = new();
 
         private CancellationTokenSource _cts = new();
 
@@ -687,8 +686,8 @@ namespace Loupedeck.HomeAssistantPlugin
                 { IconId.Area,         "area_icon.svg" },
             });
 
-            // Wrap the raw client so the service can be unit-tested / mocked later
-            this._ha = new HaClientAdapter(this._client);
+            // Initialize dependency injection - use the shared HaClient from Plugin
+            this._ha = new HaClientAdapter(((HomeAssistantPlugin)this.Plugin).HaClient);
 
             // Initialize new services
             this._dataService = new Services.HomeAssistantDataService(this._ha);
@@ -1092,7 +1091,7 @@ namespace Loupedeck.HomeAssistantPlugin
         {
             PluginLog.Info("DynamicFolder.Deactivate() -> close WS");
             this._cts?.Cancel();
-            this._client.SafeCloseAsync().GetAwaiter().GetResult();
+            this._ha.SafeCloseAsync().GetAwaiter().GetResult();
             this._eventsCts?.Cancel();
             _ = this._events.SafeCloseAsync();
             //this.Plugin.OnPluginStatusChanged(PluginStatus.Warning, "Folder closed.", null);
@@ -1138,7 +1137,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
             try
             {
-                var (ok, msg) = this._client
+                var (ok, msg) = this._ha
                     .ConnectAndAuthenticateAsync(baseUrl, token, TimeSpan.FromSeconds(AuthTimeoutSeconds), this._cts.Token)
                     .GetAwaiter().GetResult();
 
@@ -1186,7 +1185,7 @@ namespace Loupedeck.HomeAssistantPlugin
                         PluginLog.Warning("FetchLightsAndServices encountered issues (see logs).");
                     }
 
-                    this._client.SendPingAsync(this._cts.Token).GetAwaiter().GetResult();
+                    this._ha.EnsureConnectedAsync(TimeSpan.FromSeconds(AuthTimeoutSeconds), this._cts.Token).GetAwaiter().GetResult();
 
                     this._level = ViewLevel.Root;
                     this._currentAreaId = null;
