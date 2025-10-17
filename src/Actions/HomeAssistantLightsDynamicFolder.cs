@@ -59,7 +59,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
         private LightCaps GetCaps(String eid) =>
-            this._lightStateManager.GetCapabilities(eid);
+            this._lightStateManager?.GetCapabilities(eid) ?? new LightCaps();
 
 
 
@@ -219,8 +219,8 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
 
-        private readonly LightControlService _lightSvc;
-        private readonly IHaClient _ha; // adapter over HaWebSocketClient
+        private LightControlService? _lightSvc;
+        private IHaClient? _ha; // adapter over HaWebSocketClient
 
 
         // --- Echo suppression: ignore HA frames shortly after we sent a command ---
@@ -521,7 +521,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
                         this.MarkCommandSent(entityId);
 
-                        this._lightSvc.SetBrightness(entityId, targetB);
+                        this._lightSvc?.SetBrightness(entityId, targetB);
 
                     }
                     else
@@ -572,7 +572,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
                     var curH = this._hsbByEntity.TryGetValue(eid, out var hsb3) ? hsb3.H : DefaultHue;
                     this.MarkCommandSent(eid);
-                    this._lightSvc.SetHueSat(eid, curH, newS);
+                    this._lightSvc?.SetHueSat(eid, curH, newS);
 
 
                 }
@@ -608,7 +608,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
                     var curS = this._hsbByEntity.TryGetValue(eid, out var hsb2) ? hsb2.S : DefaultSaturation;
                     this.MarkCommandSent(eid);
-                    this._lightSvc.SetHueSat(eid, newH, curS);
+                    this._lightSvc?.SetHueSat(eid, newH, curS);
 
                 }
 
@@ -642,7 +642,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     this.AdjustmentValueChanged(AdjHue);
                     this.AdjustmentValueChanged(AdjSat);
                     this.MarkCommandSent(eid);
-                    this._lightSvc.SetTempMired(eid, targetM);
+                    this._lightSvc?.SetTempMired(eid, targetM);
                 }
             }
 
@@ -660,13 +660,15 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
         // New service dependencies
-        private readonly IHomeAssistantDataService _dataService;
-        private readonly IHomeAssistantDataParser _dataParser;
-        private readonly ILightStateManager _lightStateManager;
-        private readonly IRegistryService _registryService;
+        private IHomeAssistantDataService? _dataService;
+        private IHomeAssistantDataParser? _dataParser;
+        private ILightStateManager? _lightStateManager;
+        private IRegistryService? _registryService;
 
         public HomeAssistantLightsDynamicFolder()
         {
+            PluginLog.Info("[LightsDynamicFolder] Constructor START");
+            
             this.DisplayName = "All Light Controls";
             this.GroupName = "Lights";
 
@@ -686,26 +688,8 @@ namespace Loupedeck.HomeAssistantPlugin
                 { IconId.Area,         "area_icon.svg" },
             });
 
-            // Initialize dependency injection - use the shared HaClient from Plugin
-            this._ha = new HaClientAdapter(((HomeAssistantPlugin)this.Plugin).HaClient);
-
-            // Initialize new services
-            this._dataService = new Services.HomeAssistantDataService(this._ha);
-            this._dataParser = new Services.HomeAssistantDataParser(this._capSvc);
-            this._lightStateManager = new Services.LightStateManager();
-            this._registryService = new Services.RegistryService();
-
-            // If you want separate debounce timings per channel, split these constants.
-            const Int32 BrightnessDebounceMs = SendDebounceMs;
-            const Int32 HueSatDebounceMs = SendDebounceMs;
-            const Int32 TempDebounceMs = SendDebounceMs;
-
-            this._lightSvc = new LightControlService(
-                this._ha,
-                BrightnessDebounceMs,
-                HueSatDebounceMs,
-                TempDebounceMs
-            );
+            PluginLog.Info($"[LightsDynamicFolder] Constructor - this.Plugin is null: {this.Plugin == null}");
+            PluginLog.Info("[LightsDynamicFolder] Constructor completed - dependency initialization deferred to OnLoad()");
         }
 
         public override PluginDynamicFolderNavigation GetNavigationArea(DeviceType _) =>
@@ -819,7 +803,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
         private Int32 GetEffectiveBrightnessForDisplay(String entityId) =>
             // Use the service for getting effective brightness
-            this._lightStateManager.GetEffectiveBrightness(entityId);
+            this._lightStateManager?.GetEffectiveBrightness(entityId) ?? BrightnessOff;
 
         // Paint the tile: green when OK, red on error
         public override BitmapImage GetCommandImage(String actionParameter, PluginImageSize imageSize)
@@ -893,7 +877,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     if (!String.IsNullOrEmpty(this._currentEntityId))
                     {
-                        this._lightSvc.CancelPending(this._currentEntityId);
+                        this._lightSvc?.CancelPending(this._currentEntityId);
                     }
                     this._inDeviceView = false;
                     this._currentEntityId = null;
@@ -1017,7 +1001,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     data = JsonSerializer.SerializeToElement(new { brightness = bri });
                 }
                 this.MarkCommandSent(entityId);
-                _ = this._lightSvc.TurnOnAsync(entityId, data);
+                _ = this._lightSvc?.TurnOnAsync(entityId, data);
                 return;
             }
             if (actionParameter.StartsWith(PfxActOff, StringComparison.OrdinalIgnoreCase))
@@ -1035,7 +1019,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     this.AdjustmentValueChanged(AdjTemp);
                 }
 
-                this._lightSvc.TurnOffAsync(entityId);
+                this._lightSvc?.TurnOffAsync(entityId);
                 this.MarkCommandSent(entityId);
                 return;
             }
@@ -1054,14 +1038,57 @@ namespace Loupedeck.HomeAssistantPlugin
         // 🔧 return bools here:
         public override Boolean Load()
         {
-            PluginLog.Info("DynamicFolder.Load()");
-            PluginLog.Info($"Folder.Name = {this.Name}, CommandName = {this.CommandName}, AdjustmentName = {this.AdjustmentName}");
+            PluginLog.Info("[LightsDynamicFolder] Load() START");
+            PluginLog.Info($"[LightsDynamicFolder] Folder.Name = {this.Name}, CommandName = {this.CommandName}, AdjustmentName = {this.AdjustmentName}");
 
-            HealthBus.HealthChanged += this.OnHealthChanged;
+            try
+            {
+                // Initialize dependencies now that Plugin is available
+                PluginLog.Info($"[LightsDynamicFolder] Load() - this.Plugin is null: {this.Plugin == null}");
+                
+                if (this.Plugin is HomeAssistantPlugin haPlugin)
+                {
+                    PluginLog.Info($"[LightsDynamicFolder] Load() - this.Plugin type: {this.Plugin.GetType().Name}");
+                    
+                    // Initialize dependency injection - use the shared HaClient from Plugin
+                    PluginLog.Info("[LightsDynamicFolder] Load() - Initializing dependencies");
+                    
+                    this._ha = new HaClientAdapter(haPlugin.HaClient);
+                    this._dataService = new Services.HomeAssistantDataService(this._ha);
+                    this._dataParser = new Services.HomeAssistantDataParser(this._capSvc);
+                    this._lightStateManager = new Services.LightStateManager();
+                    this._registryService = new Services.RegistryService();
 
+                    // Initialize light control service with debounce settings
+                    const Int32 BrightnessDebounceMs = SendDebounceMs;
+                    const Int32 HueSatDebounceMs = SendDebounceMs;
+                    const Int32 TempDebounceMs = SendDebounceMs;
 
+                    this._lightSvc = new LightControlService(
+                        this._ha,
+                        BrightnessDebounceMs,
+                        HueSatDebounceMs,
+                        TempDebounceMs
+                    );
+                    
+                    PluginLog.Info("[LightsDynamicFolder] Load() - All dependencies initialized successfully");
+                }
+                else
+                {
+                    PluginLog.Error($"[LightsDynamicFolder] Load() - Plugin is not HomeAssistantPlugin, actual type: {this.Plugin?.GetType()?.Name ?? "null"}");
+                    return false;
+                }
 
-            return true;
+                HealthBus.HealthChanged += this.OnHealthChanged;
+
+                PluginLog.Info("[LightsDynamicFolder] Load() completed successfully");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Error(ex, "[LightsDynamicFolder] Load() failed with exception");
+                return false;
+            }
         }
 
         public override Boolean Unload()
@@ -1091,7 +1118,7 @@ namespace Loupedeck.HomeAssistantPlugin
         {
             PluginLog.Info("DynamicFolder.Deactivate() -> close WS");
             this._cts?.Cancel();
-            this._ha.SafeCloseAsync().GetAwaiter().GetResult();
+            this._ha?.SafeCloseAsync().GetAwaiter().GetResult();
             this._eventsCts?.Cancel();
             _ = this._events.SafeCloseAsync();
             //this.Plugin.OnPluginStatusChanged(PluginStatus.Warning, "Folder closed.", null);
@@ -1137,9 +1164,10 @@ namespace Loupedeck.HomeAssistantPlugin
 
             try
             {
-                var (ok, msg) = this._ha
-                    .ConnectAndAuthenticateAsync(baseUrl, token, TimeSpan.FromSeconds(AuthTimeoutSeconds), this._cts.Token)
-                    .GetAwaiter().GetResult();
+                var (ok, msg) = this._ha != null
+                    ? this._ha.ConnectAndAuthenticateAsync(baseUrl, token, TimeSpan.FromSeconds(AuthTimeoutSeconds), this._cts.Token)
+                        .GetAwaiter().GetResult()
+                    : (false, "HaClient not initialized");
 
                 if (ok)
                 {
@@ -1185,7 +1213,7 @@ namespace Loupedeck.HomeAssistantPlugin
                         PluginLog.Warning("FetchLightsAndServices encountered issues (see logs).");
                     }
 
-                    this._ha.EnsureConnectedAsync(TimeSpan.FromSeconds(AuthTimeoutSeconds), this._cts.Token).GetAwaiter().GetResult();
+                    this._ha?.EnsureConnectedAsync(TimeSpan.FromSeconds(AuthTimeoutSeconds), this._cts.Token).GetAwaiter().GetResult();
 
                     this._level = ViewLevel.Root;
                     this._currentAreaId = null;
@@ -1215,6 +1243,12 @@ namespace Loupedeck.HomeAssistantPlugin
         {
             try
             {
+                if (this._dataService == null || this._dataParser == null || this._registryService == null || this._lightStateManager == null)
+                {
+                    PluginLog.Error("[LightsDynamicFolder] FetchLightsAndServices: Required services are not initialized");
+                    return false;
+                }
+
                 // Fetch all required data from Home Assistant APIs using the data service
                 var (okStates, statesJson, errStates) = this._dataService.FetchStatesAsync(this._cts.Token).GetAwaiter().GetResult();
                 if (!okStates)
@@ -1308,7 +1342,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private void SetCachedBrightness(String entityId, Int32 bri)
         {
             // Use the service for setting cached brightness
-            this._lightStateManager.SetCachedBrightness(entityId, bri);
+            this._lightStateManager?.SetCachedBrightness(entityId, bri);
 
             // Also update the internal cache for backward compatibility
             // TODO: Remove this once all code is refactored to use services
