@@ -6,6 +6,8 @@ namespace Loupedeck.HomeAssistantPlugin
     using System.Threading;
     using System.Threading.Tasks;
 
+    using Loupedeck.HomeAssistantPlugin.Services;
+
     internal sealed class LightControlService : ILightControlService
     {
         // ====================================================================

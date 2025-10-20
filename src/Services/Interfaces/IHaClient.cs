@@ -1,5 +1,5 @@
 // Services/IHaClient.cs (and adapter)
-namespace Loupedeck.HomeAssistantPlugin
+namespace Loupedeck.HomeAssistantPlugin.Services
 {
     using System;
     using System.Text.Json;

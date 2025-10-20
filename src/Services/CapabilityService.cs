@@ -4,6 +4,8 @@ namespace Loupedeck.HomeAssistantPlugin
     using System;
     using System.Text.Json;
 
+    using Loupedeck.HomeAssistantPlugin.Services;
+
     /// <summary>
     /// Central place to infer capabilities (lights today; other domains tomorrow).
     /// </summary>

@@ -90,5 +90,26 @@ namespace Loupedeck.HomeAssistantPlugin.Services
         /// </summary>
         /// <param name="lights">Collection of light data</param>
         void InitializeLightStates(IEnumerable<LightData> lights);
+
+        /// <summary>
+        /// Sets cached color temperature for a light entity
+        /// </summary>
+        /// <param name="entityId">Light entity ID</param>
+        /// <param name="minM">Optional minimum mireds (preserves existing if null)</param>
+        /// <param name="maxM">Optional maximum mireds (preserves existing if null)</param>
+        /// <param name="curMired">Current mired value</param>
+        void SetCachedTempMired(String entityId, Int32? minM, Int32? maxM, Int32 curMired);
+
+        /// <summary>
+        /// Removes an entity from all internal caches
+        /// </summary>
+        /// <param name="entityId">Entity ID to remove</param>
+        void RemoveEntity(String entityId);
+
+        /// <summary>
+        /// Gets all currently tracked entity IDs
+        /// </summary>
+        /// <returns>Collection of entity IDs</returns>
+        IEnumerable<String> GetTrackedEntityIds();
     }
 }

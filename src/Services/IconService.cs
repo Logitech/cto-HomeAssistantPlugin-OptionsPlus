@@ -1,10 +1,8 @@
 // Services/IconService.cs
-namespace Loupedeck.HomeAssistantPlugin
+namespace Loupedeck.HomeAssistantPlugin.Services
 {
     using System;
     using System.Collections.Generic;
-
-    using Loupedeck.HomeAssistantPlugin.Services;
 
     /// <summary>
     /// Loads embedded PNGs once and hands out cached BitmapImage instances by id.
@@ -120,6 +118,10 @@ namespace Loupedeck.HomeAssistantPlugin
         }
     }
 
+}
+
+namespace Loupedeck.HomeAssistantPlugin.Services
+{
     /// <summary>String constants for icons (keeps callsites typo-safe).</summary>
     internal static class IconId
     {

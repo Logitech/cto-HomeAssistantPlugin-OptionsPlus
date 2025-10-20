@@ -1,11 +1,9 @@
-namespace Loupedeck.HomeAssistantPlugin
+namespace Loupedeck.HomeAssistantPlugin.Services
 {
     using System;
     using System.Collections.Generic;
     using System.Threading.Tasks;
     using System.Timers;
-
-    using Loupedeck.HomeAssistantPlugin.Services;
 
     internal sealed class DebouncedSender<TKey, TValue> : IDebouncedSender<TKey, TValue>, IDisposable
         where TKey : notnull
