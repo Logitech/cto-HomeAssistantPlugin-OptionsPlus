@@ -46,6 +46,10 @@ namespace Loupedeck.HomeAssistantPlugin
         private CancellationTokenSource? _cts;
         private Task? _loop;
         private Int32 _nextId = InitialMessageId;
+        
+        // Reusable buffer to prevent allocations
+        private readonly Byte[] _receiveBuffer = new Byte[WebSocketBufferSize];
+        private readonly StringBuilder _messageBuilder = new StringBuilder();
 
         public event Action<String, Int32?>? BrightnessChanged; // (entityId, brightness 0..255 or null)
         public event Action<String, Int32?, Int32?, Int32?, Int32?>? ColorTempChanged;
@@ -399,6 +403,21 @@ namespace Loupedeck.HomeAssistantPlugin
                 PluginLog.Verbose("[Events] Canceling event processing loop...");
                 this._cts?.Cancel();
 
+                // Wait for receive loop to complete before closing WebSocket
+                if (this._loop != null && !this._loop.IsCompleted)
+                {
+                    PluginLog.Verbose("[Events] Waiting for receive loop to complete...");
+                    try
+                    {
+                        await this._loop.ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Expected when cancellation occurs
+                        PluginLog.Verbose("[Events] Receive loop cancelled as expected");
+                    }
+                }
+
                 if (this._ws?.State == WebSocketState.Open)
                 {
                     PluginLog.Verbose("[Events] Closing WebSocket connection...");
@@ -420,6 +439,9 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 this._ws?.Dispose();
                 this._ws = null;
+                this._cts?.Dispose();
+                this._cts = null;
+                this._loop = null;
                 PluginLog.Info("[Events] Event listener disposed and reset");
             }
         }
@@ -430,9 +452,35 @@ namespace Loupedeck.HomeAssistantPlugin
 
             try
             {
+                // Cancel the background task
                 this._cts?.Cancel();
+                
+                // Wait for the background task to complete (with timeout)
+                if (this._loop != null && !this._loop.IsCompleted)
+                {
+                    PluginLog.Verbose("[Events] Waiting for receive loop to terminate...");
+                    try
+                    {
+                        this._loop.Wait(TimeSpan.FromSeconds(5));
+                    }
+                    catch (AggregateException ex) when (ex.InnerException is OperationCanceledException)
+                    {
+                        // Expected when cancellation occurs
+                        PluginLog.Verbose("[Events] Receive loop cancelled as expected");
+                    }
+                    catch (TimeoutException)
+                    {
+                        PluginLog.Warning("[Events] Timeout waiting for receive loop to terminate");
+                    }
+                }
+                
+                // Clean up resources
                 this._ws?.Dispose();
                 this._ws = null;
+                this._cts?.Dispose();
+                this._cts = null;
+                this._loop = null;
+                
                 PluginLog.Info("[Events] Dispose completed successfully");
             }
             catch (Exception ex)
@@ -460,8 +508,12 @@ namespace Loupedeck.HomeAssistantPlugin
                 throw new InvalidOperationException("WebSocket is not initialized");
             }
 
-            var buffer = new ArraySegment<Byte>(new Byte[WebSocketBufferSize]);
-            var sb = new StringBuilder();
+            // Use reusable buffer to prevent allocations
+            var buffer = new ArraySegment<Byte>(this._receiveBuffer);
+            
+            // Clear and reuse StringBuilder to prevent allocations
+            this._messageBuilder.Clear();
+            
             WebSocketReceiveResult result;
             do
             {
@@ -471,12 +523,13 @@ namespace Loupedeck.HomeAssistantPlugin
                     throw new WebSocketException("Server closed");
                 }
 
-                if (buffer.Array != null)
+                if (result.Count > 0)
                 {
-                    sb.Append(Encoding.UTF8.GetString(buffer.Array, 0, result.Count));
+                    this._messageBuilder.Append(Encoding.UTF8.GetString(this._receiveBuffer, 0, result.Count));
                 }
             } while (!result.EndOfMessage);
-            return sb.ToString();
+            
+            return this._messageBuilder.ToString();
         }
 
         private Task SendTextAsync(String text, CancellationToken ct)
