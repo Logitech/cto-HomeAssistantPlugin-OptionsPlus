@@ -69,7 +69,7 @@ namespace Loupedeck.HomeAssistantPlugin
         public void SetBrightness(String entityId, Int32 value)
         {
             var clampedValue = HSBHelper.Clamp(value, MinBrightnessValue, MaxBrightnessValue);
-            PluginLog.Verbose($"[LightControlService] SetBrightness - entity: {entityId}, value: {value} -> {clampedValue}");
+            PluginLog.Verbose(() => $"[LightControlService] SetBrightness - entity: {entityId}, value: {value} -> {clampedValue}");
             this._brightnessSender.Set(entityId, clampedValue);
         }
 
@@ -77,26 +77,26 @@ namespace Loupedeck.HomeAssistantPlugin
         {
             var wrappedH = HSBHelper.Wrap360(h);
             var clampedS = HSBHelper.Clamp(s, MinSaturationValue, MaxSaturationValue);
-            PluginLog.Verbose($"[LightControlService] SetHueSat - entity: {entityId}, h: {h:F1} -> {wrappedH:F1}, s: {s:F1} -> {clampedS:F1}");
+            PluginLog.Verbose(() => $"[LightControlService] SetHueSat - entity: {entityId}, h: {h:F1} -> {wrappedH:F1}, s: {s:F1} -> {clampedS:F1}");
             this._hsSender.Set(entityId, new Hs(wrappedH, clampedS));
         }
 
         public void SetTempMired(String entityId, Int32 mired)
         {
             var clampedMired = Math.Max(MinMiredValue, mired);
-            PluginLog.Verbose($"[LightControlService] SetTempMired - entity: {entityId}, mired: {mired} -> {clampedMired}");
+            PluginLog.Verbose(() => $"[LightControlService] SetTempMired - entity: {entityId}, mired: {mired} -> {clampedMired}");
             this._tempSender.Set(entityId, clampedMired);
         }
 
         public void CancelPending(String entityId)
         {
-            PluginLog.Verbose($"[LightControlService] CancelPending - entity: {entityId}, canceling all pending operations");
+            PluginLog.Verbose(() => $"[LightControlService] CancelPending - entity: {entityId}, canceling all pending operations");
             try
             {
                 this._brightnessSender.Cancel(entityId);
                 this._hsSender.Cancel(entityId);
                 this._tempSender.Cancel(entityId);
-                PluginLog.Verbose($"[LightControlService] CancelPending completed for {entityId}");
+                PluginLog.Verbose(() => $"[LightControlService] CancelPending completed for {entityId}");
             }
             catch (Exception ex)
             {
@@ -107,7 +107,7 @@ namespace Loupedeck.HomeAssistantPlugin
         public async Task<Boolean> TurnOnAsync(String entityId, JsonElement? data = null, CancellationToken ct = default)
         {
             var hasData = data.HasValue;
-            PluginLog.Info($"[LightControlService] TurnOnAsync - entity: {entityId}, hasData: {hasData}");
+            PluginLog.Debug(() => $"[LightControlService] TurnOnAsync - entity: {entityId}, hasData: {hasData}");
 
             try
             {
@@ -117,11 +117,11 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 if (ok)
                 {
-                    PluginLog.Info($"[LightControlService] TurnOnAsync SUCCESS - {entityId} turned on in {elapsed.TotalMilliseconds:F0}ms");
+                    PluginLog.Info(() => $"[LightControlService] TurnOnAsync SUCCESS - {entityId} turned on in {elapsed.TotalMilliseconds:F0}ms");
                 }
                 else
                 {
-                    PluginLog.Warning($"[LightControlService] TurnOnAsync FAILED - {entityId} failed in {elapsed.TotalMilliseconds:F0}ms: {error}");
+                    PluginLog.Warning(() => $"[LightControlService] TurnOnAsync FAILED - {entityId} failed in {elapsed.TotalMilliseconds:F0}ms: {error}");
                 }
 
                 return ok;
@@ -145,11 +145,11 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 if (ok)
                 {
-                    PluginLog.Info($"[LightControlService] TurnOffAsync SUCCESS - {entityId} turned off in {elapsed.TotalMilliseconds:F0}ms");
+                    PluginLog.Info(() => $"[LightControlService] TurnOffAsync SUCCESS - {entityId} turned off in {elapsed.TotalMilliseconds:F0}ms");
                 }
                 else
                 {
-                    PluginLog.Warning($"[LightControlService] TurnOffAsync FAILED - {entityId} failed in {elapsed.TotalMilliseconds:F0}ms: {error}");
+                    PluginLog.Warning(() => $"[LightControlService] TurnOffAsync FAILED - {entityId} failed in {elapsed.TotalMilliseconds:F0}ms: {error}");
                 }
 
                 return ok;
@@ -173,11 +173,11 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 if (ok)
                 {
-                    PluginLog.Info($"[LightControlService] ToggleAsync SUCCESS - {entityId} toggled in {elapsed.TotalMilliseconds:F0}ms");
+                    PluginLog.Info(() => $"[LightControlService] ToggleAsync SUCCESS - {entityId} toggled in {elapsed.TotalMilliseconds:F0}ms");
                 }
                 else
                 {
-                    PluginLog.Warning($"[LightControlService] ToggleAsync FAILED - {entityId} failed in {elapsed.TotalMilliseconds:F0}ms: {error}");
+                    PluginLog.Warning(() => $"[LightControlService] ToggleAsync FAILED - {entityId} failed in {elapsed.TotalMilliseconds:F0}ms: {error}");
                 }
 
                 return ok;
@@ -205,7 +205,7 @@ namespace Loupedeck.HomeAssistantPlugin
                         this._lastBri[entityId] = target;
                     }
 
-                    PluginLog.Info($"[light] bri={target} -> {entityId} OK");
+                    PluginLog.Info(() => $"[light] bri={target} -> {entityId} OK");
                 }
                 else
                 {
@@ -231,7 +231,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 var (ok, err) = await this._ha.CallServiceAsync("light", "turn_on", entityId, data, cts.Token).ConfigureAwait(false);
                 if (ok)
                 {
-                    PluginLog.Info($"[light] hs=[{hs.H:F0},{hs.S:F0}] -> {entityId} OK");
+                    PluginLog.Info(() => $"[light] hs=[{hs.H:F0},{hs.S:F0}] -> {entityId} OK");
                 }
                 else
                 {
@@ -259,7 +259,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 var (ok, err) = await this._ha.CallServiceAsync("light", "turn_on", entityId, data, cts.Token).ConfigureAwait(false);
                 if (ok)
                 {
-                    PluginLog.Info($"[light] temp={kelvin}K ({mired} mired) -> {entityId} OK");
+                    PluginLog.Info(() => $"[light] temp={kelvin}K ({mired} mired) -> {entityId} OK");
                 }
                 else
                 {

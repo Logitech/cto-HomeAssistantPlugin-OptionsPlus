@@ -28,14 +28,14 @@ namespace Loupedeck.HomeAssistantPlugin.Services
 
                 if (isNewEntry)
                 {
-                    PluginLog.Verbose($"[DebouncedSender] Set NEW - key: {key}, value: {value}, delay: {this._delayMs}ms");
+                    PluginLog.Trace(() => $"[DebouncedSender] Set NEW - key: {key}, value: {value}, delay: {this._delayMs}ms");
                     var timer = new Timer { AutoReset = false, Interval = this._delayMs };
                     timer.Elapsed += async (_, __) => await this.FireAsync(key).ConfigureAwait(false);
                     this._map[key] = (value, timer);
                 }
                 else
                 {
-                    PluginLog.Verbose($"[DebouncedSender] Set UPDATE - key: {key}, oldValue: {entry.value}, newValue: {value}, restarting timer");
+                    PluginLog.Trace(() => $"[DebouncedSender] Set UPDATE - key: {key}, oldValue: {entry.value}, newValue: {value}, restarting timer");
                     entry.value = value;
                     entry.timer.Stop();
                     this._map[key] = entry;
@@ -50,13 +50,13 @@ namespace Loupedeck.HomeAssistantPlugin.Services
             {
                 if (this._map.TryGetValue(key, out var entry))
                 {
-                    PluginLog.Verbose($"[DebouncedSender] Cancel - key: {key}, stopping timer");
+                    PluginLog.Verbose(() => $"[DebouncedSender] Cancel - key: {key}, stopping timer");
                     entry.timer.Stop();
                     this._map[key] = entry;
                 }
                 else
                 {
-                    PluginLog.Verbose($"[DebouncedSender] Cancel - key: {key}, no entry found");
+                    PluginLog.Verbose(() => $"[DebouncedSender] Cancel - key: {key}, no entry found");
                 }
             }
         }
@@ -68,21 +68,21 @@ namespace Loupedeck.HomeAssistantPlugin.Services
             {
                 if (!this._map.TryGetValue(key, out var entry))
                 {
-                    PluginLog.Verbose($"[DebouncedSender] FireAsync - key: {key}, entry not found (already processed?)");
+                    PluginLog.Verbose(() => $"[DebouncedSender] FireAsync - key: {key}, entry not found (already processed?)");
                     return;
                 }
 
                 value = entry.value;
             }
 
-            PluginLog.Verbose($"[DebouncedSender] FireAsync START - key: {key}, value: {value}");
+            PluginLog.Verbose(() => $"[DebouncedSender] FireAsync START - key: {key}, value: {value}");
             var startTime = DateTime.UtcNow;
 
             try
             {
                 await this._send(key, value).ConfigureAwait(false);
                 var elapsed = DateTime.UtcNow - startTime;
-                PluginLog.Verbose($"[DebouncedSender] FireAsync SUCCESS - key: {key}, completed in {elapsed.TotalMilliseconds:F0}ms");
+                PluginLog.Verbose(() => $"[DebouncedSender] FireAsync SUCCESS - key: {key}, completed in {elapsed.TotalMilliseconds:F0}ms");
             }
             catch (Exception ex)
             {
@@ -109,7 +109,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
                     var count = this._map.Count;
                     this._map.Clear();
 
-                    PluginLog.Verbose($"[DebouncedSender] Dispose completed - Disposed {count} entries");
+                    PluginLog.Verbose(() => $"[DebouncedSender] Dispose completed - Disposed {count} entries");
                 }
                 catch (Exception ex)
                 {

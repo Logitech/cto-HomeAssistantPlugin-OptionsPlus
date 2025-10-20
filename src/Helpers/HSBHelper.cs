@@ -57,7 +57,7 @@ namespace Loupedeck.HomeAssistantPlugin
             var result = (x % DegreesInCircle + DegreesInCircle) % DegreesInCircle;
             if (Math.Abs(x - result) > SignificantChangeTolerance) // Only log if significant change
             {
-                PluginLog.Verbose($"[HSBHelper] Wrap360({x:F2}) -> {result:F2}");
+                PluginLog.Trace(() => $"[HSBHelper] Wrap360({x:F2}) -> {result:F2}");
             }
             return result;
         }
@@ -67,7 +67,7 @@ namespace Loupedeck.HomeAssistantPlugin
             var result = v < min ? min : (v > max ? max : v);
             if (result != v)
             {
-                PluginLog.Verbose($"[HSBHelper] Clamp({v}, {min}, {max}) -> {result}");
+                PluginLog.Trace(() => $"[HSBHelper] Clamp({v}, {min}, {max}) -> {result}");
             }
             return result;
         }
@@ -77,7 +77,7 @@ namespace Loupedeck.HomeAssistantPlugin
             var result = v < min ? min : (v > max ? max : v);
             if (Math.Abs(result - v) > ClampingChangeTolerance) // Only log if clamped
             {
-                PluginLog.Verbose($"[HSBHelper] Clamp({v:F3}, {min:F3}, {max:F3}) -> {result:F3}");
+                PluginLog.Trace(() => $"[HSBHelper] Clamp({v:F3}, {min:F3}, {max:F3}) -> {result:F3}");
             }
             return result;
         }
@@ -86,7 +86,7 @@ namespace Loupedeck.HomeAssistantPlugin
         public static (Double H, Double S) RgbToHs(Int32 r, Int32 g, Int32 b)
         {
             var startTime = DateTime.UtcNow;
-            PluginLog.Verbose($"[HSBHelper] RgbToHs({r}, {g}, {b}) called");
+            PluginLog.Trace(() => $"[HSBHelper] RgbToHs({r}, {g}, {b}) called");
 
             try
             {
@@ -97,7 +97,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 var min = Math.Min(R, Math.Min(G, B));
                 var d = max - min;
 
-                PluginLog.Verbose($"[HSBHelper] Normalized RGB: ({R:F3}, {G:F3}, {B:F3}), range: {min:F3}-{max:F3}, delta: {d:F3}");
+                PluginLog.Trace(() => $"[HSBHelper] Normalized RGB: ({R:F3}, {G:F3}, {B:F3}), range: {min:F3}-{max:F3}, delta: {d:F3}");
 
                 // Hue calculation
                 var h = d == 0 ? FallbackHue : max == R ? DegreesPerHueSector * ((G - B) / d % HueSectorsCount) : max == G ? DegreesPerHueSector * ((B - R) / d + GreenHueSectorOffset) : DegreesPerHueSector * ((R - G) / d + BlueHueSectorOffset);
@@ -107,7 +107,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 var s = (max == 0) ? FallbackSaturation : d / max * PercentageScaleFactor;
 
                 var elapsed = (DateTime.UtcNow - startTime).TotalMilliseconds;
-                PluginLog.Info($"[HSBHelper] RGB->HS conversion completed in {elapsed:F2}ms: ({r},{g},{b}) -> (H:{h:F1}°, S:{s:F1}%)");
+                PluginLog.Debug(() => $"[HSBHelper] RGB->HS conversion completed in {elapsed:F2}ms: ({r},{g},{b}) -> (H:{h:F1}°, S:{s:F1}%)");
 
                 return (h, s);
             }
@@ -122,7 +122,7 @@ namespace Loupedeck.HomeAssistantPlugin
         public static (Int32 R, Int32 G, Int32 B) HsbToRgb(Double hDeg, Double sPct, Double bPct)
         {
             var startTime = DateTime.UtcNow;
-            PluginLog.Verbose($"[HSBHelper] HsbToRgb(H:{hDeg:F1}°, S:{sPct:F1}%, B:{bPct:F1}%) called");
+            PluginLog.Trace(() => $"[HSBHelper] HsbToRgb(H:{hDeg:F1}°, S:{sPct:F1}%, B:{bPct:F1}%) called");
 
             try
             {
@@ -133,14 +133,14 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 if (Math.Abs(hDeg - H) > NormalizationTolerance || Math.Abs(sPct - S * PercentageScaleFactor) > NormalizationTolerance || Math.Abs(bPct - V * PercentageScaleFactor) > NormalizationTolerance)
                 {
-                    PluginLog.Verbose($"[HSBHelper] Input normalized: H:{hDeg:F1}->{H:F1}, S:{sPct:F1}->{S * PercentageScaleFactor:F1}, B:{bPct:F1}->{V * PercentageScaleFactor:F1}");
+                    PluginLog.Trace(() => $"[HSBHelper] Input normalized: H:{hDeg:F1}->{H:F1}, S:{sPct:F1}->{S * PercentageScaleFactor:F1}, B:{bPct:F1}->{V * PercentageScaleFactor:F1}");
                 }
 
                 var C = V * S; // Chroma
                 var X = C * (ChromaOffsetValue - Math.Abs(H / DegreesPerHueSector % ChromaModuloDivisor - ChromaOffsetValue));
                 var m = V - C; // Match value
 
-                PluginLog.Verbose($"[HSBHelper] HSV intermediate values: C={C:F3}, X={X:F3}, m={m:F3}");
+                PluginLog.Trace(() => $"[HSBHelper] HSV intermediate values: C={C:F3}, X={X:F3}, m={m:F3}");
 
                 // Determine RGB' values based on hue sector
                 Double r1, g1, b1;
@@ -158,7 +158,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 else
                 { r1 = C; g1 = FallbackSaturation; b1 = X; sector = "Magenta-Red"; }
 
-                PluginLog.Verbose($"[HSBHelper] Hue sector: {sector}, RGB' values: ({r1:F3}, {g1:F3}, {b1:F3})");
+                PluginLog.Trace(() => $"[HSBHelper] Hue sector: {sector}, RGB' values: ({r1:F3}, {g1:F3}, {b1:F3})");
 
                 // Add match value and convert to 8-bit
                 var R = (Int32)Math.Round((r1 + m) * RgbScaleFactor);
@@ -171,7 +171,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 B = Math.Min(MaxRgbComponent, Math.Max(MinRgbComponent, B));
 
                 var elapsed = (DateTime.UtcNow - startTime).TotalMilliseconds;
-                PluginLog.Info($"[HSBHelper] HSB->RGB conversion completed in {elapsed:F2}ms: (H:{hDeg:F1}°, S:{sPct:F1}%, B:{bPct:F1}%) -> RGB({R},{G},{B})");
+                PluginLog.Debug(() => $"[HSBHelper] HSB->RGB conversion completed in {elapsed:F2}ms: (H:{hDeg:F1}°, S:{sPct:F1}%, B:{bPct:F1}%) -> RGB({R},{G},{B})");
 
                 return (R, G, B);
             }
@@ -186,7 +186,7 @@ namespace Loupedeck.HomeAssistantPlugin
         public static (Int32 R, Int32 G, Int32 B) HsbToRgb255(Double hDeg, Double sPct, Int32 b0to255)
         {
             var bPct = b0to255 * PercentageScaleFactor / RgbScaleFactor;
-            PluginLog.Verbose($"[HSBHelper] HsbToRgb255() called - converting brightness {b0to255}/255 to {bPct:F1}%");
+            PluginLog.Trace(() => $"[HSBHelper] HsbToRgb255() called - converting brightness {b0to255}/255 to {bPct:F1}%");
             return HsbToRgb(hDeg, sPct, bPct);
         }
     }
