@@ -49,7 +49,7 @@ namespace Loupedeck.HomeAssistantPlugin
         public static (Int32 R, Int32 G, Int32 B) XyBriToRgb(Double x, Double y, Int32 brightness)
         {
             var startTime = DateTime.UtcNow;
-            PluginLog.Verbose($"[ColorConv] XyBriToRgb() called with x={x:F4}, y={y:F4}, brightness={brightness}");
+            PluginLog.Trace(() => $"[ColorConv] XyBriToRgb() called with x={x:F4}, y={y:F4}, brightness={brightness}");
 
             try
             {
@@ -64,23 +64,23 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 if (originalX != x || originalY != y || originalBrightness != brightness)
                 {
-                    PluginLog.Verbose($"[ColorConv] Input clamped: x {originalX:F4}->{x:F4}, y {originalY:F4}->{y:F4}, brightness {originalBrightness}->{brightness}");
+                    PluginLog.Trace(() => $"[ColorConv] Input clamped: x {originalX:F4}->{x:F4}, y {originalY:F4}->{y:F4}, brightness {originalBrightness}->{brightness}");
                 }
 
-                PluginLog.Verbose($"[ColorConv] Normalized luminance Y={Y:F4}");
+                PluginLog.Trace(() => $"[ColorConv] Normalized luminance Y={Y:F4}");
 
                 // xyY -> XYZ conversion
                 var X = Y / y * x;
                 var Z = Y / y * (MaxLuminance - x - y);
 
-                PluginLog.Verbose($"[ColorConv] XYZ color space: X={X:F4}, Y={Y:F4}, Z={Z:F4}");
+                PluginLog.Trace(() => $"[ColorConv] XYZ color space: X={X:F4}, Y={Y:F4}, Z={Z:F4}");
 
                 // XYZ -> linear sRGB (D65) conversion
                 var r = XyzToSrgb_R_X * X + XyzToSrgb_R_Y * Y + XyzToSrgb_R_Z * Z;
                 var g = XyzToSrgb_G_X * X + XyzToSrgb_G_Y * Y + XyzToSrgb_G_Z * Z;
                 var b = XyzToSrgb_B_X * X + XyzToSrgb_B_Y * Y + XyzToSrgb_B_Z * Z;
 
-                PluginLog.Verbose($"[ColorConv] Linear sRGB (before clipping): r={r:F4}, g={g:F4}, b={b:F4}");
+                PluginLog.Trace(() => $"[ColorConv] Linear sRGB (before clipping): r={r:F4}, g={g:F4}, b={b:F4}");
 
                 // clip negatives before gamma
                 var rClipped = Math.Max(MinRgbComponent, r);
@@ -89,7 +89,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 if (r != rClipped || g != gClipped || b != bClipped)
                 {
-                    PluginLog.Verbose($"[ColorConv] Negative values clipped: r {r:F4}->{rClipped:F4}, g {g:F4}->{gClipped:F4}, b {b:F4}->{bClipped:F4}");
+                    PluginLog.Trace(() => $"[ColorConv] Negative values clipped: r {r:F4}->{rClipped:F4}, g {g:F4}->{gClipped:F4}, b {b:F4}->{bClipped:F4}");
                 }
 
                 r = rClipped;
@@ -101,17 +101,17 @@ namespace Loupedeck.HomeAssistantPlugin
                 g = g <= LinearSrgbThreshold ? SrgbLinearMultiplier * g : SrgbGammaMultiplier * Math.Pow(g, MaxLuminance / SrgbGammaExponent) - SrgbGammaOffset;
                 b = b <= LinearSrgbThreshold ? SrgbLinearMultiplier * b : SrgbGammaMultiplier * Math.Pow(b, MaxLuminance / SrgbGammaExponent) - SrgbGammaOffset;
 
-                PluginLog.Verbose($"[ColorConv] After gamma correction: r={r:F4}, g={g:F4}, b={b:F4}");
+                PluginLog.Trace(() => $"[ColorConv] After gamma correction: r={r:F4}, g={g:F4}, b={b:F4}");
 
                 // normalize if any component >1
                 var max = Math.Max(r, Math.Max(g, b));
                 if (max > MaxRgbComponent)
                 {
-                    PluginLog.Verbose($"[ColorConv] Normalizing by max value {max:F4}");
+                    PluginLog.Trace(() => $"[ColorConv] Normalizing by max value {max:F4}");
                     r /= max;
                     g /= max;
                     b /= max;
-                    PluginLog.Verbose($"[ColorConv] After normalization: r={r:F4}, g={g:F4}, b={b:F4}");
+                    PluginLog.Trace(() => $"[ColorConv] After normalization: r={r:F4}, g={g:F4}, b={b:F4}");
                 }
 
                 // Convert to 8-bit RGB
@@ -120,7 +120,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 var B = (Int32)Math.Round(RgbScaleFactor * Math.Max(MinRgbComponent, Math.Min(MaxRgbComponent, b)));
 
                 var elapsed = (DateTime.UtcNow - startTime).TotalMilliseconds;
-                PluginLog.Info($"[ColorConv] Color conversion completed in {elapsed:F2}ms: xy({x:F4},{y:F4}) + bri({brightness}) -> RGB({R},{G},{B})");
+                PluginLog.Debug(() => $"[ColorConv] Color conversion completed in {elapsed:F2}ms: xy({x:F4},{y:F4}) + bri({brightness}) -> RGB({R},{G},{B})");
 
                 return (R, G, B);
             }
@@ -131,7 +131,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 // Return safe fallback - white at specified brightness
                 var fallbackValue = Math.Max((Int32)MinRgbComponent, Math.Min((Int32)RgbScaleFactor, brightness));
-                PluginLog.Warning($"[ColorConv] Returning fallback RGB({fallbackValue},{fallbackValue},{fallbackValue})");
+                PluginLog.Warning(() => $"[ColorConv] Returning fallback RGB({fallbackValue},{fallbackValue},{fallbackValue})");
                 return (fallbackValue, fallbackValue, fallbackValue);
             }
         }

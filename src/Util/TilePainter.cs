@@ -31,27 +31,27 @@ namespace Loupedeck.HomeAssistantPlugin
         public static BitmapImage IconOrGlyph(BitmapBuilder bb, BitmapImage? icon, String glyph, Int32 padPct = DefaultPaddingPercentage, Int32 font = DefaultFontSize)
         {
             var startTime = DateTime.UtcNow;
-            PluginLog.Verbose($"[TilePainter] IconOrGlyph() called - canvas: {bb.Width}x{bb.Height}, glyph: '{glyph}', padding: {padPct}%, font: {font}");
+            PluginLog.Trace(() => $"[TilePainter] IconOrGlyph() called - canvas: {bb.Width}x{bb.Height}, glyph: '{glyph}', padding: {padPct}%, font: {font}");
 
             try
             {
                 if (icon != null)
                 {
                     var (x, y, side) = CenteredSquare(bb.Width, bb.Height, padPct);
-                    PluginLog.Verbose($"[TilePainter] Drawing icon at ({x},{y}) with size {side}x{side}");
+                    PluginLog.Trace(() => $"[TilePainter] Drawing icon at ({x},{y}) with size {side}x{side}");
                     bb.DrawImage(icon, x, y, side, side);
                     PluginLog.Verbose("[TilePainter] Icon drawn successfully");
                 }
                 else
                 {
-                    PluginLog.Verbose($"[TilePainter] No icon provided - drawing glyph text '{glyph}' with font size {font}");
+                    PluginLog.Trace(() => $"[TilePainter] No icon provided - drawing glyph text '{glyph}' with font size {font}");
                     bb.DrawText(glyph, fontSize: font, color: new BitmapColor(WhiteColorRed, WhiteColorGreen, WhiteColorBlue));
                     PluginLog.Verbose("[TilePainter] Glyph text drawn successfully");
                 }
 
                 var result = bb.ToImage();
                 var elapsed = (DateTime.UtcNow - startTime).TotalMilliseconds;
-                PluginLog.Info($"[TilePainter] Icon/glyph rendering completed in {elapsed:F2}ms");
+                PluginLog.Debug(() => $"[TilePainter] Icon/glyph rendering completed in {elapsed:F2}ms");
 
                 return result;
             }
@@ -77,7 +77,7 @@ namespace Loupedeck.HomeAssistantPlugin
         public static void Background(BitmapBuilder bb, BitmapImage? bgImage, BitmapColor fallback)
         {
             var startTime = DateTime.UtcNow;
-            PluginLog.Verbose($"[TilePainter] Background() called - canvas: {bb.Width}x{bb.Height}, fallback color: R{fallback.R} G{fallback.G} B{fallback.B}");
+            PluginLog.Trace(() => $"[TilePainter] Background() called - canvas: {bb.Width}x{bb.Height}, fallback color: R{fallback.R} G{fallback.G} B{fallback.B}");
 
             try
             {
@@ -118,7 +118,7 @@ namespace Loupedeck.HomeAssistantPlugin
         /// <summary>Compute a centered square inside width×height with padding percentage.</summary>
         private static (Int32 x, Int32 y, Int32 side) CenteredSquare(Int32 w, Int32 h, Int32 padPct)
         {
-            PluginLog.Verbose($"[TilePainter] CenteredSquare() called - dimensions: {w}x{h}, padding: {padPct}%");
+            PluginLog.Trace(() => $"[TilePainter] CenteredSquare() called - dimensions: {w}x{h}, padding: {padPct}%");
 
             try
             {
@@ -127,7 +127,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 var x = (w - side) / CenteringDivisor;
                 var y = (h - side) / CenteringDivisor;
 
-                PluginLog.Verbose($"[TilePainter] Calculated square: position ({x},{y}), size {side}x{side}, padding {pad}px");
+                PluginLog.Trace(() => $"[TilePainter] Calculated square: position ({x},{y}), size {side}x{side}, padding {pad}px");
 
                 return (x, y, side);
             }
@@ -140,7 +140,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 var fallbackX = (w - fallbackSide) / CenteringDivisor;
                 var fallbackY = (h - fallbackSide) / CenteringDivisor;
 
-                PluginLog.Warning($"[TilePainter] Using fallback square: ({fallbackX},{fallbackY}), size {fallbackSide}x{fallbackSide}");
+                PluginLog.Warning(() => $"[TilePainter] Using fallback square: ({fallbackX},{fallbackY}), size {fallbackSide}x{fallbackSide}");
                 return (fallbackX, fallbackY, fallbackSide);
             }
         }

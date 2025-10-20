@@ -159,7 +159,8 @@ namespace Loupedeck.HomeAssistantPlugin.Services
 
                     lights.Add(lightData);
 
-                    PluginLog.Info($"[Light] {entityId} | name='{friendly}' | state={state} | dev='{deviceName}' mf='{mf}' model='{model}' bri={bri} tempMired={curM} range=[{minM},{maxM}] area='{areaId}'");
+                    // Use lambda-based logging to defer expensive string operations - only evaluated when VERBOSE_LOGGING is enabled
+                    PluginLog.Verbose(() => $"[Light] {entityId} | name='{friendly}' | state={state} | dev='{deviceName}' mf='{mf}' model='{model}' bri={bri} tempMired={curM} range=[{minM},{maxM}] area='{areaId}'");
                 }
             }
             catch (Exception ex)
@@ -202,7 +203,8 @@ namespace Loupedeck.HomeAssistantPlugin.Services
                             }
                             fields = String.Join(", ", names);
                         }
-                        PluginLog.Info($"[Service light.{svcName}] fields=[{fields}] target={(svcDef.TryGetProperty("target", out var t) ? "yes" : "no")}");
+                        // Use lambda-based logging to defer expensive string operations - only evaluated when VERBOSE_LOGGING is enabled
+                        PluginLog.Verbose(() => $"[Service light.{svcName}] fields=[{fields}] target={(svcDef.TryGetProperty("target", out var t) ? "yes" : "no")}");
                     }
                 }
                 else

@@ -9,6 +9,24 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
 
+    <!-- Conditional Compilation Symbols for Logging Levels -->
+    <!-- For Beta/Development builds: Uncomment TRACE_LOGGING to enable all verbose logging -->
+    <DefineConstants>$(DefineConstants);TRACE_LOGGING</DefineConstants>
+    
+    <!-- For Production builds with verbose logs: Uncomment VERBOSE_LOGGING -->
+    <!-- <DefineConstants>$(DefineConstants);VERBOSE_LOGGING</DefineConstants> -->
+    
+    <!-- For Production builds with debug info: Uncomment DEBUG_LOGGING -->
+    <!-- <DefineConstants>$(DefineConstants);DEBUG_LOGGING</DefineConstants> -->
+    
+    <!-- For Standard Production builds: Uncomment INFO_LOGGING (recommended default) -->
+    <!-- <DefineConstants>$(DefineConstants);INFO_LOGGING</DefineConstants> -->
+    
+    <!-- For Minimal Production builds: Uncomment WARNING_LOGGING only -->
+    <!-- <DefineConstants>$(DefineConstants);WARNING_LOGGING</DefineConstants> -->
+    
+    <!-- Note: ERROR_LOGGING is always enabled regardless of symbols -->
+
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
 
