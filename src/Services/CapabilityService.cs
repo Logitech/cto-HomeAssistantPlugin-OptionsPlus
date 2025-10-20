@@ -7,7 +7,7 @@ namespace Loupedeck.HomeAssistantPlugin
     /// <summary>
     /// Central place to infer capabilities (lights today; other domains tomorrow).
     /// </summary>
-    internal sealed class CapabilityService
+    internal sealed class CapabilityService : ICapabilityService
     {
         public CapabilityService() => PluginLog.Info("[CapabilityService] Service initialized - ready to analyze device capabilities");
 

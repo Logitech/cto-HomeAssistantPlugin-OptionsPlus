@@ -5,7 +5,9 @@ namespace Loupedeck.HomeAssistantPlugin
     using System.Threading.Tasks;
     using System.Timers;
 
-    internal sealed class DebouncedSender<TKey, TValue> : IDisposable
+    using Loupedeck.HomeAssistantPlugin.Services;
+
+    internal sealed class DebouncedSender<TKey, TValue> : IDebouncedSender<TKey, TValue>, IDisposable
         where TKey : notnull
     {
         private readonly Object _gate = new();
