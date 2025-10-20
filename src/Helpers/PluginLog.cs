@@ -21,7 +21,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
     internal static class PluginLog
     {
-        private static PluginLogFile _pluginLogFile;
+        private static PluginLogFile? _pluginLogFile;
 
         public static void Init(PluginLogFile pluginLogFile)
         {
@@ -40,20 +40,14 @@ namespace Loupedeck.HomeAssistantPlugin
         /// </summary>
         [Conditional("TRACE_LOGGING")]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Trace(String message)
-        {
-            PluginLog._pluginLogFile?.Verbose($"[TRACE] {message}");
-        }
+        public static void Trace(String message) => PluginLog._pluginLogFile?.Verbose($"[TRACE] {message}");
 
         /// <summary>
         /// Logs trace-level messages with exception and performance timing. Only available when TRACE_LOGGING is defined.
         /// </summary>
         [Conditional("TRACE_LOGGING")]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Trace(Exception ex, String message)
-        {
-            PluginLog._pluginLogFile?.Verbose(ex, $"[TRACE] {message}");
-        }
+        public static void Trace(Exception ex, String message) => PluginLog._pluginLogFile?.Verbose(ex, $"[TRACE] {message}");
 
         /// <summary>
         /// Logs trace-level messages with exception using a lambda to defer expensive string operations.
@@ -61,10 +55,7 @@ namespace Loupedeck.HomeAssistantPlugin
         /// </summary>
         [Conditional("TRACE_LOGGING")]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Trace(Exception ex, Func<String> messageFactory)
-        {
-            PluginLog._pluginLogFile?.Verbose(ex, $"[TRACE] {messageFactory()}");
-        }
+        public static void Trace(Exception ex, Func<String> messageFactory) => PluginLog._pluginLogFile?.Verbose(ex, $"[TRACE] {messageFactory()}");
 
         /// <summary>
         /// Logs trace-level messages using a lambda to defer expensive string operations.
@@ -72,10 +63,7 @@ namespace Loupedeck.HomeAssistantPlugin
         /// </summary>
         [Conditional("TRACE_LOGGING")]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Trace(Func<String> messageFactory)
-        {
-            PluginLog._pluginLogFile?.Verbose($"[TRACE] {messageFactory()}");
-        }
+        public static void Trace(Func<String> messageFactory) => PluginLog._pluginLogFile?.Verbose($"[TRACE] {messageFactory()}");
 
         /// <summary>
         /// Logs verbose-level messages. Only available when TRACE_LOGGING or VERBOSE_LOGGING is defined.
@@ -83,20 +71,14 @@ namespace Loupedeck.HomeAssistantPlugin
         /// </summary>
         [Conditional("TRACE_LOGGING"), Conditional("VERBOSE_LOGGING")]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Verbose(String text)
-        {
-            PluginLog._pluginLogFile?.Verbose(text);
-        }
+        public static void Verbose(String text) => PluginLog._pluginLogFile?.Verbose(text);
 
         /// <summary>
         /// Logs verbose-level messages with exception. Only available when TRACE_LOGGING or VERBOSE_LOGGING is defined.
         /// </summary>
         [Conditional("TRACE_LOGGING"), Conditional("VERBOSE_LOGGING")]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Verbose(Exception ex, String text)
-        {
-            PluginLog._pluginLogFile?.Verbose(ex, text);
-        }
+        public static void Verbose(Exception ex, String text) => PluginLog._pluginLogFile?.Verbose(ex, text);
 
         /// <summary>
         /// Logs verbose-level messages with exception using a lambda to defer expensive string operations.
@@ -104,10 +86,7 @@ namespace Loupedeck.HomeAssistantPlugin
         /// </summary>
         [Conditional("TRACE_LOGGING"), Conditional("VERBOSE_LOGGING")]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Verbose(Exception ex, Func<String> messageFactory)
-        {
-            PluginLog._pluginLogFile?.Verbose(ex, messageFactory());
-        }
+        public static void Verbose(Exception ex, Func<String> messageFactory) => PluginLog._pluginLogFile?.Verbose(ex, messageFactory());
 
         /// <summary>
         /// Logs verbose-level messages using a lambda to defer expensive string operations.
@@ -115,10 +94,7 @@ namespace Loupedeck.HomeAssistantPlugin
         /// </summary>
         [Conditional("TRACE_LOGGING"), Conditional("VERBOSE_LOGGING")]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Verbose(Func<String> messageFactory)
-        {
-            PluginLog._pluginLogFile?.Verbose(messageFactory());
-        }
+        public static void Verbose(Func<String> messageFactory) => PluginLog._pluginLogFile?.Verbose(messageFactory());
 
         /// <summary>
         /// Logs debug-level messages. Only available when TRACE_LOGGING, VERBOSE_LOGGING, or DEBUG_LOGGING is defined.
@@ -126,20 +102,14 @@ namespace Loupedeck.HomeAssistantPlugin
         /// </summary>
         [Conditional("TRACE_LOGGING"), Conditional("VERBOSE_LOGGING"), Conditional("DEBUG_LOGGING")]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Debug(String text)
-        {
-            PluginLog._pluginLogFile?.Info($"[DEBUG] {text}");
-        }
+        public static void Debug(String text) => PluginLog._pluginLogFile?.Info($"[DEBUG] {text}");
 
         /// <summary>
         /// Logs debug-level messages with exception. Only available when appropriate logging symbols are defined.
         /// </summary>
         [Conditional("TRACE_LOGGING"), Conditional("VERBOSE_LOGGING"), Conditional("DEBUG_LOGGING")]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Debug(Exception ex, String text)
-        {
-            PluginLog._pluginLogFile?.Info(ex, $"[DEBUG] {text}");
-        }
+        public static void Debug(Exception ex, String text) => PluginLog._pluginLogFile?.Info(ex, $"[DEBUG] {text}");
 
         /// <summary>
         /// Logs debug-level messages with exception using a lambda to defer expensive string operations.
@@ -147,10 +117,7 @@ namespace Loupedeck.HomeAssistantPlugin
         /// </summary>
         [Conditional("TRACE_LOGGING"), Conditional("VERBOSE_LOGGING"), Conditional("DEBUG_LOGGING")]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Debug(Exception ex, Func<String> messageFactory)
-        {
-            PluginLog._pluginLogFile?.Info(ex, $"[DEBUG] {messageFactory()}");
-        }
+        public static void Debug(Exception ex, Func<String> messageFactory) => PluginLog._pluginLogFile?.Info(ex, $"[DEBUG] {messageFactory()}");
 
         /// <summary>
         /// Logs debug-level messages using a lambda to defer expensive string operations.
@@ -158,10 +125,7 @@ namespace Loupedeck.HomeAssistantPlugin
         /// </summary>
         [Conditional("TRACE_LOGGING"), Conditional("VERBOSE_LOGGING"), Conditional("DEBUG_LOGGING")]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Debug(Func<String> messageFactory)
-        {
-            PluginLog._pluginLogFile?.Info($"[DEBUG] {messageFactory()}");
-        }
+        public static void Debug(Func<String> messageFactory) => PluginLog._pluginLogFile?.Info($"[DEBUG] {messageFactory()}");
 
         /// <summary>
         /// Logs info-level messages. Available when any logging level except ERROR_LOGGING is defined.
@@ -169,20 +133,14 @@ namespace Loupedeck.HomeAssistantPlugin
         /// </summary>
         [Conditional("TRACE_LOGGING"), Conditional("VERBOSE_LOGGING"), Conditional("DEBUG_LOGGING"), Conditional("INFO_LOGGING")]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Info(String text)
-        {
-            PluginLog._pluginLogFile?.Info(text);
-        }
+        public static void Info(String text) => PluginLog._pluginLogFile?.Info(text);
 
         /// <summary>
         /// Logs info-level messages with exception. Available when appropriate logging symbols are defined.
         /// </summary>
         [Conditional("TRACE_LOGGING"), Conditional("VERBOSE_LOGGING"), Conditional("DEBUG_LOGGING"), Conditional("INFO_LOGGING")]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Info(Exception ex, String text)
-        {
-            PluginLog._pluginLogFile?.Info(ex, text);
-        }
+        public static void Info(Exception ex, String text) => PluginLog._pluginLogFile?.Info(ex, text);
 
         /// <summary>
         /// Logs info-level messages with exception using a lambda to defer expensive string operations.
@@ -190,10 +148,7 @@ namespace Loupedeck.HomeAssistantPlugin
         /// </summary>
         [Conditional("TRACE_LOGGING"), Conditional("VERBOSE_LOGGING"), Conditional("DEBUG_LOGGING"), Conditional("INFO_LOGGING")]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Info(Exception ex, Func<String> messageFactory)
-        {
-            PluginLog._pluginLogFile?.Info(ex, messageFactory());
-        }
+        public static void Info(Exception ex, Func<String> messageFactory) => PluginLog._pluginLogFile?.Info(ex, messageFactory());
 
         /// <summary>
         /// Logs info-level messages using a lambda to defer expensive string operations.
@@ -201,10 +156,7 @@ namespace Loupedeck.HomeAssistantPlugin
         /// </summary>
         [Conditional("TRACE_LOGGING"), Conditional("VERBOSE_LOGGING"), Conditional("DEBUG_LOGGING"), Conditional("INFO_LOGGING")]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Info(Func<String> messageFactory)
-        {
-            PluginLog._pluginLogFile?.Info(messageFactory());
-        }
+        public static void Info(Func<String> messageFactory) => PluginLog._pluginLogFile?.Info(messageFactory());
 
         /// <summary>
         /// Logs warning-level messages. Always available unless no logging symbols are defined.
@@ -212,20 +164,14 @@ namespace Loupedeck.HomeAssistantPlugin
         /// </summary>
         [Conditional("TRACE_LOGGING"), Conditional("VERBOSE_LOGGING"), Conditional("DEBUG_LOGGING"), Conditional("INFO_LOGGING"), Conditional("WARNING_LOGGING")]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Warning(String text)
-        {
-            PluginLog._pluginLogFile?.Warning(text);
-        }
+        public static void Warning(String text) => PluginLog._pluginLogFile?.Warning(text);
 
         /// <summary>
         /// Logs warning-level messages with exception. Always available unless no logging symbols are defined.
         /// </summary>
         [Conditional("TRACE_LOGGING"), Conditional("VERBOSE_LOGGING"), Conditional("DEBUG_LOGGING"), Conditional("INFO_LOGGING"), Conditional("WARNING_LOGGING")]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Warning(Exception ex, String text)
-        {
-            PluginLog._pluginLogFile?.Warning(ex, text);
-        }
+        public static void Warning(Exception ex, String text) => PluginLog._pluginLogFile?.Warning(ex, text);
 
         /// <summary>
         /// Logs warning-level messages with exception using a lambda to defer expensive string operations.
@@ -233,10 +179,7 @@ namespace Loupedeck.HomeAssistantPlugin
         /// </summary>
         [Conditional("TRACE_LOGGING"), Conditional("VERBOSE_LOGGING"), Conditional("DEBUG_LOGGING"), Conditional("INFO_LOGGING"), Conditional("WARNING_LOGGING")]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Warning(Exception ex, Func<String> messageFactory)
-        {
-            PluginLog._pluginLogFile?.Warning(ex, messageFactory());
-        }
+        public static void Warning(Exception ex, Func<String> messageFactory) => PluginLog._pluginLogFile?.Warning(ex, messageFactory());
 
         /// <summary>
         /// Logs warning-level messages using a lambda to defer expensive string operations.
@@ -244,47 +187,32 @@ namespace Loupedeck.HomeAssistantPlugin
         /// </summary>
         [Conditional("TRACE_LOGGING"), Conditional("VERBOSE_LOGGING"), Conditional("DEBUG_LOGGING"), Conditional("INFO_LOGGING"), Conditional("WARNING_LOGGING")]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Warning(Func<String> messageFactory)
-        {
-            PluginLog._pluginLogFile?.Warning(messageFactory());
-        }
+        public static void Warning(Func<String> messageFactory) => PluginLog._pluginLogFile?.Warning(messageFactory());
 
         /// <summary>
         /// Logs error-level messages. Always available - errors should always be logged.
         /// Use for error conditions that may affect functionality.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Error(String text)
-        {
-            PluginLog._pluginLogFile?.Error(text);
-        }
+        public static void Error(String text) => PluginLog._pluginLogFile?.Error(text);
 
         /// <summary>
         /// Logs error-level messages with exception. Always available - errors should always be logged.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Error(Exception ex, String text)
-        {
-            PluginLog._pluginLogFile?.Error(ex, text);
-        }
+        public static void Error(Exception ex, String text) => PluginLog._pluginLogFile?.Error(ex, text);
 
         /// <summary>
         /// Logs error-level messages with exception using a lambda. Always evaluates since errors should always be logged.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Error(Exception ex, Func<String> messageFactory)
-        {
-            PluginLog._pluginLogFile?.Error(ex, messageFactory());
-        }
+        public static void Error(Exception ex, Func<String> messageFactory) => PluginLog._pluginLogFile?.Error(ex, messageFactory());
 
         /// <summary>
         /// Logs error-level messages using a lambda. Always evaluates since errors should always be logged.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Error(Func<String> messageFactory)
-        {
-            PluginLog._pluginLogFile?.Error(messageFactory());
-        }
+        public static void Error(Func<String> messageFactory) => PluginLog._pluginLogFile?.Error(messageFactory());
 
         // ====================================================================
         // PERFORMANCE LOGGING UTILITIES
