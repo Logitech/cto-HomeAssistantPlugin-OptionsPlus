@@ -7,6 +7,7 @@ namespace Loupedeck.HomeAssistantPlugin
     using System.Threading.Tasks;
 
     using Loupedeck;
+    using Loupedeck.HomeAssistantPlugin.Services;
 
     public sealed class ToggleLightAction : ActionEditorCommand
     {

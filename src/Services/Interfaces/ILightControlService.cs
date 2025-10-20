@@ -1,5 +1,4 @@
-// Services/ILightControlService.cs
-namespace Loupedeck.HomeAssistantPlugin
+namespace Loupedeck.HomeAssistantPlugin.Services
 {
     using System;
     using System.Text.Json;

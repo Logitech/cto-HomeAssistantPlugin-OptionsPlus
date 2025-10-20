@@ -1,5 +1,4 @@
-// Services/ICapabilityService.cs
-namespace Loupedeck.HomeAssistantPlugin
+namespace Loupedeck.HomeAssistantPlugin.Services
 {
     using System.Text.Json;
 

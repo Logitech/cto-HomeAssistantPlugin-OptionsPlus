@@ -79,5 +79,41 @@ namespace Loupedeck.HomeAssistantPlugin.Services
         /// <param name="areaId">Area ID</param>
         /// <returns>True if area exists</returns>
         Boolean AreaExists(String areaId);
+
+        /// <summary>
+        /// Gets all registered area IDs
+        /// </summary>
+        /// <returns>Collection of area IDs</returns>
+        IEnumerable<String> GetAllAreaIds();
+
+        /// <summary>
+        /// Gets all registered device IDs
+        /// </summary>
+        /// <returns>Collection of device IDs</returns>
+        IEnumerable<String> GetAllDeviceIds();
+
+        /// <summary>
+        /// Gets all registered entity IDs
+        /// </summary>
+        /// <returns>Collection of entity IDs</returns>
+        IEnumerable<String> GetAllEntityIds();
+
+        /// <summary>
+        /// Resolves the final area ID for an entity, including fallback to unassigned
+        /// </summary>
+        /// <param name="entityId">Entity ID</param>
+        /// <returns>Area ID (never null - returns UnassignedAreaId if no area found)</returns>
+        String ResolveEntityAreaId(String entityId);
+
+        /// <summary>
+        /// Gets statistics about the current registry data
+        /// </summary>
+        /// <returns>Tuple with counts of devices, entities, and areas</returns>
+        (Int32 DeviceCount, Int32 EntityCount, Int32 AreaCount) GetRegistryStats();
+
+        /// <summary>
+        /// Clears all registry data
+        /// </summary>
+        void ClearAll();
     }
 }
