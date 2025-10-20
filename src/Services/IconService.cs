@@ -34,7 +34,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
         /// <param name="resourceMap">logical id → embedded resource filename</param>
         public IconService(IDictionary<String, String> resourceMap)
         {
-            PluginLog.Info($"[IconService] Constructor - Initializing with {resourceMap?.Count ?? 0} icon mappings");
+            PluginLog.Debug(() => $"[IconService] Constructor - Initializing with {resourceMap?.Count ?? 0} icon mappings");
 
             if (resourceMap is null)
             {
@@ -53,22 +53,22 @@ namespace Loupedeck.HomeAssistantPlugin.Services
 
                 foreach (var kv in resourceMap)
                 {
-                    PluginLog.Verbose($"[IconService] Loading icon: '{kv.Key}' from '{kv.Value}'");
+                    PluginLog.Verbose(() => $"[IconService] Loading icon: '{kv.Key}' from '{kv.Value}'");
                     var img = PluginResources.ReadImage(kv.Value);
                     if (img == null)
                     {
-                        PluginLog.Warning($"[IconService] Missing embedded icon: '{kv.Value}' for id '{kv.Key}'");
+                        PluginLog.Warning(() => $"[IconService] Missing embedded icon: '{kv.Value}' for id '{kv.Key}'");
                         failCount++;
                     }
                     else
                     {
                         successCount++;
-                        PluginLog.Verbose($"[IconService] Successfully loaded icon: '{kv.Key}'");
+                        PluginLog.Verbose(() => $"[IconService] Successfully loaded icon: '{kv.Key}'");
                     }
                     this._cache[kv.Key] = img;
                 }
 
-                PluginLog.Info($"[IconService] Constructor completed - Loaded {successCount} icons successfully, {failCount} failed");
+                PluginLog.Info(() => $"[IconService] Constructor completed - Loaded {successCount} icons successfully, {failCount} failed");
             }
             catch (Exception ex)
             {
@@ -87,11 +87,11 @@ namespace Loupedeck.HomeAssistantPlugin.Services
 
             if (this._cache.TryGetValue(id, out var img) && img != null)
             {
-                PluginLog.Verbose($"[IconService] Get SUCCESS - Found cached icon for id: '{id}'");
+                PluginLog.Verbose(() => $"[IconService] Get SUCCESS - Found cached icon for id: '{id}'");
                 return img;
             }
 
-            PluginLog.Warning($"[IconService] Get FALLBACK - Icon not found for id: '{id}', returning fallback icon");
+            PluginLog.Warning(() => $"[IconService] Get FALLBACK - Icon not found for id: '{id}', returning fallback icon");
             return CreateFallbackIcon();
         }
 

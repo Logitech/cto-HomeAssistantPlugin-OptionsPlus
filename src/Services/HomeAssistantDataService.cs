@@ -20,7 +20,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
                 var (ok, resultJson, errorMessage) = await this._client.RequestAsync("get_states", token).ConfigureAwait(false);
                 if (!ok)
                 {
-                    PluginLog.Warning($"get_states failed: {errorMessage}");
+                    PluginLog.Warning(() => $"get_states failed: {errorMessage}");
                     HealthBus.Error("get_states failed");
                 }
                 return (ok, resultJson, errorMessage);
@@ -39,7 +39,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
                 var (ok, resultJson, errorMessage) = await this._client.RequestAsync("get_services", token).ConfigureAwait(false);
                 if (!ok)
                 {
-                    PluginLog.Warning($"get_services failed: {errorMessage}");
+                    PluginLog.Warning(() => $"get_services failed: {errorMessage}");
                     HealthBus.Error("get_services failed");
                 }
                 return (ok, resultJson, errorMessage);
@@ -58,7 +58,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
                 var (ok, resultJson, errorMessage) = await this._client.RequestAsync("config/entity_registry/list", token).ConfigureAwait(false);
                 if (!ok)
                 {
-                    PluginLog.Warning($"entity_registry/list failed: {errorMessage}");
+                    PluginLog.Warning(() => $"entity_registry/list failed: {errorMessage}");
                     // Not fatal for basic operation, but helpful for device names
                 }
                 return (ok, resultJson, errorMessage);
@@ -77,7 +77,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
                 var (ok, resultJson, errorMessage) = await this._client.RequestAsync("config/device_registry/list", token).ConfigureAwait(false);
                 if (!ok)
                 {
-                    PluginLog.Warning($"device_registry/list failed: {errorMessage}");
+                    PluginLog.Warning(() => $"device_registry/list failed: {errorMessage}");
                 }
                 return (ok, resultJson, errorMessage);
             }
@@ -95,7 +95,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
                 var (ok, resultJson, errorMessage) = await this._client.RequestAsync("config/area_registry/list", token).ConfigureAwait(false);
                 if (!ok)
                 {
-                    PluginLog.Warning($"area_registry/list failed: {errorMessage}");
+                    PluginLog.Warning(() => $"area_registry/list failed: {errorMessage}");
                 }
                 return (ok, resultJson, errorMessage);
             }

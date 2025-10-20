@@ -115,7 +115,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     this._events.ScriptRunningChanged += (entityId, isRunning) =>
                     {
-                        PluginLog.Info($"{LogPrefix} Event: ScriptRunningChanged entity='{entityId}' running={isRunning}");
+                        PluginLog.Debug(() => $"{LogPrefix} Event: ScriptRunningChanged entity='{entityId}' running={isRunning}");
                         _isRunningCache[entityId] = isRunning;
                         //this.ActionImageChanged(); // resets user icon
                     };
@@ -161,7 +161,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     return true;
                 }
 
-                PluginLog.Info($"{LogPrefix} Connecting to HA… url='{baseUrl}'");
+                PluginLog.Debug(() => $"{LogPrefix} Connecting to HA… url='{baseUrl}'");
                 if (this._client == null)
                 {
                     PluginLog.Warning($"{LogPrefix} EnsureHaReady: Client is null");
@@ -172,10 +172,10 @@ namespace Loupedeck.HomeAssistantPlugin
                     baseUrl, token, TimeSpan.FromSeconds(ConnectionTimeoutSeconds), CancellationToken.None
                 ).ConfigureAwait(false);
 
-                PluginLog.Info($"{LogPrefix} Auth result ok={ok} msg='{msg}'");
+                PluginLog.Info(() => $"{LogPrefix} Auth result ok={ok} msg='{msg}'");
                 if (!ok)
                 {
-                    PluginLog.Warning($"{LogPrefix} Authentication failed: {msg}");
+                    PluginLog.Warning(() => $"{LogPrefix} Authentication failed: {msg}");
                     return false;
                 }
 
@@ -186,11 +186,11 @@ namespace Loupedeck.HomeAssistantPlugin
                     {
                         var subOk = await this._events.ConnectAndSubscribeAsync(baseUrl, token, CancellationToken.None)
                                                  .ConfigureAwait(false);
-                        PluginLog.Info($"{LogPrefix} Event subscription success={subOk}");
+                        PluginLog.Debug(() => $"{LogPrefix} Event subscription success={subOk}");
                     }
                     else
                     {
-                        PluginLog.Warning($"{LogPrefix} Event listener is null, skipping subscription");
+                        PluginLog.Warning(() => $"{LogPrefix} Event listener is null, skipping subscription");
                     }
                 }
                 catch (Exception ex)
@@ -233,12 +233,12 @@ namespace Loupedeck.HomeAssistantPlugin
                 var hasVars = ps.TryGetString(ControlVarsJson, out var rawVars) && !String.IsNullOrWhiteSpace(rawVars);
                 var preferToggle = ps.TryGetBoolean(ControlUseToggle, out var toggle) && toggle;
 
-                PluginLog.Info($"{LogPrefix} Press: entity='{entityId}' preferToggle={preferToggle} hasVars={hasVars}");
+                PluginLog.Debug(() => $"{LogPrefix} Press: entity='{entityId}' preferToggle={preferToggle} hasVars={hasVars}");
 
                 if (preferToggle && hasVars)
                 {
                     // script.toggle ignores variables — make that explicit in logs
-                    PluginLog.Warning($"{LogPrefix} Toggle selected but variables provided — variables will be ignored.");
+                    PluginLog.Warning(() => $"{LogPrefix} Toggle selected but variables provided — variables will be ignored.");
                 }
 
                 // Toggle path (no variables)
@@ -246,31 +246,31 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     if (this._client == null)
                     {
-                        PluginLog.Warning($"{LogPrefix} Client is null, cannot toggle script");
+                        PluginLog.Warning(() => $"{LogPrefix} Client is null, cannot toggle script");
                         return false;
                     }
 
                     var (ok, err) = this._client.CallServiceAsync("script", "toggle", entityId, data: null, CancellationToken.None)
                                            .GetAwaiter().GetResult();
-                    PluginLog.Info($"{LogPrefix} call_service script.toggle '{entityId}' -> ok={ok} err='{err}'");
+                    PluginLog.Info(() => $"{LogPrefix} call_service script.toggle '{entityId}' -> ok={ok} err='{err}'");
                     return ok;
                 }
 
                 // If running, stop it
                 var isRunning = _isRunningCache.TryGetValue(entityId, out var r) && r;
-                PluginLog.Info($"{LogPrefix} Current running state: {isRunning}");
+                PluginLog.Debug(() => $"{LogPrefix} Current running state: {isRunning}");
 
                 if (isRunning)
                 {
                     if (this._client == null)
                     {
-                        PluginLog.Warning($"{LogPrefix} Client is null, cannot turn off script");
+                        PluginLog.Warning(() => $"{LogPrefix} Client is null, cannot turn off script");
                         return false;
                     }
 
                     var (ok, err) = this._client.CallServiceAsync("script", "turn_off", entityId, data: null, CancellationToken.None)
                                            .GetAwaiter().GetResult();
-                    PluginLog.Info($"{LogPrefix} call_service script.turn_off '{entityId}' -> ok={ok} err='{err}'");
+                    PluginLog.Info(() => $"{LogPrefix} call_service script.turn_off '{entityId}' -> ok={ok} err='{err}'");
                     return ok;
                 }
 
@@ -286,24 +286,24 @@ namespace Loupedeck.HomeAssistantPlugin
                         using var wrapperDoc = JsonDocument.Parse(wrapperJson);
                         serviceData = wrapperDoc.RootElement.Clone();
 
-                        PluginLog.Info($"{LogPrefix} Variables parsed OK: {SafeJson(varsDoc.RootElement)}");
+                        PluginLog.Debug(() => $"{LogPrefix} Variables parsed OK: {SafeJson(varsDoc.RootElement)}");
                     }
                     catch (Exception ex)
                     {
-                        PluginLog.Warning(ex, $"{LogPrefix} Variables JSON invalid. Will run without variables. raw='{rawVars}'");
+                        PluginLog.Warning(ex, () => $"{LogPrefix} Variables JSON invalid. Will run without variables. raw='{rawVars}'");
                         serviceData = null;
                     }
                 }
 
                 if (this._client == null)
                 {
-                    PluginLog.Warning($"{LogPrefix} Client is null, cannot turn on script");
+                    PluginLog.Warning(() => $"{LogPrefix} Client is null, cannot turn on script");
                     return false;
                 }
 
                 var (ok2, err2) = this._client.CallServiceAsync("script", "turn_on", entityId, serviceData, CancellationToken.None)
                                          .GetAwaiter().GetResult();
-                PluginLog.Info($"{LogPrefix} call_service script.turn_on '{entityId}' data={SafeJson(serviceData)} -> ok={ok2} err='{err2}'");
+                PluginLog.Info(() => $"{LogPrefix} call_service script.turn_on '{entityId}' data={SafeJson(serviceData)} -> ok={ok2} err='{err2}'");
                 return ok2;
             }
             catch (Exception ex)
@@ -324,7 +324,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 return;
             }
 
-            PluginLog.Info($"{LogPrefix} ListboxItemsRequested({e.ControlName})");
+            PluginLog.Debug(() => $"{LogPrefix} ListboxItemsRequested({e.ControlName})");
 
             try
             {
@@ -337,7 +337,7 @@ namespace Loupedeck.HomeAssistantPlugin
                         e.AddItem(name: kv.Key, displayName: kv.Value, description: "Home Assistant script");
                         count++;
                     }
-                    PluginLog.Info($"{LogPrefix} Served cached scripts: {count}");
+                    PluginLog.Debug(() => $"{LogPrefix} Served cached scripts: {count}");
 
                     // Keep current selection if still valid
                     var current = e.ActionEditorState?.GetControlValue(ControlScript) as String;
@@ -363,7 +363,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(QuickTimeoutSeconds));
                     var ok = await this.RefreshScriptsCacheAsync(cts.Token).ConfigureAwait(false);
-                    PluginLog.Info($"{LogPrefix} Background prefetch after list request ok={ok}");
+                    PluginLog.Debug(() => $"{LogPrefix} Background prefetch after list request ok={ok}");
                 });
             }
             catch (Exception ex)
@@ -416,14 +416,14 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 if (this._client == null)
                 {
-                    PluginLog.Warning($"{LogPrefix} RefreshScriptsCacheAsync: Client is null");
+                    PluginLog.Warning(() => $"{LogPrefix} RefreshScriptsCacheAsync: Client is null");
                     return false;
                 }
 
                 var (ok, json, error) = await this._client.RequestAsync("get_states", ct).ConfigureAwait(false);
                 if (!ok || String.IsNullOrEmpty(json))
                 {
-                    PluginLog.Warning($"{LogPrefix} RefreshScriptsCacheAsync: get_states failed: '{error ?? "unknown"}'");
+                    PluginLog.Warning(() => $"{LogPrefix} RefreshScriptsCacheAsync: get_states failed: '{error ?? "unknown"}'");
                     return false;
                 }
 
@@ -461,12 +461,12 @@ namespace Loupedeck.HomeAssistantPlugin
                 }
 
                 _scriptsLoadedOnce = true;
-                PluginLog.Info($"{LogPrefix} Refreshed scripts: count={_scripts.Count}");
+                PluginLog.Info(() => $"{LogPrefix} Refreshed scripts: count={_scripts.Count}");
                 return true;
             }
             catch (OperationCanceledException)
             {
-                PluginLog.Warning($"{LogPrefix} RefreshScriptsCacheAsync: canceled/timeout");
+                PluginLog.Warning(() => $"{LogPrefix} RefreshScriptsCacheAsync: canceled/timeout");
                 return false;
             }
             catch (Exception ex)

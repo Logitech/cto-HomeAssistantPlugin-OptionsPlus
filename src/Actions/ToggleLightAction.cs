@@ -89,12 +89,12 @@ namespace Loupedeck.HomeAssistantPlugin
 
             try
             {
-                PluginLog.Info($"{LogPrefix} Connecting to HA… url='{baseUrl}'");
+                PluginLog.Debug(() => $"{LogPrefix} Connecting to HA… url='{baseUrl}'");
                 var (ok, msg) = await this._client!.ConnectAndAuthenticateAsync(
                     baseUrl, token, TimeSpan.FromSeconds(ConnectionTimeoutSeconds), CancellationToken.None
                 ).ConfigureAwait(false);
 
-                PluginLog.Info($"{LogPrefix} Auth result ok={ok} msg='{msg}'");
+                PluginLog.Info(() => $"{LogPrefix} Auth result ok={ok} msg='{msg}'");
                 return ok;
             }
             catch (Exception ex)
@@ -123,12 +123,12 @@ namespace Loupedeck.HomeAssistantPlugin
                     return false;
                 }
 
-                PluginLog.Info($"{LogPrefix} Press: entity='{entityId}'");
+                PluginLog.Debug(() => $"{LogPrefix} Press: entity='{entityId}'");
 
                 // Send toggle command
                 var (ok, err) = this._client!.CallServiceAsync("light", "toggle", entityId, data: null, CancellationToken.None)
                     .GetAwaiter().GetResult();
-                PluginLog.Info($"{LogPrefix} call_service light.toggle '{entityId}' -> ok={ok} err='{err}'");
+                PluginLog.Info(() => $"{LogPrefix} call_service light.toggle '{entityId}' -> ok={ok} err='{err}'");
                 return ok;
             }
             catch (Exception ex)
@@ -149,7 +149,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 return;
             }
 
-            PluginLog.Info($"{LogPrefix} ListboxItemsRequested({e.ControlName})");
+            PluginLog.Debug(() => $"{LogPrefix} ListboxItemsRequested({e.ControlName})");
             try
             {
                 // Ensure we’re connected before asking HA for states
@@ -170,7 +170,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 var (ok, json, error) = this._client!.RequestAsync("get_states", CancellationToken.None)
                     .GetAwaiter().GetResult();
-                PluginLog.Info($"{LogPrefix} get_states ok={ok} error='{error}' bytes={json?.Length ?? 0}");
+                PluginLog.Debug(() => $"{LogPrefix} get_states ok={ok} error='{error}' bytes={json?.Length ?? 0}");
 
                 if (!ok || String.IsNullOrEmpty(json))
                 {
@@ -206,13 +206,13 @@ namespace Loupedeck.HomeAssistantPlugin
                     count++;
                 }
 
-                PluginLog.Info($"{LogPrefix} List populated with {count} light(s)");
+                PluginLog.Debug(() => $"{LogPrefix} List populated with {count} light(s)");
 
                 // keep current selection
                 var current = e.ActionEditorState?.GetControlValue(ControlLight) as String;
                 if (!String.IsNullOrEmpty(current))
                 {
-                    PluginLog.Info($"{LogPrefix} Keeping current selection: '{current}'");
+                    PluginLog.Debug(() => $"{LogPrefix} Keeping current selection: '{current}'");
                     e.SetSelectedItemName(current);
                 }
             }

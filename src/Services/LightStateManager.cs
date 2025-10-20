@@ -38,7 +38,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
 
         public void UpdateLightState(String entityId, Boolean isOn, Int32? brightness = null)
         {
-            PluginLog.Verbose($"[LightStateManager] UpdateLightState: {entityId} isOn={isOn} brightness={brightness}");
+            PluginLog.Verbose(() => $"[LightStateManager] UpdateLightState: {entityId} isOn={isOn} brightness={brightness}");
 
             this._isOnByEntity[entityId] = isOn;
 
@@ -50,7 +50,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
 
         public void UpdateHsColor(String entityId, Double? hue, Double? saturation)
         {
-            PluginLog.Verbose($"[LightStateManager] UpdateHsColor: {entityId} hue={hue} saturation={saturation}");
+            PluginLog.Verbose(() => $"[LightStateManager] UpdateHsColor: {entityId} hue={hue} saturation={saturation}");
 
             if (!this._hsbByEntity.TryGetValue(entityId, out var hsb))
             {
@@ -65,7 +65,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
 
         public void UpdateColorTemp(String entityId, Int32? mired, Int32? kelvin, Int32? minM, Int32? maxM)
         {
-            PluginLog.Verbose($"[LightStateManager] UpdateColorTemp: {entityId} mired={mired} kelvin={kelvin} minM={minM} maxM={maxM}");
+            PluginLog.Verbose(() => $"[LightStateManager] UpdateColorTemp: {entityId} mired={mired} kelvin={kelvin} minM={minM} maxM={maxM}");
 
             var existing = this._tempMiredByEntity.TryGetValue(entityId, out var temp)
                 ? temp
@@ -107,7 +107,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
         public void SetCapabilities(String entityId, LightCaps caps)
         {
             this._capsByEntity[entityId] = caps;
-            PluginLog.Verbose($"[LightStateManager] Set capabilities for {entityId}: onoff={caps.OnOff} bri={caps.Brightness} ctemp={caps.ColorTemp} color={caps.ColorHs}");
+            PluginLog.Verbose(() => $"[LightStateManager] Set capabilities for {entityId}: onoff={caps.OnOff} bri={caps.Brightness} ctemp={caps.ColorTemp} color={caps.ColorHs}");
         }
 
         public LightCaps GetCapabilities(String entityId)
@@ -121,7 +121,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
 
         public void SetCachedBrightness(String entityId, Int32 brightness)
         {
-            PluginLog.Verbose($"[LightStateManager] SetCachedBrightness: {entityId} brightness={brightness}");
+            PluginLog.Verbose(() => $"[LightStateManager] SetCachedBrightness: {entityId} brightness={brightness}");
 
             var clampedBrightness = HSBHelper.Clamp(brightness, BrightnessOff, MaxBrightness);
 
@@ -132,7 +132,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
 
         public void InitializeLightStates(IEnumerable<LightData> lights)
         {
-            PluginLog.Info($"[LightStateManager] Initializing light states for {lights.Count()} lights");
+            PluginLog.Info(() => $"[LightStateManager] Initializing light states for {lights.Count()} lights");
 
             // Clear existing data
             this._hsbByEntity.Clear();
@@ -157,10 +157,10 @@ namespace Loupedeck.HomeAssistantPlugin.Services
                     this._tempMiredByEntity[light.EntityId] = (light.MinMired, light.MaxMired, light.ColorTempMired);
                 }
 
-                PluginLog.Verbose($"[LightStateManager] Initialized {light.EntityId}: isOn={light.IsOn}, HSB=({light.Hue:F1},{light.Saturation:F1},{light.Brightness}), temp={light.ColorTempMired}");
+                PluginLog.Verbose(() => $"[LightStateManager] Initialized {light.EntityId}: isOn={light.IsOn}, HSB=({light.Hue:F1},{light.Saturation:F1},{light.Brightness}), temp={light.ColorTempMired}");
             }
 
-            PluginLog.Info($"[LightStateManager] Light state initialization completed");
+            PluginLog.Debug("Light state initialization completed");
         }
 
         /// <summary>
@@ -181,7 +181,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
             var cur = HSBHelper.Clamp(curMired, min, max);
 
             this._tempMiredByEntity[entityId] = (min, max, cur);
-            PluginLog.Verbose($"[LightStateManager] SetCachedTempMired: {entityId} range=[{min},{max}] cur={cur}");
+            PluginLog.Verbose(() => $"[LightStateManager] SetCachedTempMired: {entityId} range=[{min},{max}] cur={cur}");
         }
 
         /// <summary>
@@ -194,7 +194,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
             this._isOnByEntity.Remove(entityId);
             this._capsByEntity.Remove(entityId);
             this._tempMiredByEntity.Remove(entityId);
-            PluginLog.Verbose($"[LightStateManager] Removed entity {entityId} from all caches");
+            PluginLog.Verbose(() => $"[LightStateManager] Removed entity {entityId} from all caches");
         }
 
         /// <summary>

@@ -33,7 +33,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
 
         public void UpdateRegistries(ParsedRegistryData data)
         {
-            PluginLog.Info($"[RegistryService] Updating registries: {data.DeviceById.Count} devices, {data.EntityDevice.Count} entities, {data.AreaIdToName.Count} areas");
+            PluginLog.Info(() => $"[RegistryService] Updating registries: {data.DeviceById.Count} devices, {data.EntityDevice.Count} entities, {data.AreaIdToName.Count} areas");
 
             this._deviceById = new Dictionary<String, (String name, String manufacturer, String model)>(data.DeviceById, StringComparer.OrdinalIgnoreCase);
             this._deviceAreaById = new Dictionary<String, String>(data.DeviceAreaById, StringComparer.OrdinalIgnoreCase);
@@ -47,7 +47,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
                 this._areaIdToName[UnassignedAreaId] = UnassignedAreaName;
             }
 
-            PluginLog.Info($"[RegistryService] Registry update completed");
+            PluginLog.Debug("Registry update completed");
         }
 
         public String? GetDeviceArea(String deviceId) => this._deviceAreaById.TryGetValue(deviceId, out var areaId) ? areaId : null;

@@ -868,7 +868,7 @@ namespace Loupedeck.HomeAssistantPlugin
         public override void RunCommand(String actionParameter)
         {
 
-            PluginLog.Info($"RunCommand: {actionParameter}");
+            PluginLog.Debug(() => $"RunCommand: {actionParameter}");
 
 
             if (actionParameter == CmdBack)
@@ -924,7 +924,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     this._currentEntityId = null;
                     this.ButtonActionNamesChanged();
                     this.EncoderActionNamesChanged();
-                    PluginLog.Info($"ENTER area view: {areaId}");
+                    PluginLog.Debug(() => $"ENTER area view: {areaId}");
                 }
                 return;
             }
@@ -970,7 +970,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     this.AdjustmentValueChanged(AdjHue);
                     this.AdjustmentValueChanged(AdjSat);
 
-                    PluginLog.Info($"ENTER device view: {entityId}  level={this._level} inDevice={this._inDeviceView}");
+                    PluginLog.Debug(() => $"ENTER device view: {entityId}  level={this._level} inDevice={this._inDeviceView}");
 
                 }
                 return;
@@ -1039,16 +1039,16 @@ namespace Loupedeck.HomeAssistantPlugin
         public override Boolean Load()
         {
             PluginLog.Info("[LightsDynamicFolder] Load() START");
-            PluginLog.Info($"[LightsDynamicFolder] Folder.Name = {this.Name}, CommandName = {this.CommandName}, AdjustmentName = {this.AdjustmentName}");
+            PluginLog.Debug(() => $"[LightsDynamicFolder] Folder.Name = {this.Name}, CommandName = {this.CommandName}, AdjustmentName = {this.AdjustmentName}");
 
             try
             {
                 // Initialize dependencies now that Plugin is available
-                PluginLog.Info($"[LightsDynamicFolder] Load() - this.Plugin is null: {this.Plugin == null}");
+                PluginLog.Debug(() => $"[LightsDynamicFolder] Load() - this.Plugin is null: {this.Plugin == null}");
                 
                 if (this.Plugin is HomeAssistantPlugin haPlugin)
                 {
-                    PluginLog.Info($"[LightsDynamicFolder] Load() - this.Plugin type: {this.Plugin.GetType().Name}");
+                    PluginLog.Debug(() => $"[LightsDynamicFolder] Load() - this.Plugin type: {this.Plugin.GetType().Name}");
                     
                     // Initialize dependency injection - use the shared HaClient from Plugin
                     PluginLog.Info("[LightsDynamicFolder] Load() - Initializing dependencies");
@@ -1075,7 +1075,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 }
                 else
                 {
-                    PluginLog.Error($"[LightsDynamicFolder] Load() - Plugin is not HomeAssistantPlugin, actual type: {this.Plugin?.GetType()?.Name ?? "null"}");
+                    PluginLog.Error(() => $"[LightsDynamicFolder] Load() - Plugin is not HomeAssistantPlugin, actual type: {this.Plugin?.GetType()?.Name ?? "null"}");
                     return false;
                 }
 
@@ -1253,7 +1253,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 var (okStates, statesJson, errStates) = this._dataService.FetchStatesAsync(this._cts.Token).GetAwaiter().GetResult();
                 if (!okStates)
                 {
-                    PluginLog.Error($"Failed to fetch states: {errStates}");
+                    PluginLog.Error(() => $"Failed to fetch states: {errStates}");
                     return false;
                 }
 
@@ -1268,7 +1268,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 var (okServices, servicesJson, errServices) = this._dataService.FetchServicesAsync(this._cts.Token).GetAwaiter().GetResult();
                 if (!okServices)
                 {
-                    PluginLog.Error($"Failed to fetch services: {errServices}");
+                    PluginLog.Error(() => $"Failed to fetch services: {errServices}");
                     return false;
                 }
 
@@ -1454,7 +1454,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 return;
             }
 
-            PluginLog.Verbose($"[OnHaHsColorChanged] eid={entityId} h={h?.ToString("F1")} s={s?.ToString("F1")}");
+            PluginLog.Verbose(() => $"[OnHaHsColorChanged] eid={entityId} h={h?.ToString("F1")} s={s?.ToString("F1")}");
 
 
             // Update HS in cache
@@ -1497,7 +1497,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 return;
             }
 
-            PluginLog.Verbose($"[OnHaRgbColorChanged] eid={entityId} rgb=[{r},{g},{b}]");
+            PluginLog.Verbose(() => $"[OnHaRgbColorChanged] eid={entityId} rgb=[{r},{g},{b}]");
 
 
             var (h, s) = HSBHelper.RgbToHs(r.Value, g.Value, b.Value);
@@ -1540,7 +1540,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 return;
             }
 
-            PluginLog.Verbose($"[OnHaXyColorChanged] eid={entityId} xy=[{xv.ToString("F4")},{yv.ToString("F4")}] bri={bri}");
+            PluginLog.Verbose(() => $"[OnHaXyColorChanged] eid={entityId} xy=[{xv.ToString("F4")},{yv.ToString("F4")}] bri={bri}");
 
             // Pick a luminance for XY->RGB: prefer event bri, else cached, else mid
             var baseB = this._hsbByEntity.TryGetValue(entityId, out var old) ? old.B : MidBrightness;
@@ -1585,7 +1585,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     if (!String.IsNullOrEmpty(reasonForLog))
                     {
-                        PluginLog.Verbose($"[echo] Suppressing frame for {entityId} ({reasonForLog})");
+                        PluginLog.Verbose(() => $"[echo] Suppressing frame for {entityId} ({reasonForLog})");
                     }
 
                     return true;

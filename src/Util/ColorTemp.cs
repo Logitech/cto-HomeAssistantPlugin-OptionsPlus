@@ -18,7 +18,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
         public static Int32 MiredToKelvin(Int32 mired)
         {
-            PluginLog.Verbose($"[ColorTemp] MiredToKelvin({mired}) called");
+            PluginLog.Trace(() => $"[ColorTemp] MiredToKelvin({mired}) called");
 
             try
             {
@@ -27,22 +27,22 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 if (safeMired != mired)
                 {
-                    PluginLog.Verbose($"[ColorTemp] Input clamped: {mired} -> {safeMired} mired");
+                    PluginLog.Trace(() => $"[ColorTemp] Input clamped: {mired} -> {safeMired} mired");
                 }
 
-                PluginLog.Verbose($"[ColorTemp] Conversion result: {mired} mired -> {result} Kelvin");
+                PluginLog.Trace(() => $"[ColorTemp] Conversion result: {mired} mired -> {result} Kelvin");
                 return result;
             }
             catch (Exception ex)
             {
-                PluginLog.Error($"[ColorTemp] Exception in MiredToKelvin({mired}): {ex.Message}");
+                PluginLog.Error(() => $"[ColorTemp] Exception in MiredToKelvin({mired}): {ex.Message}");
                 return FallbackKelvinWarmWhite; // Safe fallback - warm white
             }
         }
 
         public static Int32 KelvinToMired(Int32 kelvin)
         {
-            PluginLog.Verbose($"[ColorTemp] KelvinToMired({kelvin}) called");
+            PluginLog.Trace(() => $"[ColorTemp] KelvinToMired({kelvin}) called");
 
             try
             {
@@ -51,15 +51,15 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 if (safeKelvin != kelvin)
                 {
-                    PluginLog.Verbose($"[ColorTemp] Input clamped: {kelvin} -> {safeKelvin} Kelvin");
+                    PluginLog.Trace(() => $"[ColorTemp] Input clamped: {kelvin} -> {safeKelvin} Kelvin");
                 }
 
-                PluginLog.Verbose($"[ColorTemp] Conversion result: {kelvin} Kelvin -> {result} mired");
+                PluginLog.Trace(() => $"[ColorTemp] Conversion result: {kelvin} Kelvin -> {result} mired");
                 return result;
             }
             catch (Exception ex)
             {
-                PluginLog.Error($"[ColorTemp] Exception in KelvinToMired({kelvin}): {ex.Message}");
+                PluginLog.Error(() => $"[ColorTemp] Exception in KelvinToMired({kelvin}): {ex.Message}");
                 return FallbackMiredWarmWhite; // Safe fallback - ~2700K warm white
             }
         }
