@@ -4,10 +4,12 @@ namespace Loupedeck.HomeAssistantPlugin
     using System;
     using System.Collections.Generic;
 
+    using Loupedeck.HomeAssistantPlugin.Services;
+
     /// <summary>
     /// Loads embedded PNGs once and hands out cached BitmapImage instances by id.
     /// </summary>
-    internal sealed class IconService
+    internal sealed class IconService : IIconService
     {
         // ====================================================================
         // CONSTANTS - Icon Service Configuration

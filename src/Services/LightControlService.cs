@@ -6,7 +6,7 @@ namespace Loupedeck.HomeAssistantPlugin
     using System.Threading;
     using System.Threading.Tasks;
 
-    internal sealed class LightControlService : IDisposable
+    internal sealed class LightControlService : ILightControlService
     {
         // ====================================================================
         // CONSTANTS - Light Control Service Configuration
