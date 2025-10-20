@@ -51,7 +51,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 if (hasBaseUrl && hasToken)
                 {
-                    PluginLog.Info($"[Plugin] Configuration found - Base URL: {(hasBaseUrl ? "configured" : "missing")}, Token: {(hasToken ? "configured" : "missing")}");
+                    PluginLog.Info(() => $"[Plugin] Configuration found - Base URL: {(hasBaseUrl ? "configured" : "missing")}, Token: {(hasToken ? "configured" : "missing")}");
                 }
                 else
                 {

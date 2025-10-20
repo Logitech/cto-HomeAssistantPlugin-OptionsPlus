@@ -16,24 +16,24 @@ namespace Loupedeck.HomeAssistantPlugin
         public LightCaps ForLight(JsonElement attributes)
         {
             var startTime = DateTime.UtcNow;
-            PluginLog.Verbose("[CapabilityService] ForLight() called - analyzing light device capabilities");
+            PluginLog.Trace("Analyzing light device capabilities");
 
             try
             {
                 var result = LightCaps.FromAttributes(attributes);
                 var elapsed = (DateTime.UtcNow - startTime).TotalMilliseconds;
 
-                PluginLog.Info($"[CapabilityService] Light capability analysis completed in {elapsed:F1}ms - Result: {result}");
+                PluginLog.Debug(() => $"[CapabilityService] Light capability analysis completed in {elapsed:F1}ms - Result: {result}");
                 return result;
             }
             catch (Exception ex)
             {
                 var elapsed = (DateTime.UtcNow - startTime).TotalMilliseconds;
-                PluginLog.Error($"[CapabilityService] Exception during light capability analysis after {elapsed:F1}ms: {ex.Message}");
+                PluginLog.Error(() => $"[CapabilityService] Exception during light capability analysis after {elapsed:F1}ms: {ex.Message}");
 
                 // Return safe defaults on error
                 var fallback = new LightCaps(true, false, false, false);
-                PluginLog.Warning($"[CapabilityService] Returning fallback light capabilities: {fallback}");
+                PluginLog.Warning(() => $"[CapabilityService] Returning fallback light capabilities: {fallback}");
                 return fallback;
             }
         }

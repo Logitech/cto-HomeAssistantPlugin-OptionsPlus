@@ -10,14 +10,14 @@ namespace Loupedeck.HomeAssistantPlugin
             // Return null if the element is not an object
             if (el.ValueKind != JsonValueKind.Object)
             {
-                PluginLog.Verbose($"[JsonExt] GetPropertyOrDefault - Element is not an object (ValueKind: {el.ValueKind}) for property '{name}'");
+                PluginLog.Trace(() => $"[JsonExt] GetPropertyOrDefault - Element is not an object (ValueKind: {el.ValueKind}) for property '{name}'");
                 return null;
             }
 
             // Return null if the property doesn't exist
             if (!el.TryGetProperty(name, out var property))
             {
-                PluginLog.Verbose($"[JsonExt] GetPropertyOrDefault - Property '{name}' not found in JSON object");
+                PluginLog.Trace(() => $"[JsonExt] GetPropertyOrDefault - Property '{name}' not found in JSON object");
                 return null;
             }
 
@@ -31,7 +31,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
             if (result == null && property.ValueKind != JsonValueKind.Null)
             {
-                PluginLog.Verbose($"[JsonExt] GetPropertyOrDefault - Property '{name}' exists but is not a string (ValueKind: {property.ValueKind})");
+                PluginLog.Trace(() => $"[JsonExt] GetPropertyOrDefault - Property '{name}' exists but is not a string (ValueKind: {property.ValueKind})");
             }
 
             return result;

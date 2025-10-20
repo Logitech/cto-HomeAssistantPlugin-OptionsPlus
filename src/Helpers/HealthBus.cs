@@ -25,7 +25,7 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 lock (_gate)
                 {
-                    PluginLog.Verbose($"[HealthBus] State getter called - current state: {_state}");
+                    PluginLog.Trace(() => $"[HealthBus] State getter called - current state: {_state}");
                     return _state;
                 }
             }
@@ -37,7 +37,7 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 lock (_gate)
                 {
-                    PluginLog.Verbose($"[HealthBus] LastMessage getter called - current message: '{_lastMessage}'");
+                    PluginLog.Trace(() => $"[HealthBus] LastMessage getter called - current message: '{_lastMessage}'");
                     return _lastMessage;
                 }
             }
@@ -45,13 +45,13 @@ namespace Loupedeck.HomeAssistantPlugin
 
         public static void Ok(String message = "OK")
         {
-            PluginLog.Info($"[HealthBus] Setting OK state with message: '{message}'");
+            PluginLog.Debug(() => $"[HealthBus] Setting OK state with message: '{message}'");
             Set(HealthState.Ok, message);
         }
 
         public static void Error(String message = "Error")
         {
-            PluginLog.Warning($"[HealthBus] Setting Error state with message: '{message}'");
+            PluginLog.Warning(() => $"[HealthBus] Setting Error state with message: '{message}'");
             Set(HealthState.Error, message);
         }
 
@@ -72,12 +72,12 @@ namespace Loupedeck.HomeAssistantPlugin
 
             if (changed)
             {
-                PluginLog.Info($"[HealthBus] Health state changed: {previousState}->'{previousMessage}' => {state}->'{message}'");
+                PluginLog.Info(() => $"[HealthBus] Health state changed: {previousState}->'{previousMessage}' => {state}->'{message}'");
                 SafeRaise();
             }
             else
             {
-                PluginLog.Verbose($"[HealthBus] Health state unchanged: {state}->'{message}'");
+                PluginLog.Trace(() => $"[HealthBus] Health state unchanged: {state}->'{message}'");
             }
         }
 
@@ -87,7 +87,7 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 var handler = Volatile.Read(ref HealthChanged);
                 var subscriberCount = handler?.GetInvocationList()?.Length ?? 0;
-                PluginLog.Verbose($"[HealthBus] Raising HealthChanged event to {subscriberCount} subscribers");
+                PluginLog.Trace(() => $"[HealthBus] Raising HealthChanged event to {subscriberCount} subscribers");
 
                 handler?.Invoke(null, EventArgs.Empty);
 
@@ -95,7 +95,7 @@ namespace Loupedeck.HomeAssistantPlugin
             }
             catch (Exception ex)
             {
-                PluginLog.Error($"[HealthBus] Exception during HealthChanged event raising: {ex.Message}");
+                PluginLog.Error(() => $"[HealthBus] Exception during HealthChanged event raising: {ex.Message}");
                 /* never throw across the SDK boundary */
             }
         }

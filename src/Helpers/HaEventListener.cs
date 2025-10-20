@@ -64,12 +64,12 @@ namespace Loupedeck.HomeAssistantPlugin
         public async Task<Boolean> ConnectAndSubscribeAsync(String baseUrl, String accessToken, CancellationToken ct)
         {
             var startTime = DateTime.UtcNow;
-            PluginLog.Info($"[Events] ConnectAndSubscribeAsync START - baseUrl: '{baseUrl}'");
+            PluginLog.Debug(() => $"[Events] ConnectAndSubscribeAsync START - baseUrl: '{baseUrl}'");
 
             try
             {
                 var wsUri = BuildWebSocketUri(baseUrl);
-                PluginLog.Info($"[Events] Built WebSocket URI: {wsUri}");
+                PluginLog.Debug(() => $"[Events] Built WebSocket URI: {wsUri}");
 
                 this._ws?.Dispose();
                 this._ws = new ClientWebSocket();
@@ -78,17 +78,17 @@ namespace Loupedeck.HomeAssistantPlugin
                 var connectStart = DateTime.UtcNow;
                 await this._ws.ConnectAsync(wsUri, ct);
                 var connectTime = DateTime.UtcNow - connectStart;
-                PluginLog.Info($"[Events] WebSocket connected in {connectTime.TotalMilliseconds:F0}ms");
+                PluginLog.Debug(() => $"[Events] WebSocket connected in {connectTime.TotalMilliseconds:F0}ms");
 
                 // 1) auth_required
                 PluginLog.Verbose("[Events] Waiting for auth_required message...");
                 var first = await this.ReceiveTextAsync(ct);
                 var type = ReadType(first);
-                PluginLog.Info($"[Events] First message received: type='{type}'");
+                PluginLog.Debug(() => $"[Events] First message received: type='{type}'");
 
                 if (!String.Equals(type, "auth_required", StringComparison.OrdinalIgnoreCase))
                 {
-                    PluginLog.Error($"[Events] Authentication failed - Expected 'auth_required', got '{type}'");
+                    PluginLog.Error(() => $"[Events] Authentication failed - Expected 'auth_required', got '{type}'");
                     return false;
                 }
 
@@ -101,17 +101,17 @@ namespace Loupedeck.HomeAssistantPlugin
                 PluginLog.Verbose("[Events] Waiting for auth response...");
                 var authReply = await this.ReceiveTextAsync(ct);
                 var authType = ReadType(authReply);
-                PluginLog.Info($"[Events] Auth response: type='{authType}'");
+                PluginLog.Debug(() => $"[Events] Auth response: type='{authType}'");
 
                 if (!String.Equals(authType, "auth_ok", StringComparison.OrdinalIgnoreCase))
                 {
-                    PluginLog.Error($"[Events] Authentication failed - Got '{authType}' instead of 'auth_ok'");
+                    PluginLog.Error(() => $"[Events] Authentication failed - Got '{authType}' instead of 'auth_ok'");
                     return false;
                 }
 
                 // 4) subscribe_events: state_changed
                 var id = Interlocked.Increment(ref this._nextId);
-                PluginLog.Info($"[Events] Subscribing to state_changed events with id={id}...");
+                PluginLog.Debug(() => $"[Events] Subscribing to state_changed events with id={id}...");
                 var sub = JsonSerializer.Serialize(new { id, type = "subscribe_events", event_type = "state_changed" });
                 await this.SendTextAsync(sub, ct);
 
@@ -124,11 +124,11 @@ namespace Loupedeck.HomeAssistantPlugin
                     var matchesId = root.TryGetProperty("id", out var rid) && rid.GetInt32() == id;
                     var isSuccess = root.TryGetProperty("success", out var s) && s.GetBoolean();
 
-                    PluginLog.Info($"[Events] Subscription response - isResult: {isResult}, matchesId: {matchesId}, isSuccess: {isSuccess}");
+                    PluginLog.Debug(() => $"[Events] Subscription response - isResult: {isResult}, matchesId: {matchesId}, isSuccess: {isSuccess}");
 
                     if (!(isResult && matchesId && isSuccess))
                     {
-                        PluginLog.Error($"[Events] Subscription failed - Response: {subReply}");
+                        PluginLog.Error(() => $"[Events] Subscription failed - Response: {subReply}");
                         return false;
                     }
                 }
@@ -138,13 +138,13 @@ namespace Loupedeck.HomeAssistantPlugin
                 this._loop = Task.Run(() => this.ReceiveLoopAsync(this._cts.Token));
 
                 var totalTime = DateTime.UtcNow - startTime;
-                PluginLog.Info($"[Events] ConnectAndSubscribeAsync SUCCESS - Event listener ready in {totalTime.TotalMilliseconds:F0}ms");
+                PluginLog.Info(() => $"[Events] ConnectAndSubscribeAsync SUCCESS - Event listener ready in {totalTime.TotalMilliseconds:F0}ms");
                 return true;
             }
             catch (Exception ex)
             {
                 var elapsed = DateTime.UtcNow - startTime;
-                PluginLog.Error(ex, $"[Events] ConnectAndSubscribeAsync FAILED after {elapsed.TotalSeconds:F1}s");
+                PluginLog.Error(ex, () => $"[Events] ConnectAndSubscribeAsync FAILED after {elapsed.TotalSeconds:F1}s");
                 await this.SafeCloseAsync();
                 return false;
             }
@@ -195,7 +195,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
                     if (entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
                     {
-                        PluginLog.Verbose($"[ReceiveLoopAsync]{entityId} frame received");
+                        PluginLog.Trace(() => $"[ReceiveLoopAsync]{entityId} frame received");
                     }
 
 
@@ -286,27 +286,27 @@ namespace Loupedeck.HomeAssistantPlugin
 
                         if (bri.HasValue)
                         {
-                            PluginLog.Verbose($" bri={bri} eid={entityId}");
+                            PluginLog.Trace(() => $" bri={bri} eid={entityId}");
                         }
 
                         if (hue.HasValue || sat.HasValue)
                         {
-                            PluginLog.Verbose($"hs=[{hue?.ToString("F1") ?? "-"},{sat?.ToString("F1") ?? "-"}] eid={entityId}");
+                            PluginLog.Trace(() => $"hs=[{hue?.ToString("F1") ?? "-"},{sat?.ToString("F1") ?? "-"}] eid={entityId}");
                         }
 
                         if (rgbR.HasValue)
                         {
-                            PluginLog.Verbose($"rgb=[{rgbR},{rgbG},{rgbB}] eid={entityId}");
+                            PluginLog.Trace(() => $"rgb=[{rgbR},{rgbG},{rgbB}] eid={entityId}");
                         }
 
                         if (xyX.HasValue)
                         {
-                            PluginLog.Verbose($" xy=[{xyX:F4},{xyY:F4}] eid={entityId}");
+                            PluginLog.Trace(() => $" xy=[{xyX:F4},{xyY:F4}] eid={entityId}");
                         }
 
                         if (ctMired.HasValue || ctKelvin.HasValue)
                         {
-                            PluginLog.Verbose($"ct={ctMired}mired/{ctKelvin}K min={minMireds} max={maxMireds} eid={entityId}");
+                            PluginLog.Trace(() => $"ct={ctMired}mired/{ctKelvin}K min={minMireds} max={maxMireds} eid={entityId}");
                         }
 
 
@@ -343,9 +343,9 @@ namespace Loupedeck.HomeAssistantPlugin
                     try
                     {
                         var briSubs = BrightnessChanged?.GetInvocationList()?.Length ?? 0;
-                        PluginLog.Verbose($"[EV] BrightnessChanged subscribers={briSubs} eid={entityId}");
+                        PluginLog.Trace(() => $"[EV] BrightnessChanged subscribers={briSubs} eid={entityId}");
                         BrightnessChanged?.Invoke(entityId, bri);
-                        PluginLog.Verbose($"firing brightness event for {entityId} bri={bri}");
+                        PluginLog.Trace(() => $"firing brightness event for {entityId} bri={bri}");
                     }
                     catch { /* keep loop alive */ }
                     try
@@ -392,7 +392,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
         public async Task SafeCloseAsync()
         {
-            PluginLog.Info($"[Events] SafeCloseAsync - Current state: {this._ws?.State}");
+            PluginLog.Debug(() => $"[Events] SafeCloseAsync - Current state: {this._ws?.State}");
 
             try
             {
@@ -405,11 +405,11 @@ namespace Loupedeck.HomeAssistantPlugin
                     var closeStart = DateTime.UtcNow;
                     await this._ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Bye", CancellationToken.None);
                     var closeTime = DateTime.UtcNow - closeStart;
-                    PluginLog.Info($"[Events] WebSocket closed in {closeTime.TotalMilliseconds:F0}ms");
+                    PluginLog.Debug(() => $"[Events] WebSocket closed in {closeTime.TotalMilliseconds:F0}ms");
                 }
                 else
                 {
-                    PluginLog.Verbose($"[Events] WebSocket not open (State: {this._ws?.State}), skipping close");
+                    PluginLog.Verbose(() => $"[Events] WebSocket not open (State: {this._ws?.State}), skipping close");
                 }
             }
             catch (Exception ex)
