@@ -1,3 +1,6 @@
+//TODO BUG when closing the dynamic folder the cache light states are gone. Need to persist them somewhere.
+
+
 namespace Loupedeck.HomeAssistantPlugin
 {
     using System;
@@ -44,16 +47,6 @@ namespace Loupedeck.HomeAssistantPlugin
 
         private readonly Dictionary<String, LightItem> _lightsByEntity = new();
 
-        private readonly Dictionary<String, (Double H, Double S, Int32 B)> _hsbByEntity
-            = new Dictionary<String, (Double H, Double S, Int32 B)>(StringComparer.OrdinalIgnoreCase);
-
-        // ON/OFF state cache per entity (true = on, false = off)
-        private readonly Dictionary<String, Boolean> _isOnByEntity =
-            new(StringComparer.OrdinalIgnoreCase);
-
-
-        private readonly Dictionary<String, LightCaps> _capsByEntity =
-            new(StringComparer.OrdinalIgnoreCase);
 
         private readonly CapabilityService _capSvc = new();
 
@@ -203,9 +196,6 @@ namespace Loupedeck.HomeAssistantPlugin
         private const Int32 SatStepPctPerTick = 1;             // feels smooth
         private const Int32 MaxSatPctPerEvent = 15;            // cap burst coalesce
 
-        // Per-entity cache: (Min, Max, Current) in Mireds
-        private readonly Dictionary<String, (Int32 Min, Int32 Max, Int32 Cur)> _tempMiredByEntity =
-            new(StringComparer.OrdinalIgnoreCase);
 
         // Tune these if you want
         private const Int32 SendDebounceMs = 10;               // how long to wait after the last tick before sending
@@ -264,19 +254,23 @@ namespace Loupedeck.HomeAssistantPlugin
             }
             if (actionParameter == AdjSat)
             {
-                return this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId) &&
-                    this._hsbByEntity.TryGetValue(this._currentEntityId, out var hsb)
-                    ? $"{(Int32)Math.Round(HSBHelper.Clamp(hsb.S, MinSaturation, MaxSaturation))}%"
-                    : "—%";
+                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
+                {
+                    var hsb = this._lightStateManager?.GetHsbValues(this._currentEntityId) ?? (DefaultHue, MinSaturation, BrightnessOff);
+                    return $"{(Int32)Math.Round(HSBHelper.Clamp(hsb.S, MinSaturation, MaxSaturation))}%";
+                }
+                return "—%";
             }
 
 
             if (actionParameter == AdjHue)
             {
-                return this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId) &&
-                    this._hsbByEntity.TryGetValue(this._currentEntityId, out var hsb)
-                    ? $"{(Int32)Math.Round(HSBHelper.Wrap360(hsb.H))}°"
-                    : "—°";
+                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
+                {
+                    var hsb = this._lightStateManager?.GetHsbValues(this._currentEntityId) ?? (DefaultHue, MinSaturation, BrightnessOff);
+                    return $"{(Int32)Math.Round(HSBHelper.Wrap360(hsb.H))}°";
+                }
+                return "—°";
             }
 
             // Color Temperature wheel
@@ -284,9 +278,10 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                 {
-                    if (this._tempMiredByEntity.TryGetValue(this._currentEntityId, out var t))
+                    var temp = this._lightStateManager?.GetColorTempMired(this._currentEntityId);
+                    if (temp.HasValue)
                     {
-                        var k = ColorTemp.MiredToKelvin(t.Cur);
+                        var k = ColorTemp.MiredToKelvin(temp.Value.Cur);
                         return $"{k}K";
                     }
                     return "— K"; // no cache yet → neutral placeholder
@@ -379,7 +374,8 @@ namespace Loupedeck.HomeAssistantPlugin
             // --- Preferred: HS look ---
             (Int32 R, Int32 G, Int32 B) RenderFromHs()
             {
-                if (!this._hsbByEntity.TryGetValue(eid, out var hsb))
+                var hsb = this._lightStateManager?.GetHsbValues(eid) ?? (DefaultHue, MinSaturation, BrightnessOff);
+                if (hsb.B <= BrightnessOff && effB <= BrightnessOff)
                 {
                     return (InvalidColorMarker, InvalidColorMarker, InvalidColorMarker);
                 }
@@ -402,12 +398,13 @@ namespace Loupedeck.HomeAssistantPlugin
             // --- Preferred: Color Temp look ---
             (Int32 R, Int32 G, Int32 B) RenderFromTemp()
             {
-                if (!this.TryGetCachedTempMired(eid, out var t))
+                var temp = this._lightStateManager?.GetColorTempMired(eid);
+                if (!temp.HasValue)
                 {
                     return (InvalidColorMarker, InvalidColorMarker, InvalidColorMarker);
                 }
 
-                var k = ColorTemp.MiredToKelvin(t.Cur);
+                var k = ColorTemp.MiredToKelvin(temp.Value.Cur);
                 var srgb = KelvinToSrgb(k);                // blackbody approximate in sRGB
                 return ApplyBrightnessLinear(srgb, effB);  // dim in linear light, back to sRGB
             }
@@ -500,10 +497,9 @@ namespace Loupedeck.HomeAssistantPlugin
                     {
                         var entityId = this._currentEntityId;
 
-                        // current brightness from cache (fallback to mid)
-                        var curB = this._hsbByEntity.TryGetValue(entityId, out var hsb)
-                            ? hsb.B
-                            : MidBrightness;
+                        // current brightness from LightStateManager (fallback to mid)
+                        var hsb = this._lightStateManager?.GetHsbValues(entityId) ?? (DefaultHue, MinSaturation, MidBrightness);
+                        var curB = hsb.B;
 
                         // compute target absolutely (± WheelStepPercent per tick), with cap
                         var stepPct = diff * WheelStepPercent;
@@ -511,8 +507,10 @@ namespace Loupedeck.HomeAssistantPlugin
                         var deltaB = (Int32)Math.Round(BrightnessScale * stepPct / PercentageScale);
                         var targetB = HSBHelper.Clamp(curB + deltaB, BrightnessOff, MaxBrightness);
 
-                        // optimistic UI: update cache immediately → live value/image
-                        this.SetCachedBrightness(entityId, targetB);
+                        // optimistic UI: update cache immediately using LightStateManager → live value/image
+                        this._lightStateManager?.SetCachedBrightness(entityId, targetB);
+                        PluginLog.Debug(() => $"[BrightnessAdjust] Updated LightStateManager for {entityId}: brightness={targetB} (was {curB})");
+
                         this.AdjustmentValueChanged(actionParameter);
                         this.AdjustmentValueChanged(AdjSat);
                         this.AdjustmentValueChanged(AdjHue);
@@ -552,25 +550,22 @@ namespace Loupedeck.HomeAssistantPlugin
 
                     this._lookModeByEntity[this._currentEntityId] = LookMode.Hs;
 
-                    // Current HS from cache (fallbacks)
-                    if (!this._hsbByEntity.TryGetValue(eid, out var hsb))
-                    {
-                        hsb = (DefaultHue, DefaultSaturation, MidBrightness);
-                    }
+                    // Current HS from LightStateManager (fallbacks)
+                    var hsb = this._lightStateManager?.GetHsbValues(eid) ?? (DefaultHue, DefaultSaturation, MidBrightness);
 
                     // Compute step with cap and clamp 0..100
                     var step = diff * SatStepPctPerTick;
                     step = Math.Sign(step) * Math.Min(Math.Abs(step), MaxSatPctPerEvent);
                     var newS = HSBHelper.Clamp(hsb.S + step, MinSaturation, MaxSaturation);
 
-                    // Optimistic UI
-                    this._hsbByEntity[eid] = (hsb.H, newS, hsb.B);
+                    // Optimistic UI: update via LightStateManager
+                    this._lightStateManager?.UpdateHsColor(eid, hsb.H, newS);
                     this.AdjustmentValueChanged(AdjSat);
                     this.AdjustmentValueChanged(AdjHue);
                     this.AdjustmentValueChanged(AdjTemp);
 
-
-                    var curH = this._hsbByEntity.TryGetValue(eid, out var hsb3) ? hsb3.H : DefaultHue;
+                    // Get current hue from LightStateManager
+                    var curH = this._lightStateManager?.GetHsbValues(eid).H ?? DefaultHue;
                     this.MarkCommandSent(eid);
                     this._lightSvc?.SetHueSat(eid, curH, newS);
 
@@ -589,24 +584,22 @@ namespace Loupedeck.HomeAssistantPlugin
                     var eid = this._currentEntityId;
                     this._lookModeByEntity[this._currentEntityId] = LookMode.Hs;
 
-                    // Current HS from cache (fallbacks)
-                    if (!this._hsbByEntity.TryGetValue(eid, out var hsb))
-                    {
-                        hsb = (DefaultHue, DefaultSaturation, MidBrightness); // default to vivid color, mid brightness
-                    }
+                    // Current HS from LightStateManager (fallbacks)
+                    var hsb = this._lightStateManager?.GetHsbValues(eid) ?? (DefaultHue, DefaultSaturation, MidBrightness);
 
                     // Compute step with cap; wrap 0..360
                     var step = diff * HueStepDegPerTick;
                     step = Math.Sign(step) * Math.Min(Math.Abs(step), MaxHueDegPerEvent);
                     var newH = HSBHelper.Wrap360(hsb.H + step);
 
-                    // Optimistic UI
-                    this._hsbByEntity[eid] = (newH, hsb.S, hsb.B);
+                    // Optimistic UI: update via LightStateManager
+                    this._lightStateManager?.UpdateHsColor(eid, newH, hsb.S);
                     this.AdjustmentValueChanged(AdjHue);
                     this.AdjustmentValueChanged(AdjSat);
                     this.AdjustmentValueChanged(AdjTemp); // temp tile also reflects effB
 
-                    var curS = this._hsbByEntity.TryGetValue(eid, out var hsb2) ? hsb2.S : DefaultSaturation;
+                    // Get current saturation from LightStateManager
+                    var curS = this._lightStateManager?.GetHsbValues(eid).S ?? DefaultSaturation;
                     this.MarkCommandSent(eid);
                     this._lightSvc?.SetHueSat(eid, newH, curS);
 
@@ -627,17 +620,16 @@ namespace Loupedeck.HomeAssistantPlugin
                     var eid = this._currentEntityId;
                     this._lookModeByEntity[this._currentEntityId] = LookMode.Temp;
 
-                    var (minM, maxM, curM) = this._tempMiredByEntity.TryGetValue(eid, out var t)
-                        ? t
-                        : (DefaultMinMireds, DefaultMaxMireds, DefaultWarmMired);
+                    var temp = this._lightStateManager?.GetColorTempMired(eid) ?? (DefaultMinMireds, DefaultMaxMireds, DefaultWarmMired);
+                    var (minM, maxM, curM) = temp;
 
                     var step = diff * TempStepMireds;
                     step = Math.Sign(step) * Math.Min(Math.Abs(step), MaxMiredsPerEvent);
 
                     var targetM = HSBHelper.Clamp(curM + step, minM, maxM);
 
-                    // Optimistic UI
-                    this.SetCachedTempMired(eid, null, null, targetM);
+                    // Optimistic UI: update via LightStateManager
+                    this._lightStateManager?.SetCachedTempMired(eid, null, null, targetM);
                     this.AdjustmentValueChanged(AdjTemp);
                     this.AdjustmentValueChanged(AdjHue);
                     this.AdjustmentValueChanged(AdjSat);
@@ -668,7 +660,7 @@ namespace Loupedeck.HomeAssistantPlugin
         public HomeAssistantLightsDynamicFolder()
         {
             PluginLog.Info("[LightsDynamicFolder] Constructor START");
-            
+
             this.DisplayName = "All Light Controls";
             this.GroupName = "Lights";
 
@@ -801,9 +793,15 @@ namespace Loupedeck.HomeAssistantPlugin
             return actionParameter.StartsWith(PfxActOff, StringComparison.OrdinalIgnoreCase) ? "Off" : actionParameter;
         }
 
-        private Int32 GetEffectiveBrightnessForDisplay(String entityId) =>
-            // Use the service for getting effective brightness
-            this._lightStateManager?.GetEffectiveBrightness(entityId) ?? BrightnessOff;
+        private Int32 GetEffectiveBrightnessForDisplay(String entityId)
+        {
+            // Use the LightStateManager for getting effective brightness
+            var effectiveBrightness = this._lightStateManager?.GetEffectiveBrightness(entityId) ?? BrightnessOff;
+            var isOn = this._lightStateManager?.IsLightOn(entityId) ?? false;
+
+            PluginLog.Verbose(() => $"[GetEffectiveBrightnessForDisplay] {entityId}: isOn={isOn}, effectiveBrightness={effectiveBrightness}");
+            return effectiveBrightness;
+        }
 
         // Paint the tile: green when OK, red on error
         public override BitmapImage GetCommandImage(String actionParameter, PluginImageSize imageSize)
@@ -944,21 +942,24 @@ namespace Loupedeck.HomeAssistantPlugin
                     this._currentEntityId = entityId;
                     this._wheelCounter = WheelCounterReset; // avoids showing previous ticks anywhere
 
-                    // Brightness cache always OK
-                    if (!this._hsbByEntity.ContainsKey(entityId))
+                    // Initialize defaults in LightStateManager if needed - it handles all state internally
+                    var caps = this.GetCaps(entityId);
+                    var hsb = this._lightStateManager?.GetHsbValues(entityId) ?? (DefaultHue, MinSaturation, BrightnessOff);
+                    if (hsb.B <= BrightnessOff && hsb.H == DefaultHue && hsb.S == MinSaturation)
                     {
-                        this._hsbByEntity[entityId] = (DefaultHue, MinSaturation, BrightnessOff);
+                        // Light not yet initialized in state manager, set defaults
+                        this._lightStateManager?.SetCachedBrightness(entityId, BrightnessOff);
+                        this._lightStateManager?.UpdateHsColor(entityId, DefaultHue, MinSaturation);
                     }
 
-                    // Only keep/seed temp cache if device supports it
-                    var caps = this.GetCaps(entityId);
-                    if (!caps.ColorTemp)
+                    // Initialize color temp cache if device supports it
+                    if (caps.ColorTemp)
                     {
-                        this._tempMiredByEntity.Remove(entityId);
-                    }
-                    else if (!this._tempMiredByEntity.ContainsKey(entityId))
-                    {
-                        this._tempMiredByEntity[entityId] = (DefaultMinMireds, DefaultMaxMireds, DefaultWarmMired);
+                        var temp = this._lightStateManager?.GetColorTempMired(entityId);
+                        if (!temp.HasValue)
+                        {
+                            this._lightStateManager?.SetCachedTempMired(entityId, DefaultMinMireds, DefaultMaxMireds, DefaultWarmMired);
+                        }
                     }
 
 
@@ -982,8 +983,18 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 var entityId = actionParameter.Substring(PfxActOn.Length);
 
-                // Optimistic: mark ON immediately (UI becomes responsive)
-                this._isOnByEntity[entityId] = true;
+                // Optimistic: mark ON immediately using LightStateManager (UI becomes responsive)
+                var caps = this.GetCaps(entityId);
+                Int32? brightness = null;
+                if (caps.Brightness)
+                {
+                    var hsb = this._lightStateManager?.GetHsbValues(entityId) ?? (DefaultHue, MinSaturation, BrightnessOff);
+                    brightness = HSBHelper.Clamp(Math.Max(MinBrightness, hsb.B), MinBrightness, MaxBrightness);
+                }
+
+                this._lightStateManager?.UpdateLightState(entityId, true, brightness);
+                PluginLog.Debug(() => $"[TurnOn] Updated LightStateManager for {entityId}: ON=true, brightness={brightness}");
+
                 this.CommandImageChanged(this.CreateCommandName($"{PfxDevice}{entityId}"));
                 if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
                 {
@@ -994,11 +1005,9 @@ namespace Loupedeck.HomeAssistantPlugin
                 }
 
                 JsonElement? data = null;
-                var caps = this.GetCaps(entityId);
-                if (caps.Brightness && this._hsbByEntity.TryGetValue(entityId, out var hsb))
+                if (brightness.HasValue)
                 {
-                    var bri = HSBHelper.Clamp(Math.Max(MinBrightness, hsb.B), MinBrightness, MaxBrightness);
-                    data = JsonSerializer.SerializeToElement(new { brightness = bri });
+                    data = JsonSerializer.SerializeToElement(new { brightness = brightness.Value });
                 }
                 this.MarkCommandSent(entityId);
                 _ = this._lightSvc?.TurnOnAsync(entityId, data);
@@ -1008,8 +1017,10 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 var entityId = actionParameter.Substring(PfxActOff.Length);
 
-                // Optimistic: mark OFF (don’t touch cached B)
-                this._isOnByEntity[entityId] = false;
+                // Optimistic: mark OFF using LightStateManager (don't touch cached brightness)
+                this._lightStateManager?.UpdateLightState(entityId, false);
+                PluginLog.Debug(() => $"[TurnOff] Updated LightStateManager for {entityId}: ON=false");
+
                 this.CommandImageChanged(this.CreateCommandName($"{PfxDevice}{entityId}"));
                 if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
                 {
@@ -1045,14 +1056,14 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 // Initialize dependencies now that Plugin is available
                 PluginLog.Debug(() => $"[LightsDynamicFolder] Load() - this.Plugin is null: {this.Plugin == null}");
-                
+
                 if (this.Plugin is HomeAssistantPlugin haPlugin)
                 {
                     PluginLog.Debug(() => $"[LightsDynamicFolder] Load() - this.Plugin type: {this.Plugin.GetType().Name}");
-                    
+
                     // Initialize dependency injection - use the shared HaClient from Plugin
                     PluginLog.Info("[LightsDynamicFolder] Load() - Initializing dependencies");
-                    
+
                     this._ha = new HaClientAdapter(haPlugin.HaClient);
                     this._dataService = new HomeAssistantDataService(this._ha);
                     this._dataParser = new HomeAssistantDataParser(this._capSvc);
@@ -1070,7 +1081,7 @@ namespace Loupedeck.HomeAssistantPlugin
                         HueSatDebounceMs,
                         TempDebounceMs
                     );
-                    
+
                     PluginLog.Info("[LightsDynamicFolder] Load() - All dependencies initialized successfully");
                 }
                 else
@@ -1322,16 +1333,17 @@ namespace Loupedeck.HomeAssistantPlugin
         }
 
         /// <summary>
-        /// Temporary compatibility method to update internal caches from services
-        /// TODO: Remove this once all code is refactored to use services directly
+        /// Updates internal caches from services - only maintains non-state data for UI purposes
+        /// State management is now handled entirely by LightStateManager
         /// </summary>
         private void UpdateInternalCachesFromServices(List<LightData> lights, ParsedRegistryData registryData)
         {
-            // Clear existing data
+            // Clear existing UI data (state is managed by LightStateManager)
             this._lightsByEntity.Clear();
-            this._hsbByEntity.Clear();
             this._entityToAreaId.Clear();
             this._areaIdToName.Clear();
+
+            PluginLog.Debug(() => $"[UpdateInternalCachesFromServices] Clearing UI caches, LightStateManager handles all state data");
 
             // Update from registry data
             foreach (var (areaId, areaName) in registryData.AreaIdToName)
@@ -1339,36 +1351,18 @@ namespace Loupedeck.HomeAssistantPlugin
                 this._areaIdToName[areaId] = areaName;
             }
 
-            // Update from light data
+            // Update from light data - only UI-related data, not state
             foreach (var light in lights)
             {
                 var li = new LightItem(light.EntityId, light.FriendlyName, light.State,
                                        light.DeviceId ?? "", light.DeviceName, light.Manufacturer, light.Model);
                 this._lightsByEntity[light.EntityId] = li;
-
-                this._hsbByEntity[light.EntityId] = (light.Hue, light.Saturation, light.Brightness);
                 this._entityToAreaId[light.EntityId] = light.AreaId;
-                this._isOnByEntity[light.EntityId] = light.IsOn;
-                this._capsByEntity[light.EntityId] = light.Capabilities;
-
-                if (light.Capabilities.ColorTemp)
-                {
-                    this._tempMiredByEntity[light.EntityId] = (light.MinMired, light.MaxMired, light.ColorTempMired);
-                }
             }
+
+            PluginLog.Info(() => $"[UpdateInternalCachesFromServices] Updated {lights.Count} lights, {registryData.AreaIdToName.Count} areas - state managed by LightStateManager");
         }
 
-        private void SetCachedBrightness(String entityId, Int32 bri)
-        {
-            // Use the service for setting cached brightness
-            this._lightStateManager?.SetCachedBrightness(entityId, bri);
-
-            // Also update the internal cache for backward compatibility
-            // TODO: Remove this once all code is refactored to use services
-            this._hsbByEntity[entityId] = this._hsbByEntity.TryGetValue(entityId, out var hsb)
-                ? ((Double H, Double S, Int32 B))(hsb.H, hsb.S, HSBHelper.Clamp(bri, BrightnessOff, MaxBrightness))
-                : ((Double H, Double S, Int32 B))(DefaultHue, MinSaturation, HSBHelper.Clamp(bri, BrightnessOff, MaxBrightness));
-        }
 
 
         private void OnHaBrightnessChanged(String entityId, Int32? bri)
@@ -1384,19 +1378,19 @@ namespace Loupedeck.HomeAssistantPlugin
                 return;
             }
 
-            // Update ON/OFF state from brightness signal:
+            // Update ON/OFF state from brightness signal using LightStateManager:
             if (bri.HasValue)
             {
                 if (bri.Value <= BrightnessOff)
                 {
                     // OFF → don't change cached B, just mark state off
-                    this._isOnByEntity[entityId] = false;
+                    this._lightStateManager?.UpdateLightState(entityId, false);
                 }
                 else
                 {
                     // ON → update cached B and mark on
-                    this._isOnByEntity[entityId] = true;
-                    this.SetCachedBrightness(entityId, HSBHelper.Clamp(bri.Value, BrightnessOff, MaxBrightness));
+                    var clampedBri = HSBHelper.Clamp(bri.Value, BrightnessOff, MaxBrightness);
+                    this._lightStateManager?.UpdateLightState(entityId, true, clampedBri);
                 }
             }
 
@@ -1422,19 +1416,8 @@ namespace Loupedeck.HomeAssistantPlugin
                 return;
             }
 
-            // Figure out current mired
-            var cur = this._tempMiredByEntity.TryGetValue(entityId, out var t) ? t.Cur : DefaultWarmMired;
-            if (mired.HasValue)
-            {
-                cur = mired.Value;
-            }
-            else if (kelvin.HasValue)
-            {
-                cur = ColorTemp.KelvinToMired(kelvin.Value);
-            }
-
-            // Update cache (carry forward bounds unless provided)
-            this.SetCachedTempMired(entityId, minM, maxM, cur);
+            // Update via LightStateManager
+            this._lightStateManager?.UpdateColorTemp(entityId, mired, kelvin, minM, maxM);
 
             // If current device, refresh dial value/image
             if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
@@ -1456,18 +1439,8 @@ namespace Loupedeck.HomeAssistantPlugin
 
             PluginLog.Verbose(() => $"[OnHaHsColorChanged] eid={entityId} h={h?.ToString("F1")} s={s?.ToString("F1")}");
 
-
-            // Update HS in cache
-            if (this._hsbByEntity.TryGetValue(entityId, out var hsb))
-            {
-                var H = h.HasValue ? HSBHelper.Wrap360(h.Value) : hsb.H;
-                var S = s.HasValue ? HSBHelper.Clamp(s.Value, MinSaturation, MaxSaturation) : hsb.S;
-                this._hsbByEntity[entityId] = (H, S, hsb.B);
-            }
-            else
-            {
-                this._hsbByEntity[entityId] = (HSBHelper.Wrap360(h ?? DefaultHue), HSBHelper.Clamp(s ?? DefaultSaturation, MinSaturation, MaxSaturation), MidBrightness);
-            }
+            // Update HS via LightStateManager
+            this._lightStateManager?.UpdateHsColor(entityId, h, s);
 
             if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
             {
@@ -1499,12 +1472,11 @@ namespace Loupedeck.HomeAssistantPlugin
 
             PluginLog.Verbose(() => $"[OnHaRgbColorChanged] eid={entityId} rgb=[{r},{g},{b}]");
 
-
             var (h, s) = HSBHelper.RgbToHs(r.Value, g.Value, b.Value);
             h = HSBHelper.Wrap360(h);
             s = HSBHelper.Clamp(s, MinSaturation, MaxSaturation);
 
-            var cur = this._hsbByEntity.TryGetValue(entityId, out var old) ? old : ((Double H, Double S, Int32 B))(DefaultHue, DefaultSaturation, MidBrightness);
+            var cur = this._lightStateManager?.GetHsbValues(entityId) ?? (DefaultHue, DefaultSaturation, MidBrightness);
             var changed = Math.Abs(cur.H - h) >= HueEps || Math.Abs(cur.S - s) >= SatEps;
 
             if (!changed)
@@ -1512,7 +1484,8 @@ namespace Loupedeck.HomeAssistantPlugin
                 return;
             }
 
-            this._hsbByEntity[entityId] = (h, s, cur.B);
+            // Update via LightStateManager
+            this._lightStateManager?.UpdateHsColor(entityId, h, s);
 
             if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
             {
@@ -1543,7 +1516,8 @@ namespace Loupedeck.HomeAssistantPlugin
             PluginLog.Verbose(() => $"[OnHaXyColorChanged] eid={entityId} xy=[{xv.ToString("F4")},{yv.ToString("F4")}] bri={bri}");
 
             // Pick a luminance for XY->RGB: prefer event bri, else cached, else mid
-            var baseB = this._hsbByEntity.TryGetValue(entityId, out var old) ? old.B : MidBrightness;
+            var cur = this._lightStateManager?.GetHsbValues(entityId) ?? (DefaultHue, DefaultSaturation, MidBrightness);
+            var baseB = cur.B;
             var usedB = HSBHelper.Clamp(bri ?? baseB, BrightnessOff, MaxBrightness);
 
             var (R, G, B) = ColorConv.XyBriToRgb(xv, yv, usedB);
@@ -1551,7 +1525,6 @@ namespace Loupedeck.HomeAssistantPlugin
             h = HSBHelper.Wrap360(h);
             s = HSBHelper.Clamp(s, MinSaturation, MaxSaturation);
 
-            var cur = this._hsbByEntity.TryGetValue(entityId, out var curHsb) ? curHsb : ((Double H, Double S, Int32 B))(DefaultHue, DefaultSaturation, MidBrightness);
             var hsChanged = Math.Abs(cur.H - h) >= HueEps || Math.Abs(cur.S - s) >= SatEps;
             var briChanged = bri.HasValue && usedB != cur.B;
 
@@ -1560,7 +1533,15 @@ namespace Loupedeck.HomeAssistantPlugin
                 return;
             }
 
-            this._hsbByEntity[entityId] = (h, s, briChanged ? usedB : cur.B);
+            // Update via LightStateManager
+            if (hsChanged)
+            {
+                this._lightStateManager?.UpdateHsColor(entityId, h, s);
+            }
+            if (briChanged)
+            {
+                this._lightStateManager?.SetCachedBrightness(entityId, usedB);
+            }
 
             if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
             {
@@ -1599,16 +1580,5 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
 
-        private Boolean TryGetCachedTempMired(String entityId, out (Int32 Min, Int32 Max, Int32 Cur) t)
-            => this._tempMiredByEntity.TryGetValue(entityId, out t);
-
-        private void SetCachedTempMired(String entityId, Int32? minM, Int32? maxM, Int32 curMired)
-        {
-            var existing = this._tempMiredByEntity.TryGetValue(entityId, out var temp) ? temp : (Min: DefaultMinMireds, Max: DefaultMaxMireds, Cur: DefaultWarmMired);
-            var min = minM ?? existing.Min;
-            var max = maxM ?? existing.Max;
-            var cur = HSBHelper.Clamp(curMired, min, max);
-            this._tempMiredByEntity[entityId] = (min, max, cur);
-        }
     }
 }
