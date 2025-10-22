@@ -43,7 +43,7 @@ Control your Home Assistant lights (and soon, any entity) from your Creative Con
    * **Base Websocket URL**: `wss://homeassistant.local:8123/` if Home Assistant was setup using the default way (or your own custom URL starting with `wss://` or `ws://` otherwise). Prefer `wss://` for enhanced security.
    * **Long-Lived Token**: paste from HA Profile
    * Click **Test connection**.
-   * If no error appears after short time click save.
+   * If no error appears after click save.
 4. Put any **actions** you want into your layout. See what they do in the explanation helow
 5. (Optional) You may now delete the Configure Home Assistant action from your layout . The settings persist.
 
@@ -278,15 +278,6 @@ src/
 * **Single Responsibility**: Each class has one clear purpose (post-refactoring)
 * **State Management**: Centralized light state management with optimistic UI updates
 * **Debounced Operations**: User actions are debounced to reduce Home Assistant traffic
-
-**Recent Architectural Improvements**
-
-* **Method Decomposition**: Major refactoring of mega-methods using Command Pattern
-  - `ApplyAdjustment()`: 171 → 48 lines (72% reduction)
-  - `RunCommand()`: 172 → 29 lines (83% reduction)
-* **Command Pattern Implementation**: Brightness, hue, saturation, and temperature adjustments now use focused command classes
-* **Enhanced Testability**: All business logic extracted into independently testable units
-* **Maintainable Codebase**: All methods now <50 lines with single responsibilities
 
 ---
 
