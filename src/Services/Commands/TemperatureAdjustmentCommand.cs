@@ -21,15 +21,12 @@ namespace Loupedeck.HomeAssistantPlugin.Services.Commands
 
         private readonly AdjustmentCommandContext _context;
 
-        public TemperatureAdjustmentCommand(AdjustmentCommandContext context)
-        {
-            _context = context ?? throw new ArgumentNullException(nameof(context));
-        }
+        public TemperatureAdjustmentCommand(AdjustmentCommandContext context) => this._context = context ?? throw new ArgumentNullException(nameof(context));
 
         public void Execute(String entityId, Int32 diff)
         {
             // Check if device supports color temperature
-            if (!_context.GetCapabilities(entityId).ColorTemp)
+            if (!this._context.GetCapabilities(entityId).ColorTemp)
             {
                 return;
             }
@@ -37,10 +34,10 @@ namespace Loupedeck.HomeAssistantPlugin.Services.Commands
             try
             {
                 // Set look mode preference to Temperature
-                _context.LookModeByEntity[entityId] = LookMode.Temp;
+                this._context.LookModeByEntity[entityId] = LookMode.Temp;
 
                 // Get current temperature data from LightStateManager
-                var temp = _context.LightStateManager?.GetColorTempMired(entityId) ?? (DefaultMinMireds, DefaultMaxMireds, DefaultWarmMired);
+                var temp = this._context.LightStateManager?.GetColorTempMired(entityId) ?? (DefaultMinMireds, DefaultMaxMireds, DefaultWarmMired);
                 var (minM, maxM, curM) = temp;
 
                 // Compute step with cap
@@ -50,24 +47,24 @@ namespace Loupedeck.HomeAssistantPlugin.Services.Commands
                 var targetM = HSBHelper.Clamp(curM + step, minM, maxM);
 
                 // Optimistic UI: update via LightStateManager
-                _context.LightStateManager?.SetCachedTempMired(entityId, null, null, targetM);
-                
+                this._context.LightStateManager?.SetCachedTempMired(entityId, null, null, targetM);
+
                 // Refresh UI for related adjustment dials
-                _context.TriggerAdjustmentValueChanged(AdjTemp);
-                _context.TriggerAdjustmentValueChanged(AdjHue);
-                _context.TriggerAdjustmentValueChanged(AdjSat);
-                
+                this._context.TriggerAdjustmentValueChanged(AdjTemp);
+                this._context.TriggerAdjustmentValueChanged(AdjHue);
+                this._context.TriggerAdjustmentValueChanged(AdjSat);
+
                 // Mark command as sent for echo suppression
-                _context.MarkCommandSent(entityId);
-                
+                this._context.MarkCommandSent(entityId);
+
                 // Send command to Home Assistant
-                _context.LightControlService?.SetTempMired(entityId, targetM);
+                this._context.LightControlService?.SetTempMired(entityId, targetM);
             }
             catch (Exception ex)
             {
                 PluginLog.Error(ex, "[TemperatureAdjustmentCommand] Execute exception");
                 HealthBus.Error("Temperature adjustment error");
-                _context.TriggerAdjustmentValueChanged(AdjTemp);
+                this._context.TriggerAdjustmentValueChanged(AdjTemp);
             }
         }
     }

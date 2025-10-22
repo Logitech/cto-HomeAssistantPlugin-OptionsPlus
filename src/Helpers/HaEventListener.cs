@@ -46,7 +46,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private CancellationTokenSource? _cts;
         private Task? _loop;
         private Int32 _nextId = InitialMessageId;
-        
+
         // Reusable buffer to prevent allocations
         private readonly Byte[] _receiveBuffer = new Byte[WebSocketBufferSize];
         private readonly StringBuilder _messageBuilder = new StringBuilder();
@@ -454,7 +454,7 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 // Cancel the background task
                 this._cts?.Cancel();
-                
+
                 // Wait for the background task to complete (with timeout)
                 if (this._loop != null && !this._loop.IsCompleted)
                 {
@@ -473,14 +473,14 @@ namespace Loupedeck.HomeAssistantPlugin
                         PluginLog.Warning("[Events] Timeout waiting for receive loop to terminate");
                     }
                 }
-                
+
                 // Clean up resources
                 this._ws?.Dispose();
                 this._ws = null;
                 this._cts?.Dispose();
                 this._cts = null;
                 this._loop = null;
-                
+
                 PluginLog.Info("[Events] Dispose completed successfully");
             }
             catch (Exception ex)
@@ -510,10 +510,10 @@ namespace Loupedeck.HomeAssistantPlugin
 
             // Use reusable buffer to prevent allocations
             var buffer = new ArraySegment<Byte>(this._receiveBuffer);
-            
+
             // Clear and reuse StringBuilder to prevent allocations
             this._messageBuilder.Clear();
-            
+
             WebSocketReceiveResult result;
             do
             {
@@ -528,7 +528,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     this._messageBuilder.Append(Encoding.UTF8.GetString(this._receiveBuffer, 0, result.Count));
                 }
             } while (!result.EndOfMessage);
-            
+
             return this._messageBuilder.ToString();
         }
 

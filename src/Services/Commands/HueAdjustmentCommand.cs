@@ -22,15 +22,12 @@ namespace Loupedeck.HomeAssistantPlugin.Services.Commands
 
         private readonly AdjustmentCommandContext _context;
 
-        public HueAdjustmentCommand(AdjustmentCommandContext context)
-        {
-            _context = context ?? throw new ArgumentNullException(nameof(context));
-        }
+        public HueAdjustmentCommand(AdjustmentCommandContext context) => this._context = context ?? throw new ArgumentNullException(nameof(context));
 
         public void Execute(String entityId, Int32 diff)
         {
             // Check if device supports HS color
-            if (!_context.GetCapabilities(entityId).ColorHs)
+            if (!this._context.GetCapabilities(entityId).ColorHs)
             {
                 return;
             }
@@ -38,10 +35,10 @@ namespace Loupedeck.HomeAssistantPlugin.Services.Commands
             try
             {
                 // Set look mode preference to HS
-                _context.LookModeByEntity[entityId] = LookMode.Hs;
+                this._context.LookModeByEntity[entityId] = LookMode.Hs;
 
                 // Current HS from LightStateManager (fallbacks)
-                var hsb = _context.LightStateManager?.GetHsbValues(entityId) ?? (DefaultHue, DefaultSaturation, MidBrightness);
+                var hsb = this._context.LightStateManager?.GetHsbValues(entityId) ?? (DefaultHue, DefaultSaturation, MidBrightness);
 
                 // Compute step with cap; wrap 0..360
                 var step = diff * HueStepDegPerTick;
@@ -49,27 +46,27 @@ namespace Loupedeck.HomeAssistantPlugin.Services.Commands
                 var newH = HSBHelper.Wrap360(hsb.H + step);
 
                 // Optimistic UI: update via LightStateManager
-                _context.LightStateManager?.UpdateHsColor(entityId, newH, hsb.S);
-                
+                this._context.LightStateManager?.UpdateHsColor(entityId, newH, hsb.S);
+
                 // Refresh UI for related adjustment dials
-                _context.TriggerAdjustmentValueChanged(AdjHue);
-                _context.TriggerAdjustmentValueChanged(AdjSat);
-                _context.TriggerAdjustmentValueChanged(AdjTemp); // temp tile also reflects effB
+                this._context.TriggerAdjustmentValueChanged(AdjHue);
+                this._context.TriggerAdjustmentValueChanged(AdjSat);
+                this._context.TriggerAdjustmentValueChanged(AdjTemp); // temp tile also reflects effB
 
                 // Get current saturation from LightStateManager
-                var curS = _context.LightStateManager?.GetHsbValues(entityId).S ?? DefaultSaturation;
-                
+                var curS = this._context.LightStateManager?.GetHsbValues(entityId).S ?? DefaultSaturation;
+
                 // Mark command as sent for echo suppression
-                _context.MarkCommandSent(entityId);
-                
+                this._context.MarkCommandSent(entityId);
+
                 // Send command to Home Assistant
-                _context.LightControlService?.SetHueSat(entityId, newH, curS);
+                this._context.LightControlService?.SetHueSat(entityId, newH, curS);
             }
             catch (Exception ex)
             {
                 PluginLog.Error(ex, "[HueAdjustmentCommand] Execute exception");
                 HealthBus.Error("Hue adjustment error");
-                _context.TriggerAdjustmentValueChanged(AdjHue);
+                this._context.TriggerAdjustmentValueChanged(AdjHue);
             }
         }
     }

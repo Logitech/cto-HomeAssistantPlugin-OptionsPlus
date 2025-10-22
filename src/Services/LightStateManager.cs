@@ -135,13 +135,13 @@ namespace Loupedeck.HomeAssistantPlugin.Services
             var existingCount = this._hsbByEntity.Count;
             var preservedCount = 0;
             var updatedCount = 0;
-            
+
             PluginLog.Info(() => $"[LightStateManager] Initializing light states for {lights.Count()} lights with {existingCount} existing cached states");
 
             // Backup existing user-adjusted values before updating base state
             var preservedHsb = new Dictionary<String, (Double H, Double S, Int32 B)>(this._hsbByEntity, StringComparer.OrdinalIgnoreCase);
             var preservedTemp = new Dictionary<String, (Int32 Min, Int32 Max, Int32 Cur)>(this._tempMiredByEntity, StringComparer.OrdinalIgnoreCase);
-            
+
             // Only clear capabilities - we'll preserve user state and update base state selectively
             this._capsByEntity.Clear();
 

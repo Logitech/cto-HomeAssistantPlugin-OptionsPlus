@@ -26,19 +26,16 @@ namespace Loupedeck.HomeAssistantPlugin.Services.Commands
 
         private readonly AdjustmentCommandContext _context;
 
-        public BrightnessAdjustmentCommand(AdjustmentCommandContext context)
-        {
-            _context = context ?? throw new ArgumentNullException(nameof(context));
-        }
+        public BrightnessAdjustmentCommand(AdjustmentCommandContext context) => this._context = context ?? throw new ArgumentNullException(nameof(context));
 
         public void Execute(String entityId, Int32 diff)
         {
             try
             {
                 // Get current brightness from LightStateManager (fallback to mid)
-                var hsb = _context.LightStateManager?.GetHsbValues(entityId) ?? (DefaultHue, MinSaturation, MidBrightness);
+                var hsb = this._context.LightStateManager?.GetHsbValues(entityId) ?? (DefaultHue, MinSaturation, MidBrightness);
                 var curB = hsb.B;
-                var isCurrentlyOn = _context.LightStateManager?.IsLightOn(entityId) ?? false;
+                var isCurrentlyOn = this._context.LightStateManager?.IsLightOn(entityId) ?? false;
 
                 // Compute target absolutely (± WheelStepPercent per tick), with cap
                 var stepPct = diff * WheelStepPercent;
@@ -53,34 +50,34 @@ namespace Loupedeck.HomeAssistantPlugin.Services.Commands
                 if (!isCurrentlyOn && targetB > BrightnessOff)
                 {
                     // Update both brightness and ON state optimistically since we're about to turn it on
-                    _context.LightStateManager?.UpdateLightState(entityId, true, targetB);
+                    this._context.LightStateManager?.UpdateLightState(entityId, true, targetB);
                     PluginLog.Verbose(() => $"[BrightnessAdjust] FIX - Turning ON light {entityId} with brightness={targetB} (was OFF)");
                 }
                 else
                 {
                     // Just update cached brightness without changing ON/OFF state
-                    _context.LightStateManager?.SetCachedBrightness(entityId, targetB);
+                    this._context.LightStateManager?.SetCachedBrightness(entityId, targetB);
                 }
-                
+
                 PluginLog.Debug(() => $"[BrightnessAdjust] Updated LightStateManager for {entityId}: brightness={targetB} (was {curB})");
 
                 // Refresh UI for all related adjustment dials
-                _context.TriggerAdjustmentValueChanged(AdjBri);
-                _context.TriggerAdjustmentValueChanged(AdjSat);
-                _context.TriggerAdjustmentValueChanged(AdjHue);
-                _context.TriggerAdjustmentValueChanged(AdjTemp); // temp tile also reflects effB
+                this._context.TriggerAdjustmentValueChanged(AdjBri);
+                this._context.TriggerAdjustmentValueChanged(AdjSat);
+                this._context.TriggerAdjustmentValueChanged(AdjHue);
+                this._context.TriggerAdjustmentValueChanged(AdjTemp); // temp tile also reflects effB
 
                 // Mark command as sent for echo suppression
-                _context.MarkCommandSent(entityId);
+                this._context.MarkCommandSent(entityId);
 
                 // Send command to Home Assistant
-                _context.LightControlService?.SetBrightness(entityId, targetB);
+                this._context.LightControlService?.SetBrightness(entityId, targetB);
             }
             catch (Exception ex)
             {
                 PluginLog.Error(ex, "[BrightnessAdjustmentCommand] Execute exception");
                 HealthBus.Error("Brightness adjustment error");
-                _context.TriggerAdjustmentValueChanged(AdjBri);
+                this._context.TriggerAdjustmentValueChanged(AdjBri);
             }
         }
     }
