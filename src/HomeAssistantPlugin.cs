@@ -3,6 +3,7 @@ namespace Loupedeck.HomeAssistantPlugin
     using System;
 
     using Loupedeck;
+    using Loupedeck.HomeAssistantPlugin.Services;
 
 
     public class HomeAssistantPlugin : Plugin
@@ -15,6 +16,7 @@ namespace Loupedeck.HomeAssistantPlugin
         // Expose singletons for actions to use
         internal HaWebSocketClient HaClient { get; } = new();
         internal HaEventListener HaEvents { get; } = new();
+        internal LightStateManager LightStateManager { get; } = new();
 
 
 
@@ -78,6 +80,8 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 PluginLog.Info("[Plugin] Closing WebSocket client...");
                 _ = this.HaClient.SafeCloseAsync();
+
+                PluginLog.Info("[Plugin] Light state manager will persist - no cleanup needed");
 
                 PluginLog.Info("[Plugin] Unload() completed successfully");
             }

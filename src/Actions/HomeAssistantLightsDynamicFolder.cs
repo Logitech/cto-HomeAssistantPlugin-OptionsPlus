@@ -1,4 +1,4 @@
-//TODO BUG when closing the dynamic folder the cache light states are gone. Need to persist them somewhere.
+// FIXED: Light state persistence issue resolved by using singleton LightStateManager in main plugin
 
 
 namespace Loupedeck.HomeAssistantPlugin
@@ -1083,7 +1083,12 @@ namespace Loupedeck.HomeAssistantPlugin
                     this._ha = new HaClientAdapter(haPlugin.HaClient);
                     this._dataService = new HomeAssistantDataService(this._ha);
                     this._dataParser = new HomeAssistantDataParser(this._capSvc);
-                    this._lightStateManager = new LightStateManager();
+                    
+                    // Use the singleton LightStateManager from the main plugin to preserve state across folder exits/entries
+                    this._lightStateManager = haPlugin.LightStateManager;
+                    var existingCount = this._lightStateManager.GetTrackedEntityIds().Count();
+                    PluginLog.Info(() => $"[LightsDynamicFolder] Using singleton LightStateManager with {existingCount} existing tracked entities");
+                    
                     this._registryService = new RegistryService();
 
                     // Initialize light control service with debounce settings
@@ -1121,8 +1126,12 @@ namespace Loupedeck.HomeAssistantPlugin
         public override Boolean Unload()
         {
             PluginLog.Info("DynamicFolder.Unload()");
-
-
+            
+            if (this._lightStateManager != null)
+            {
+                var trackedCount = this._lightStateManager.GetTrackedEntityIds().Count();
+                PluginLog.Info(() => $"[LightsDynamicFolder] Unloading - LightStateManager retains {trackedCount} tracked entities (singleton preserved)");
+            }
 
             // New debounced sender
             this._lightSvc?.Dispose();
@@ -1144,6 +1153,13 @@ namespace Loupedeck.HomeAssistantPlugin
         public override Boolean Deactivate()
         {
             PluginLog.Info("DynamicFolder.Deactivate() -> close WS");
+            
+            if (this._lightStateManager != null)
+            {
+                var trackedCount = this._lightStateManager.GetTrackedEntityIds().Count();
+                PluginLog.Info(() => $"[LightsDynamicFolder] Deactivating - LightStateManager retains {trackedCount} tracked entities (singleton preserved)");
+            }
+            
             this._cts?.Cancel();
             this._ha?.SafeCloseAsync().GetAwaiter().GetResult();
             this._eventsCts?.Cancel();
