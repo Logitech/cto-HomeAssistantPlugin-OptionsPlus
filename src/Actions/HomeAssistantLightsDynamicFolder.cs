@@ -162,30 +162,23 @@ namespace Loupedeck.HomeAssistantPlugin
         // --- WHEEL: constants & state
         private const String AdjBri = "adj:bri";               // brightness wheel
         private Int32 _wheelCounter = 0;                       // just for display/log when not in device view
-        private const Int32 WheelStepPercent = 1;              // 1% per tick
 
         // ---- COLOR TEMP state (mirrors brightness pattern) ----
         private const String AdjTemp = "adj:ha-temp";          // wheel id
         private const Int32 TempStepMireds = 2;                // step per tick (≈smooth)
-        private const Int32 MaxMiredsPerEvent = 60;            // cap coalesced burst
         private const Int32 DefaultMinMireds = 153;            // ~6500K
         private const Int32 DefaultMaxMireds = 500;            // ~2000K
         private const Int32 DefaultWarmMired = 370;            // ~2700K (UI fallback)
 
         // ===== HUE control (rotation-only) =====
         private const String AdjHue = "adj:ha-hue";           // wheel id
-        private const Int32 HueStepDegPerTick = 1;             // 1° per tick feels smooth
-        private const Int32 MaxHueDegPerEvent = 30;            // cap coalesced bursts
 
         // ===== SATURATION control =====
         private const String AdjSat = "adj:ha-sat";
-        private const Int32 SatStepPctPerTick = 1;             // feels smooth
-        private const Int32 MaxSatPctPerEvent = 15;            // cap burst coalesce
 
 
         // Tune these if you want
         private const Int32 SendDebounceMs = 10;               // how long to wait after the last tick before sending
-        private const Int32 MaxPctPerEvent = 10;               // cap huge coalesced diffs to keep UI sane
 
         private readonly HaEventListener _events = new();
         private CancellationTokenSource _eventsCts = new();
