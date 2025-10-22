@@ -472,7 +472,10 @@ namespace Loupedeck.HomeAssistantPlugin
         // --- WHEEL: rotation handler using Command Pattern
         public override void ApplyAdjustment(String actionParameter, Int32 diff)
         {
-            if (diff == 0) return;
+            if (diff == 0)
+            {
+                return;
+            }
 
             try
             {
@@ -532,7 +535,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private IHomeAssistantDataParser? _dataParser;
         private ILightStateManager? _lightStateManager;
         private IRegistryService? _registryService;
-        
+
         // Command pattern for adjustment handling
         private IAdjustmentCommandFactory? _adjustmentCommandFactory;
 
@@ -752,13 +755,13 @@ namespace Loupedeck.HomeAssistantPlugin
                 // Use switch expression to dispatch to focused command handlers
                 var handled = actionParameter switch
                 {
-                    CmdBack => HandleBackCommand(),
-                    CmdRetry => HandleRetryCommand(),
-                    CmdStatus => HandleStatusCommand(),
-                    var cmd when cmd.StartsWith(CmdArea, StringComparison.OrdinalIgnoreCase) => HandleAreaCommand(cmd),
-                    var cmd when cmd.StartsWith(PfxDevice, StringComparison.OrdinalIgnoreCase) => HandleDeviceCommand(cmd),
-                    var cmd when cmd.StartsWith(PfxActOn, StringComparison.OrdinalIgnoreCase) => HandleLightOnCommand(cmd),
-                    var cmd when cmd.StartsWith(PfxActOff, StringComparison.OrdinalIgnoreCase) => HandleLightOffCommand(cmd),
+                    CmdBack => this.HandleBackCommand(),
+                    CmdRetry => this.HandleRetryCommand(),
+                    CmdStatus => this.HandleStatusCommand(),
+                    var cmd when cmd.StartsWith(CmdArea, StringComparison.OrdinalIgnoreCase) => this.HandleAreaCommand(cmd),
+                    var cmd when cmd.StartsWith(PfxDevice, StringComparison.OrdinalIgnoreCase) => this.HandleDeviceCommand(cmd),
+                    var cmd when cmd.StartsWith(PfxActOn, StringComparison.OrdinalIgnoreCase) => this.HandleLightOnCommand(cmd),
+                    var cmd when cmd.StartsWith(PfxActOff, StringComparison.OrdinalIgnoreCase) => this.HandleLightOffCommand(cmd),
                     _ => false
                 };
 
@@ -966,12 +969,12 @@ namespace Loupedeck.HomeAssistantPlugin
                     this._ha = new HaClientAdapter(haPlugin.HaClient);
                     this._dataService = new HomeAssistantDataService(this._ha);
                     this._dataParser = new HomeAssistantDataParser(this._capSvc);
-                    
+
                     // Use the singleton LightStateManager from the main plugin to preserve state across folder exits/entries
                     this._lightStateManager = haPlugin.LightStateManager;
                     var existingCount = this._lightStateManager.GetTrackedEntityIds().Count();
                     PluginLog.Info(() => $"[LightsDynamicFolder] Using singleton LightStateManager with {existingCount} existing tracked entities");
-                    
+
                     this._registryService = new RegistryService();
 
                     // Initialize light control service with debounce settings
@@ -1020,7 +1023,7 @@ namespace Loupedeck.HomeAssistantPlugin
         public override Boolean Unload()
         {
             PluginLog.Info("DynamicFolder.Unload()");
-            
+
             if (this._lightStateManager != null)
             {
                 var trackedCount = this._lightStateManager.GetTrackedEntityIds().Count();
@@ -1047,13 +1050,13 @@ namespace Loupedeck.HomeAssistantPlugin
         public override Boolean Deactivate()
         {
             PluginLog.Info("DynamicFolder.Deactivate() -> close WS");
-            
+
             if (this._lightStateManager != null)
             {
                 var trackedCount = this._lightStateManager.GetTrackedEntityIds().Count();
                 PluginLog.Info(() => $"[LightsDynamicFolder] Deactivating - LightStateManager retains {trackedCount} tracked entities (singleton preserved)");
             }
-            
+
             this._cts?.Cancel();
             this._ha?.SafeCloseAsync().GetAwaiter().GetResult();
             this._eventsCts?.Cancel();
@@ -1302,7 +1305,7 @@ namespace Loupedeck.HomeAssistantPlugin
             var priorIsOn = this._lightStateManager?.IsLightOn(entityId) ?? false;
             var priorCachedB = this._lightStateManager?.GetHsbValues(entityId).B ?? BrightnessOff;
             var wasIgnored = this.ShouldIgnoreFrame(entityId, "brightness");
-            
+
             PluginLog.Verbose(() => $"[OnHaBrightnessChanged] {entityId}: receivedBri={bri}, priorIsOn={priorIsOn}, priorCachedB={priorCachedB}, wasIgnored={wasIgnored}");
 
             if (wasIgnored)

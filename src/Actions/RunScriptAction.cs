@@ -116,7 +116,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     this._events.ScriptRunningChanged += (entityId, isRunning) =>
                     {
                         PluginLog.Debug(() => $"{LogPrefix} Event: ScriptRunningChanged entity='{entityId}' running={isRunning}");
-                        _isRunningCache[entityId] = isRunning;
+                        this._isRunningCache[entityId] = isRunning;
                         //this.ActionImageChanged(); // resets user icon
                     };
                 }
@@ -152,7 +152,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 return false;
             }
 
-            await _haConnectGate.WaitAsync().ConfigureAwait(false);
+            await this._haConnectGate.WaitAsync().ConfigureAwait(false);
             try
             {
                 if (this._client?.IsAuthenticated == true)
@@ -207,7 +207,7 @@ namespace Loupedeck.HomeAssistantPlugin
             }
             finally
             {
-                _haConnectGate.Release();
+                this._haConnectGate.Release();
             }
         }
 
@@ -257,7 +257,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 }
 
                 // If running, stop it
-                var isRunning = _isRunningCache.TryGetValue(entityId, out var r) && r;
+                var isRunning = this._isRunningCache.TryGetValue(entityId, out var r) && r;
                 PluginLog.Debug(() => $"{LogPrefix} Current running state: {isRunning}");
 
                 if (isRunning)
@@ -329,10 +329,10 @@ namespace Loupedeck.HomeAssistantPlugin
             try
             {
                 // If we have cached items, serve them immediately (works offline too)
-                if (!_scripts.IsEmpty)
+                if (!this._scripts.IsEmpty)
                 {
                     var count = 0;
-                    foreach (var kv in _scripts)
+                    foreach (var kv in this._scripts)
                     {
                         e.AddItem(name: kv.Key, displayName: kv.Value, description: "Home Assistant script");
                         count++;
@@ -341,7 +341,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
                     // Keep current selection if still valid
                     var current = e.ActionEditorState?.GetControlValue(ControlScript) as String;
-                    if (!String.IsNullOrEmpty(current) && _scripts.ContainsKey(current))
+                    if (!String.IsNullOrEmpty(current) && this._scripts.ContainsKey(current))
                     {
                         e.SetSelectedItemName(current);
                     }
@@ -349,7 +349,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 }
 
                 // If we've tried before and still nothing, show a "no scripts" item
-                if (_scriptsLoadedOnce && _scripts.IsEmpty)
+                if (this._scriptsLoadedOnce && this._scripts.IsEmpty)
                 {
                     e.AddItem(ItemNone, "No scripts found", "Define scripts in Home Assistant, then refresh.");
                     return;
@@ -405,7 +405,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
         private async Task<Boolean> RefreshScriptsCacheAsync(CancellationToken ct)
         {
-            await _scriptsRefreshGate.WaitAsync(ct).ConfigureAwait(false);
+            await this._scriptsRefreshGate.WaitAsync(ct).ConfigureAwait(false);
             try
             {
                 // If not connected yet, connect first
@@ -454,14 +454,14 @@ namespace Loupedeck.HomeAssistantPlugin
                 }
 
                 // swap into concurrent cache
-                _scripts.Clear();
+                this._scripts.Clear();
                 foreach (var kv in local)
                 {
-                    _scripts[kv.Key] = kv.Value;
+                    this._scripts[kv.Key] = kv.Value;
                 }
 
-                _scriptsLoadedOnce = true;
-                PluginLog.Info(() => $"{LogPrefix} Refreshed scripts: count={_scripts.Count}");
+                this._scriptsLoadedOnce = true;
+                PluginLog.Info(() => $"{LogPrefix} Refreshed scripts: count={this._scripts.Count}");
                 return true;
             }
             catch (OperationCanceledException)
@@ -476,7 +476,7 @@ namespace Loupedeck.HomeAssistantPlugin
             }
             finally
             {
-                _scriptsRefreshGate.Release();
+                this._scriptsRefreshGate.Release();
             }
         }
 

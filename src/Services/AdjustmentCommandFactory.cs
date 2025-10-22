@@ -9,17 +9,14 @@ namespace Loupedeck.HomeAssistantPlugin.Services
     {
         private readonly AdjustmentCommandContext _context;
 
-        public AdjustmentCommandFactory(AdjustmentCommandContext context)
-        {
-            _context = context ?? throw new System.ArgumentNullException(nameof(context));
-        }
+        public AdjustmentCommandFactory(AdjustmentCommandContext context) => this._context = context ?? throw new System.ArgumentNullException(nameof(context));
 
-        public IAdjustmentCommand CreateBrightnessCommand() => new BrightnessAdjustmentCommand(_context);
+        public IAdjustmentCommand CreateBrightnessCommand() => new BrightnessAdjustmentCommand(this._context);
 
-        public IAdjustmentCommand CreateSaturationCommand() => new SaturationAdjustmentCommand(_context);
+        public IAdjustmentCommand CreateSaturationCommand() => new SaturationAdjustmentCommand(this._context);
 
-        public IAdjustmentCommand CreateHueCommand() => new HueAdjustmentCommand(_context);
+        public IAdjustmentCommand CreateHueCommand() => new HueAdjustmentCommand(this._context);
 
-        public IAdjustmentCommand CreateTemperatureCommand() => new TemperatureAdjustmentCommand(_context);
+        public IAdjustmentCommand CreateTemperatureCommand() => new TemperatureAdjustmentCommand(this._context);
     }
 }

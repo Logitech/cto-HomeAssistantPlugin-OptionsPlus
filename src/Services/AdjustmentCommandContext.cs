@@ -2,6 +2,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
 {
     using System;
     using System.Collections.Generic;
+
     using Loupedeck.HomeAssistantPlugin.Models;
 
     /// <summary>
@@ -29,12 +30,12 @@ namespace Loupedeck.HomeAssistantPlugin.Services
             Action<String> triggerAdjustmentValueChanged,
             Func<String, LightCaps> getCapabilities)
         {
-            LightStateManager = lightStateManager ?? throw new ArgumentNullException(nameof(lightStateManager));
-            LightControlService = lightControlService ?? throw new ArgumentNullException(nameof(lightControlService));
-            LookModeByEntity = lookModeByEntity ?? throw new ArgumentNullException(nameof(lookModeByEntity));
-            MarkCommandSent = markCommandSent ?? throw new ArgumentNullException(nameof(markCommandSent));
-            TriggerAdjustmentValueChanged = triggerAdjustmentValueChanged ?? throw new ArgumentNullException(nameof(triggerAdjustmentValueChanged));
-            GetCapabilities = getCapabilities ?? throw new ArgumentNullException(nameof(getCapabilities));
+            this.LightStateManager = lightStateManager ?? throw new ArgumentNullException(nameof(lightStateManager));
+            this.LightControlService = lightControlService ?? throw new ArgumentNullException(nameof(lightControlService));
+            this.LookModeByEntity = lookModeByEntity ?? throw new ArgumentNullException(nameof(lookModeByEntity));
+            this.MarkCommandSent = markCommandSent ?? throw new ArgumentNullException(nameof(markCommandSent));
+            this.TriggerAdjustmentValueChanged = triggerAdjustmentValueChanged ?? throw new ArgumentNullException(nameof(triggerAdjustmentValueChanged));
+            this.GetCapabilities = getCapabilities ?? throw new ArgumentNullException(nameof(getCapabilities));
         }
     }
 }
