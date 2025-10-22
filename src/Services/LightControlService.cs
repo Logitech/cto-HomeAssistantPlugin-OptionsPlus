@@ -34,7 +34,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private readonly Int32 _tempDebounceMs;
 
         private readonly DebouncedSender<String, Int32> _brightnessSender;
-        private readonly DebouncedSender<String, Hs> _hsSender;
+        private readonly DebouncedSender<String, HueSaturation> _hsSender;
         private readonly DebouncedSender<String, Int32> _tempSender;
 
         // (Optional) last-sent caches if you need them externally later
@@ -54,7 +54,7 @@ namespace Loupedeck.HomeAssistantPlugin
             try
             {
                 this._brightnessSender = new DebouncedSender<String, Int32>(this._brightnessDebounceMs, this.SendBrightnessAsync);
-                this._hsSender = new DebouncedSender<String, Hs>(this._hsDebounceMs, this.SendHsAsync);
+                this._hsSender = new DebouncedSender<String, HueSaturation>(this._hsDebounceMs, this.SendHsAsync);
                 this._tempSender = new DebouncedSender<String, Int32>(this._tempDebounceMs, this.SendTempAsync);
 
                 PluginLog.Info("[LightControlService] Constructor completed - All debounced senders initialized");
@@ -78,7 +78,7 @@ namespace Loupedeck.HomeAssistantPlugin
             var wrappedH = HSBHelper.Wrap360(h);
             var clampedS = HSBHelper.Clamp(s, MinSaturationValue, MaxSaturationValue);
             PluginLog.Verbose(() => $"[LightControlService] SetHueSat - entity: {entityId}, h: {h:F1} -> {wrappedH:F1}, s: {s:F1} -> {clampedS:F1}");
-            this._hsSender.Set(entityId, new Hs(wrappedH, clampedS));
+            this._hsSender.Set(entityId, new HueSaturation(wrappedH, clampedS));
         }
 
         public void SetTempMired(String entityId, Int32 mired)
@@ -219,7 +219,7 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
-        private async Task SendHsAsync(String entityId, Hs hs)
+        private async Task SendHsAsync(String entityId, HueSaturation hs)
         {
             try
             {
