@@ -8,13 +8,22 @@ namespace Loupedeck.HomeAssistantPlugin
     using System.Threading.Tasks;
 
     using Loupedeck;
+    using Loupedeck.HomeAssistantPlugin.Services;
 
-    public sealed class AdvancedToggleAreaLightsAction : ActionEditorCommand
+    public sealed class AdvancedToggleAreaLightsAction : ActionEditorCommand, IDisposable
     {
         private const String LogPrefix = "[AdvancedToggleAreaLights]";
-        private HaWebSocketClient _client;
-        private LightControlService _lightSvc;
+        
+        // Service dependencies - modern dependency injection pattern
+        private IHaClient? _ha;
+        private ILightControlService? _lightSvc;
+        private ILightStateManager? _lightStateManager;
+        private IHomeAssistantDataService? _dataService;
+        private IHomeAssistantDataParser? _dataParser;
+        private IRegistryService? _registryService;
+        
         private readonly CapabilityService _capSvc = new();
+        private Boolean _disposed = false;
 
         // Control names
         private const String ControlArea = "ha_area";
@@ -23,6 +32,18 @@ namespace Loupedeck.HomeAssistantPlugin
         private const String ControlHue = "ha_hue";
         private const String ControlSaturation = "ha_saturation";
         private const String ControlWhiteLevel = "ha_white_level";
+
+        // Constants - extracted and organized like the newer code
+        private const Int32 MinBrightness = 1;
+        private const Int32 MaxBrightness = 255;
+        private const Int32 MinTemperature = 2000;
+        private const Int32 MaxTemperature = 6500;
+        private const Double MinHue = 0.0;
+        private const Double MaxHue = 360.0;
+        private const Double MinSaturation = 0.0;
+        private const Double MaxSaturation = 100.0;
+        private const Int32 AuthTimeoutSeconds = 8;
+        private const Int32 DebounceMs = 100;
 
         // Area constants (matching HomeAssistantLightsDynamicFolder)
         private const String UnassignedAreaId = "!unassigned";
@@ -76,6 +97,8 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 { IconId.Area, "area_icon.svg" }
             });
+
+            PluginLog.Info($"{LogPrefix} Constructor completed - dependency initialization deferred to OnLoad()");
         }
 
         protected override BitmapImage GetCommandImage(ActionEditorActionParameters parameters, Int32 width, Int32 height)
@@ -86,25 +109,94 @@ namespace Loupedeck.HomeAssistantPlugin
 
         protected override Boolean OnLoad()
         {
-            PluginLog.Info($"{LogPrefix} OnLoad()");
-            if (this.Plugin is HomeAssistantPlugin p)
+            PluginLog.Info($"{LogPrefix} OnLoad() START");
+            
+            try
             {
-                this._client = p.HaClient;
-                
-                // Initialize light control service with reasonable debounce times
-                var ha = new HaClientAdapter(this._client);
-                this._lightSvc = new LightControlService(ha, 100, 100, 100);
-                
-                return true;
+                if (this.Plugin is HomeAssistantPlugin haPlugin)
+                {
+                    PluginLog.Info($"{LogPrefix} Initializing dependencies using modern service architecture");
+                    
+                    // Initialize dependency injection - use the shared HaClient from Plugin
+                    this._ha = new HaClientAdapter(haPlugin.HaClient);
+                    this._dataService = new HomeAssistantDataService(this._ha);
+                    this._dataParser = new HomeAssistantDataParser(this._capSvc);
+                    
+                    // Use the singleton LightStateManager from the main plugin
+                    this._lightStateManager = haPlugin.LightStateManager;
+                    var existingCount = this._lightStateManager.GetTrackedEntityIds().Count();
+                    PluginLog.Info($"{LogPrefix} Using singleton LightStateManager with {existingCount} existing tracked entities");
+                    
+                    this._registryService = new RegistryService();
+                    
+                    // Initialize light control service with debounce settings
+                    this._lightSvc = new LightControlService(
+                        this._ha,
+                        DebounceMs,
+                        DebounceMs,
+                        DebounceMs
+                    );
+                    
+                    PluginLog.Info($"{LogPrefix} All dependencies initialized successfully");
+                    return true;
+                }
+                else
+                {
+                    PluginLog.Error($"{LogPrefix} Plugin is not HomeAssistantPlugin, actual type: {this.Plugin?.GetType()?.Name ?? "null"}");
+                    return false;
+                }
             }
-            PluginLog.Warning($"{LogPrefix} OnLoad(): plugin not available");
-            return false;
+            catch (Exception ex)
+            {
+                PluginLog.Error(ex, $"{LogPrefix} OnLoad() failed with exception");
+                return false;
+            }
         }
 
-        // Ensure we have an authenticated WS
+        protected override Boolean OnUnload()
+        {
+            PluginLog.Info($"{LogPrefix} OnUnload()");
+            this.Dispose();
+            return true;
+        }
+
+        public void Dispose()
+        {
+            if (this._disposed)
+                return;
+
+            PluginLog.Info($"{LogPrefix} Disposing resources");
+            
+            try
+            {
+                this._lightSvc?.Dispose();
+                this._lightSvc = null;
+                
+                // Don't dispose shared services - they're managed by the main plugin
+                this._ha = null;
+                this._dataService = null;
+                this._dataParser = null;
+                this._lightStateManager = null;
+                this._registryService = null;
+                
+                this._disposed = true;
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Error(ex, $"{LogPrefix} Error during disposal");
+            }
+        }
+
+        // Ensure we have an authenticated connection using modern service architecture
         private async Task<Boolean> EnsureHaReadyAsync()
         {
-            if (this._client?.IsAuthenticated == true)
+            if (this._ha == null)
+            {
+                PluginLog.Error($"{LogPrefix} EnsureHaReady: HaClient not initialized");
+                return false;
+            }
+
+            if (this._ha.IsAuthenticated)
             {
                 PluginLog.Info($"{LogPrefix} EnsureHaReady: already authenticated");
                 return true;
@@ -114,6 +206,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 String.IsNullOrWhiteSpace(baseUrl))
             {
                 PluginLog.Warning($"{LogPrefix} EnsureHaReady: Missing ha.baseUrl setting");
+                HealthBus.Error("Missing Base URL");
                 return false;
             }
 
@@ -121,22 +214,34 @@ namespace Loupedeck.HomeAssistantPlugin
                 String.IsNullOrWhiteSpace(token))
             {
                 PluginLog.Warning($"{LogPrefix} EnsureHaReady: Missing ha.token setting");
+                HealthBus.Error("Missing Token");
                 return false;
             }
 
             try
             {
-                PluginLog.Info($"{LogPrefix} Connecting to HA… url='{baseUrl}'");
-                var (ok, msg) = await this._client.ConnectAndAuthenticateAsync(
-                    baseUrl, token, TimeSpan.FromSeconds(8), CancellationToken.None
+                PluginLog.Info($"{LogPrefix} Connecting to HA using modern service architecture… url='{baseUrl}'");
+                var (ok, msg) = await this._ha.ConnectAndAuthenticateAsync(
+                    baseUrl, token, TimeSpan.FromSeconds(AuthTimeoutSeconds), CancellationToken.None
                 ).ConfigureAwait(false);
 
-                PluginLog.Info($"{LogPrefix} Auth result ok={ok} msg='{msg}'");
+                if (ok)
+                {
+                    HealthBus.Ok("Auth OK");
+                    PluginLog.Info($"{LogPrefix} Auth result ok={ok} msg='{msg}'");
+                }
+                else
+                {
+                    HealthBus.Error(msg ?? "Auth failed");
+                    PluginLog.Warning($"{LogPrefix} Auth failed: {msg}");
+                }
+                
                 return ok;
             }
             catch (Exception ex)
             {
                 PluginLog.Error(ex, $"{LogPrefix} EnsureHaReady exception");
+                HealthBus.Error("Auth error");
                 return false;
             }
         }
@@ -148,113 +253,68 @@ namespace Loupedeck.HomeAssistantPlugin
 
         private List<String> GetAreaLights(String areaId)
         {
-            PluginLog.Info($"{LogPrefix} Getting lights for area: {areaId}");
+            PluginLog.Info($"{LogPrefix} Getting lights for area: {areaId} using modern service architecture");
 
-            // Get states to find lights
-            var (okStates, statesJson, errStates) = this._client.RequestAsync("get_states", CancellationToken.None)
-                .GetAwaiter().GetResult();
-
-            if (!okStates || String.IsNullOrEmpty(statesJson))
+            if (this._dataService == null || this._registryService == null)
             {
-                PluginLog.Warning($"{LogPrefix} get_states failed: {errStates}");
+                PluginLog.Error($"{LogPrefix} GetAreaLights: Required services not available");
                 return new List<String>();
             }
 
-            // Get entity registry to map entities to areas
-            var (okEnt, entJson, errEnt) = this._client.RequestAsync("config/entity_registry/list", CancellationToken.None)
-                .GetAwaiter().GetResult();
-
-            // Get device registry for device->area mapping
-            var (okDev, devJson, errDev) = this._client.RequestAsync("config/device_registry/list", CancellationToken.None)
-                .GetAwaiter().GetResult();
-
-            // Build entity->area and device->area mappings
-            var entityToArea = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
-            var entityToDevice = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
-            var deviceToArea = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
-
-            if (okEnt && !String.IsNullOrEmpty(entJson))
+            try
             {
-                using var entDoc = JsonDocument.Parse(entJson);
-                if (entDoc.RootElement.ValueKind == JsonValueKind.Array)
+                // Use modern data service to fetch all required data
+                var (okStates, statesJson, errStates) = this._dataService.FetchStatesAsync(CancellationToken.None)
+                    .GetAwaiter().GetResult();
+
+                if (!okStates || String.IsNullOrEmpty(statesJson))
                 {
-                    foreach (var ent in entDoc.RootElement.EnumerateArray())
+                    PluginLog.Warning($"{LogPrefix} FetchStatesAsync failed: {errStates}");
+                    return new List<String>();
+                }
+
+                var (okEnt, entJson, errEnt) = this._dataService.FetchEntityRegistryAsync(CancellationToken.None)
+                    .GetAwaiter().GetResult();
+
+                var (okDev, devJson, errDev) = this._dataService.FetchDeviceRegistryAsync(CancellationToken.None)
+                    .GetAwaiter().GetResult();
+
+                var (okArea, areaJson, errArea) = this._dataService.FetchAreaRegistryAsync(CancellationToken.None)
+                    .GetAwaiter().GetResult();
+
+                // Parse registry data using modern parser
+                if (this._dataParser == null)
+                {
+                    PluginLog.Error($"{LogPrefix} GetAreaLights: DataParser not available");
+                    return new List<String>();
+                }
+
+                var registryData = this._dataParser.ParseRegistries(devJson, entJson, areaJson);
+                this._registryService.UpdateRegistries(registryData);
+
+                // Find all light entity IDs first
+                var allLightIds = new List<String>();
+                using var statesDoc = JsonDocument.Parse(statesJson);
+                foreach (var state in statesDoc.RootElement.EnumerateArray())
+                {
+                    var entityId = state.GetPropertyOrDefault("entity_id");
+                    if (!String.IsNullOrEmpty(entityId) && entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
                     {
-                        var entityId = ent.GetPropertyOrDefault("entity_id");
-                        if (String.IsNullOrEmpty(entityId)) continue;
-
-                        var deviceId = ent.GetPropertyOrDefault("device_id") ?? "";
-                        var entAreaId = ent.GetPropertyOrDefault("area_id");
-
-                        if (!String.IsNullOrEmpty(deviceId))
-                        {
-                            entityToDevice[entityId] = deviceId;
-                        }
-
-                        if (!String.IsNullOrEmpty(entAreaId))
-                        {
-                            entityToArea[entityId] = entAreaId;
-                        }
+                        allLightIds.Add(entityId);
                     }
                 }
-            }
 
-            if (okDev && !String.IsNullOrEmpty(devJson))
+                // Use registry service to get lights in the specified area
+                var areaLights = this._registryService.GetLightsInArea(areaId, allLightIds).ToList();
+
+                PluginLog.Info($"{LogPrefix} Found {areaLights.Count} lights in area '{areaId}' using modern services: {String.Join(", ", areaLights)}");
+                return areaLights;
+            }
+            catch (Exception ex)
             {
-                using var devDoc = JsonDocument.Parse(devJson);
-                if (devDoc.RootElement.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var dev in devDoc.RootElement.EnumerateArray())
-                    {
-                        var deviceId = dev.GetPropertyOrDefault("id");
-                        var devAreaId = dev.GetPropertyOrDefault("area_id");
-
-                        if (!String.IsNullOrEmpty(deviceId) && !String.IsNullOrEmpty(devAreaId))
-                        {
-                            deviceToArea[deviceId] = devAreaId;
-                        }
-                    }
-                }
+                PluginLog.Error(ex, $"{LogPrefix} GetAreaLights failed");
+                return new List<String>();
             }
-
-            // Find lights in the specified area
-            var areaLights = new List<String>();
-
-            using var statesDoc = JsonDocument.Parse(statesJson);
-            foreach (var state in statesDoc.RootElement.EnumerateArray())
-            {
-                var entityId = state.GetPropertyOrDefault("entity_id");
-                if (String.IsNullOrEmpty(entityId) || !entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                // Determine this light's area (entity area wins, then device area, then unassigned)
-                String lightAreaId = null;
-                
-                if (entityToArea.TryGetValue(entityId, out var entArea))
-                {
-                    lightAreaId = entArea;
-                }
-                else if (entityToDevice.TryGetValue(entityId, out var deviceId) &&
-                         deviceToArea.TryGetValue(deviceId, out var devArea))
-                {
-                    lightAreaId = devArea;
-                }
-
-                if (String.IsNullOrEmpty(lightAreaId))
-                {
-                    lightAreaId = UnassignedAreaId;
-                }
-
-                // Check if this light belongs to our target area
-                if (!String.Equals(lightAreaId, areaId, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                areaLights.Add(entityId);
-            }
-
-            PluginLog.Info($"{LogPrefix} Found {areaLights.Count} lights in area '{areaId}': {String.Join(", ", areaLights)}");
-
-            return areaLights;
         }
 
         protected override Boolean RunCommand(ActionEditorActionParameters ps)
@@ -294,12 +354,12 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 PluginLog.Info($"{LogPrefix} Press: Processing {areaLights.Count} lights in area '{selectedArea}'");
 
-                // Parse control values
-                var brightness = this.ParseIntParameter(ps, ControlBrightness, 0, 255);
-                var temperature = this.ParseIntParameter(ps, ControlTemperature, 2000, 6500);
-                var hue = this.ParseDoubleParameter(ps, ControlHue, 0, 360);
-                var saturation = this.ParseDoubleParameter(ps, ControlSaturation, 0, 100);
-                var whiteLevel = this.ParseIntParameter(ps, ControlWhiteLevel, 0, 255);
+                // Parse control values using defined constants
+                var brightness = this.ParseIntParameter(ps, ControlBrightness, 0, MaxBrightness);
+                var temperature = this.ParseIntParameter(ps, ControlTemperature, MinTemperature, MaxTemperature);
+                var hue = this.ParseDoubleParameter(ps, ControlHue, MinHue, MaxHue);
+                var saturation = this.ParseDoubleParameter(ps, ControlSaturation, MinSaturation, MaxSaturation);
+                var whiteLevel = this.ParseIntParameter(ps, ControlWhiteLevel, 0, MaxBrightness);
 
                 // Process each light in the area
                 var success = true;
@@ -346,9 +406,15 @@ namespace Loupedeck.HomeAssistantPlugin
 
             if (Int32.TryParse(valueStr, out var value))
             {
-                return HSBHelper.Clamp(value, min, max);
+                var clamped = HSBHelper.Clamp(value, min, max);
+                if (clamped != value)
+                {
+                    PluginLog.Debug($"{LogPrefix} Parameter {controlName}: {value} clamped to {clamped} (range {min}-{max})");
+                }
+                return clamped;
             }
 
+            PluginLog.Warning($"{LogPrefix} Parameter {controlName}: failed to parse '{valueStr}' as integer");
             return null;
         }
 
@@ -359,9 +425,15 @@ namespace Loupedeck.HomeAssistantPlugin
 
             if (Double.TryParse(valueStr, out var value))
             {
-                return HSBHelper.Clamp(value, min, max);
+                var clamped = HSBHelper.Clamp(value, min, max);
+                if (Math.Abs(clamped - value) > 1e-6)
+                {
+                    PluginLog.Debug($"{LogPrefix} Parameter {controlName}: {value} clamped to {clamped} (range {min}-{max})");
+                }
+                return clamped;
             }
 
+            PluginLog.Warning($"{LogPrefix} Parameter {controlName}: failed to parse '{valueStr}' as double");
             return null;
         }
 
@@ -371,21 +443,48 @@ namespace Loupedeck.HomeAssistantPlugin
             PluginLog.Info($"{LogPrefix} Processing light: {entityId}");
             PluginLog.Info($"{LogPrefix} Input parameters: brightness={brightness} temperature={temperature}K hue={hue}° saturation={saturation}% whiteLevel={whiteLevel}");
 
+            if (this._lightSvc == null)
+            {
+                PluginLog.Error($"{LogPrefix} ProcessSingleLight: LightControlService not available");
+                return false;
+            }
+
             // If no parameters specified, just toggle
             if (!brightness.HasValue && !temperature.HasValue && !hue.HasValue && !saturation.HasValue && !whiteLevel.HasValue)
             {
                 PluginLog.Info($"{LogPrefix} No parameters provided, using simple toggle for '{entityId}'");
-                var (ok, err) = this._client.CallServiceAsync("light", "toggle", entityId, null, CancellationToken.None)
-                    .GetAwaiter().GetResult();
-                PluginLog.Info($"{LogPrefix} HA SERVICE CALL: domain=light service=toggle entity_id={entityId} data=null -> ok={ok} err='{err}'");
+                var success = this._lightSvc.ToggleAsync(entityId).GetAwaiter().GetResult();
+                PluginLog.Info($"{LogPrefix} HA SERVICE CALL: toggle entity_id={entityId} -> success={success}");
                 
-                if (!ok)
+                if (!success)
                 {
-                    PluginLog.Warning($"{LogPrefix} Failed to toggle light {entityId}: {err ?? "Unknown error"}");
+                    PluginLog.Warning($"{LogPrefix} Failed to toggle light {entityId}");
                 }
                 
-                return ok;
+                return success;
             }
+
+            // Check current light state for proper toggle behavior when parameters are provided
+            var isCurrentlyOn = this._lightStateManager?.IsLightOn(entityId) ?? false;
+            PluginLog.Info($"{LogPrefix} Current light state for {entityId}: isOn={isCurrentlyOn}");
+
+            // If light is currently ON and we have parameters, turn it OFF (toggle behavior)
+            if (isCurrentlyOn)
+            {
+                PluginLog.Info($"{LogPrefix} Light {entityId} is ON, turning OFF for toggle behavior");
+                var success = this._lightSvc.TurnOffAsync(entityId).GetAwaiter().GetResult();
+                PluginLog.Info($"{LogPrefix} HA SERVICE CALL: turn_off entity_id={entityId} -> success={success}");
+                
+                if (!success)
+                {
+                    PluginLog.Warning($"{LogPrefix} Failed to turn off light {entityId}");
+                }
+                
+                return success;
+            }
+
+            // Light is OFF, turn it ON with the specified parameters
+            PluginLog.Info($"{LogPrefix} Light {entityId} is OFF, turning ON with parameters");
 
             // Build service call data - send all requested parameters and let HA ignore unsupported ones
             var serviceData = new Dictionary<String, Object>();
@@ -393,23 +492,23 @@ namespace Loupedeck.HomeAssistantPlugin
             // Add brightness if specified
             if (brightness.HasValue)
             {
-                var bri = HSBHelper.Clamp(brightness.Value, 1, 255); // Ensure at least 1 for turn_on
+                var bri = HSBHelper.Clamp(brightness.Value, MinBrightness, MaxBrightness);
                 serviceData["brightness"] = bri;
-                PluginLog.Info($"{LogPrefix} Added brightness: {brightness.Value} -> {bri} (clamped 1-255)");
+                PluginLog.Info($"{LogPrefix} Added brightness: {brightness.Value} -> {bri} (clamped {MinBrightness}-{MaxBrightness})");
             }
             else if (whiteLevel.HasValue)
             {
                 // White level as fallback brightness
-                var bri = HSBHelper.Clamp(whiteLevel.Value, 1, 255);
+                var bri = HSBHelper.Clamp(whiteLevel.Value, MinBrightness, MaxBrightness);
                 serviceData["brightness"] = bri;
-                PluginLog.Info($"{LogPrefix} Added white level as brightness: {whiteLevel.Value} -> {bri} (clamped 1-255)");
+                PluginLog.Info($"{LogPrefix} Added white level as brightness: {whiteLevel.Value} -> {bri} (clamped {MinBrightness}-{MaxBrightness})");
             }
 
             // Add color controls - prioritize temperature over HS to avoid conflicts
             // (HA doesn't allow both color_temp and hs_color in the same call)
             if (temperature.HasValue)
             {
-                var kelvin = HSBHelper.Clamp(temperature.Value, 2000, 6500);
+                var kelvin = HSBHelper.Clamp(temperature.Value, MinTemperature, MaxTemperature);
                 var mired = ColorTemp.KelvinToMired(kelvin);
                 serviceData["color_temp"] = mired;
                 PluginLog.Info($"{LogPrefix} Added color temp: {temperature.Value}K -> {kelvin}K -> {mired} mireds (color temp takes priority over HS)");
@@ -422,7 +521,7 @@ namespace Loupedeck.HomeAssistantPlugin
             else if (hue.HasValue && saturation.HasValue)
             {
                 var h = HSBHelper.Wrap360(hue.Value);
-                var s = HSBHelper.Clamp(saturation.Value, 0, 100);
+                var s = HSBHelper.Clamp(saturation.Value, MinSaturation, MaxSaturation);
                 serviceData["hs_color"] = new Double[] { h, s };
                 PluginLog.Info($"{LogPrefix} Added hs_color: hue {hue.Value}° -> {h}°, saturation {saturation.Value}% -> {s}%");
             }
@@ -435,31 +534,29 @@ namespace Loupedeck.HomeAssistantPlugin
                 PluginLog.Info($"{LogPrefix} Built service data: {dataJson}");
                 
                 // Use turn_on when we have specific parameters
-                var (ok, err) = this._client.CallServiceAsync("light", "turn_on", entityId, data, CancellationToken.None)
-                    .GetAwaiter().GetResult();
-                PluginLog.Info($"{LogPrefix} HA SERVICE CALL: domain=light service=turn_on entity_id={entityId} data={dataJson} -> ok={ok} err='{err}'");
+                var success = this._lightSvc.TurnOnAsync(entityId, data).GetAwaiter().GetResult();
+                PluginLog.Info($"{LogPrefix} HA SERVICE CALL: turn_on entity_id={entityId} data={dataJson} -> success={success}");
                 
-                if (!ok)
+                if (!success)
                 {
-                    PluginLog.Warning($"{LogPrefix} Failed to control light {entityId}: {err ?? "Unknown error"}");
+                    PluginLog.Warning($"{LogPrefix} Failed to control light {entityId}");
                 }
                 
-                return ok;
+                return success;
             }
             else
             {
-                // No parameters, just toggle
-                PluginLog.Info($"{LogPrefix} No parameters provided, using simple toggle for '{entityId}'");
-                var (ok, err) = this._client.CallServiceAsync("light", "toggle", entityId, null, CancellationToken.None)
-                    .GetAwaiter().GetResult();
-                PluginLog.Info($"{LogPrefix} HA SERVICE CALL: domain=light service=toggle entity_id={entityId} data=null -> ok={ok} err='{err}'");
+                // No valid parameters, just turn on without parameters
+                PluginLog.Info($"{LogPrefix} No valid parameters, turning ON without specific parameters for '{entityId}'");
+                var success = this._lightSvc.TurnOnAsync(entityId).GetAwaiter().GetResult();
+                PluginLog.Info($"{LogPrefix} HA SERVICE CALL: turn_on entity_id={entityId} data=null -> success={success}");
                 
-                if (!ok)
+                if (!success)
                 {
-                    PluginLog.Warning($"{LogPrefix} Failed to toggle light {entityId}: {err ?? "Unknown error"}");
+                    PluginLog.Warning($"{LogPrefix} Failed to turn on light {entityId}");
                 }
                 
-                return ok;
+                return success;
             }
         }
 
@@ -470,7 +567,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 return;
             }
 
-            PluginLog.Info($"{LogPrefix} ListboxItemsRequested({e.ControlName})");
+            PluginLog.Info($"{LogPrefix} ListboxItemsRequested({e.ControlName}) using modern service architecture");
             try
             {
                 // Ensure we're connected before asking HA for areas
@@ -489,20 +586,27 @@ namespace Loupedeck.HomeAssistantPlugin
                     return;
                 }
 
-                // Get areas, states, entity registry, and device registry
-                var (okAreas, areasJson, errAreas) = this._client.RequestAsync("config/area_registry/list", CancellationToken.None)
+                if (this._dataService == null || this._dataParser == null || this._registryService == null)
+                {
+                    PluginLog.Error($"{LogPrefix} ListboxItemsRequested: Required services not available");
+                    e.AddItem("!no_service", "Data services not initialized", "Plugin initialization error");
+                    return;
+                }
+
+                // Use modern data service to fetch all required data
+                var (okAreas, areasJson, errAreas) = this._dataService.FetchAreaRegistryAsync(CancellationToken.None)
                     .GetAwaiter().GetResult();
                 
-                var (okStates, statesJson, errStates) = this._client.RequestAsync("get_states", CancellationToken.None)
+                var (okStates, statesJson, errStates) = this._dataService.FetchStatesAsync(CancellationToken.None)
                     .GetAwaiter().GetResult();
                 
-                var (okEnt, entJson, errEnt) = this._client.RequestAsync("config/entity_registry/list", CancellationToken.None)
+                var (okEnt, entJson, errEnt) = this._dataService.FetchEntityRegistryAsync(CancellationToken.None)
                     .GetAwaiter().GetResult();
                 
-                var (okDev, devJson, errDev) = this._client.RequestAsync("config/device_registry/list", CancellationToken.None)
+                var (okDev, devJson, errDev) = this._dataService.FetchDeviceRegistryAsync(CancellationToken.None)
                     .GetAwaiter().GetResult();
 
-                PluginLog.Info($"{LogPrefix} Registry calls: areas={okAreas} states={okStates} entities={okEnt} devices={okDev}");
+                PluginLog.Info($"{LogPrefix} Modern service calls: areas={okAreas} states={okStates} entities={okEnt} devices={okDev}");
 
                 if (!okAreas || !okStates || String.IsNullOrEmpty(areasJson) || String.IsNullOrEmpty(statesJson))
                 {
@@ -510,102 +614,37 @@ namespace Loupedeck.HomeAssistantPlugin
                     return;
                 }
 
-                // Build area_id -> name mapping
-                var areaIdToName = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
-                using var areasDoc = JsonDocument.Parse(areasJson);
-                if (areasDoc.RootElement.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var area in areasDoc.RootElement.EnumerateArray())
-                    {
-                        var id = area.GetPropertyOrDefault("area_id") ?? area.GetPropertyOrDefault("id");
-                        var name = area.GetPropertyOrDefault("name") ?? id ?? "";
-                        if (!String.IsNullOrEmpty(id))
-                        {
-                            areaIdToName[id] = name;
-                        }
-                    }
-                }
+                // Parse registry data using modern parser
+                var registryData = this._dataParser.ParseRegistries(devJson, entJson, areasJson);
+                this._registryService.UpdateRegistries(registryData);
 
-                // Build entity->area and device->area mappings
-                var entityToArea = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
-                var entityToDevice = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
-                var deviceToArea = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
-
-                if (okEnt && !String.IsNullOrEmpty(entJson))
-                {
-                    using var entDoc = JsonDocument.Parse(entJson);
-                    if (entDoc.RootElement.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var ent in entDoc.RootElement.EnumerateArray())
-                        {
-                            var entityId = ent.GetPropertyOrDefault("entity_id");
-                            if (String.IsNullOrEmpty(entityId)) continue;
-
-                            var deviceId = ent.GetPropertyOrDefault("device_id") ?? "";
-                            var entAreaId = ent.GetPropertyOrDefault("area_id");
-
-                            if (!String.IsNullOrEmpty(deviceId))
-                            {
-                                entityToDevice[entityId] = deviceId;
-                            }
-
-                            if (!String.IsNullOrEmpty(entAreaId))
-                            {
-                                entityToArea[entityId] = entAreaId;
-                            }
-                        }
-                    }
-                }
-
-                if (okDev && !String.IsNullOrEmpty(devJson))
-                {
-                    using var devDoc = JsonDocument.Parse(devJson);
-                    if (devDoc.RootElement.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var dev in devDoc.RootElement.EnumerateArray())
-                        {
-                            var deviceId = dev.GetPropertyOrDefault("id");
-                            var devAreaId = dev.GetPropertyOrDefault("area_id");
-
-                            if (!String.IsNullOrEmpty(deviceId) && !String.IsNullOrEmpty(devAreaId))
-                            {
-                                deviceToArea[deviceId] = devAreaId;
-                            }
-                        }
-                    }
-                }
-
-                // Find which areas actually have lights
-                var areasWithLights = new HashSet<String>(StringComparer.OrdinalIgnoreCase);
+                // Find all light entity IDs first
+                var allLightIds = new List<String>();
                 using var statesDoc = JsonDocument.Parse(statesJson);
                 foreach (var state in statesDoc.RootElement.EnumerateArray())
                 {
                     var entityId = state.GetPropertyOrDefault("entity_id");
-                    if (String.IsNullOrEmpty(entityId) || !entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    // Determine this light's area
-                    String lightAreaId = null;
-                    
-                    if (entityToArea.TryGetValue(entityId, out var entArea))
+                    if (!String.IsNullOrEmpty(entityId) && entityId.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
                     {
-                        lightAreaId = entArea;
+                        allLightIds.Add(entityId);
                     }
-                    else if (entityToDevice.TryGetValue(entityId, out var deviceId) && 
-                             deviceToArea.TryGetValue(deviceId, out var devArea))
-                    {
-                        lightAreaId = devArea;
-                    }
-
-                    if (String.IsNullOrEmpty(lightAreaId))
-                    {
-                        lightAreaId = UnassignedAreaId;
-                    }
-
-                    areasWithLights.Add(lightAreaId);
                 }
 
-                // Add unassigned area name if needed
+                // Get areas that have lights using modern registry service
+                var areasWithLights = this._registryService.GetAreasWithLights(allLightIds).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                // Build area_id -> name mapping from registry data
+                var areaIdToName = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
+                foreach (var areaId in this._registryService.GetAllAreaIds())
+                {
+                    var areaName = this._registryService.GetAreaName(areaId);
+                    if (!String.IsNullOrEmpty(areaName))
+                    {
+                        areaIdToName[areaId] = areaName;
+                    }
+                }
+
+                // Add unassigned area if there are unassigned lights
                 if (areasWithLights.Contains(UnassignedAreaId))
                 {
                     areaIdToName[UnassignedAreaId] = UnassignedAreaName;
@@ -624,7 +663,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     count++;
                 }
 
-                PluginLog.Info($"{LogPrefix} List populated with {count} area(s) that have lights");
+                PluginLog.Info($"{LogPrefix} List populated with {count} area(s) that have lights using modern service architecture");
 
                 // Keep current selection
                 var current = e.ActionEditorState?.GetControlValue(ControlArea) as String;
@@ -636,7 +675,7 @@ namespace Loupedeck.HomeAssistantPlugin
             }
             catch (Exception ex)
             {
-                PluginLog.Warning(ex, $"{LogPrefix} List population failed");
+                PluginLog.Error(ex, $"{LogPrefix} List population failed");
                 e.AddItem("!error", "Error reading areas", ex.Message);
             }
         }
