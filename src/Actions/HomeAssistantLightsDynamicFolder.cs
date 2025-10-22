@@ -500,6 +500,7 @@ namespace Loupedeck.HomeAssistantPlugin
                         // current brightness from LightStateManager (fallback to mid)
                         var hsb = this._lightStateManager?.GetHsbValues(entityId) ?? (DefaultHue, MinSaturation, MidBrightness);
                         var curB = hsb.B;
+                        var isCurrentlyOn = this._lightStateManager?.IsLightOn(entityId) ?? false;
 
                         // compute target absolutely (± WheelStepPercent per tick), with cap
                         var stepPct = diff * WheelStepPercent;
@@ -507,8 +508,22 @@ namespace Loupedeck.HomeAssistantPlugin
                         var deltaB = (Int32)Math.Round(BrightnessScale * stepPct / PercentageScale);
                         var targetB = HSBHelper.Clamp(curB + deltaB, BrightnessOff, MaxBrightness);
 
-                        // optimistic UI: update cache immediately using LightStateManager → live value/image
-                        this._lightStateManager?.SetCachedBrightness(entityId, targetB);
+                        PluginLog.Verbose(() => $"[BrightnessAdjust] BEFORE - Entity: {entityId}, isOn={isCurrentlyOn}, currentB={curB}, targetB={targetB}, diff={diff}");
+
+                        // BUG FIX: When adjusting brightness to > 0 on an OFF light, we need to update the ON state
+                        // because SetBrightness will call turn_on in Home Assistant
+                        if (!isCurrentlyOn && targetB > BrightnessOff)
+                        {
+                            // Update both brightness and ON state optimistically since we're about to turn it on
+                            this._lightStateManager?.UpdateLightState(entityId, true, targetB);
+                            PluginLog.Verbose(() => $"[BrightnessAdjust] FIX - Turning ON light {entityId} with brightness={targetB} (was OFF)");
+                        }
+                        else
+                        {
+                            // Just update cached brightness without changing ON/OFF state
+                            this._lightStateManager?.SetCachedBrightness(entityId, targetB);
+                        }
+                        
                         PluginLog.Debug(() => $"[BrightnessAdjust] Updated LightStateManager for {entityId}: brightness={targetB} (was {curB})");
 
                         this.AdjustmentValueChanged(actionParameter);
@@ -798,8 +813,9 @@ namespace Loupedeck.HomeAssistantPlugin
             // Use the LightStateManager for getting effective brightness
             var effectiveBrightness = this._lightStateManager?.GetEffectiveBrightness(entityId) ?? BrightnessOff;
             var isOn = this._lightStateManager?.IsLightOn(entityId) ?? false;
+            var cachedHsb = this._lightStateManager?.GetHsbValues(entityId) ?? (DefaultHue, MinSaturation, BrightnessOff);
 
-            PluginLog.Verbose(() => $"[GetEffectiveBrightnessForDisplay] {entityId}: isOn={isOn}, effectiveBrightness={effectiveBrightness}");
+            PluginLog.Verbose(() => $"[GetEffectiveBrightnessForDisplay] {entityId}: isOn={isOn}, effectiveBrightness={effectiveBrightness}, cachedB={cachedHsb.B}");
             return effectiveBrightness;
         }
 
@@ -1373,7 +1389,13 @@ namespace Loupedeck.HomeAssistantPlugin
                 return;
             }
 
-            if (this.ShouldIgnoreFrame(entityId, "brightness"))
+            var priorIsOn = this._lightStateManager?.IsLightOn(entityId) ?? false;
+            var priorCachedB = this._lightStateManager?.GetHsbValues(entityId).B ?? BrightnessOff;
+            var wasIgnored = this.ShouldIgnoreFrame(entityId, "brightness");
+            
+            PluginLog.Verbose(() => $"[OnHaBrightnessChanged] {entityId}: receivedBri={bri}, priorIsOn={priorIsOn}, priorCachedB={priorCachedB}, wasIgnored={wasIgnored}");
+
+            if (wasIgnored)
             {
                 return;
             }
@@ -1385,12 +1407,14 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     // OFF → don't change cached B, just mark state off
                     this._lightStateManager?.UpdateLightState(entityId, false);
+                    PluginLog.Verbose(() => $"[OnHaBrightnessChanged] {entityId}: Updated to OFF state (bri={bri.Value})");
                 }
                 else
                 {
                     // ON → update cached B and mark on
                     var clampedBri = HSBHelper.Clamp(bri.Value, BrightnessOff, MaxBrightness);
                     this._lightStateManager?.UpdateLightState(entityId, true, clampedBri);
+                    PluginLog.Verbose(() => $"[OnHaBrightnessChanged] {entityId}: Updated to ON state (bri={clampedBri})");
                 }
             }
 
@@ -1562,17 +1586,15 @@ namespace Loupedeck.HomeAssistantPlugin
         {
             if (this._lastCmdAt.TryGetValue(entityId, out var t))
             {
-                if ((DateTime.UtcNow - t) <= EchoSuppressWindow)
+                var elapsed = DateTime.UtcNow - t;
+                if (elapsed <= EchoSuppressWindow)
                 {
-                    if (!String.IsNullOrEmpty(reasonForLog))
-                    {
-                        PluginLog.Verbose(() => $"[echo] Suppressing frame for {entityId} ({reasonForLog})");
-                    }
-
+                    PluginLog.Verbose(() => $"[echo] SUPPRESSED frame for {entityId} ({reasonForLog}) - elapsed={elapsed.TotalSeconds:F1}s of {EchoSuppressWindow.TotalSeconds}s window");
                     return true;
                 }
                 // past the window → forget it
                 this._lastCmdAt.Remove(entityId);
+                PluginLog.Verbose(() => $"[echo] Window expired for {entityId}, removing from suppression list");
             }
             return false;
         }
