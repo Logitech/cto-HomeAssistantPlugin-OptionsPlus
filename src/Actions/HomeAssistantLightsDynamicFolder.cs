@@ -1,6 +1,3 @@
-// FIXED: Light state persistence issue resolved by using singleton LightStateManager in main plugin
-
-
 namespace Loupedeck.HomeAssistantPlugin
 {
     using System;
@@ -8,7 +5,7 @@ namespace Loupedeck.HomeAssistantPlugin
     using System.Text.Json;
     using System.Threading;
 
-    using Loupedeck; // ensure this is present
+    using Loupedeck;
     using Loupedeck.HomeAssistantPlugin.Models;
     using Loupedeck.HomeAssistantPlugin.Services;
 
@@ -32,8 +29,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
 
-        private enum LookMode { Hs, Temp } // which color mode to show in the adjustment tile
-                                           // What the user adjusted last per light (drives preview mode)
+        // What the user adjusted last per light (drives preview mode)
         private readonly Dictionary<String, LookMode> _lookModeByEntity =
             new(StringComparer.OrdinalIgnoreCase);
 
@@ -74,7 +70,6 @@ namespace Loupedeck.HomeAssistantPlugin
 
         // Synthetic “no area” bucket
         private const String UnassignedAreaId = "!unassigned";
-        private const String UnassignedAreaName = "(No area)";
 
         private String? _currentEntityId = null;
 
@@ -160,15 +155,6 @@ namespace Loupedeck.HomeAssistantPlugin
         private const Double KelvinHighOffset = 60.0;          // Offset for high Kelvin calculations
         private const Double KelvinBlueMax = 255.0;            // Maximum blue value for high Kelvin
 
-        // --- Color Array Constants ---
-        private const Int32 HsColorArrayLength = 2;            // Expected length for HS color arrays
-        private const Int32 RgbColorArrayLength = 3;           // Expected length for RGB color arrays
-        private const Int32 HueArrayIndex = 0;                 // Array index for hue component
-        private const Int32 SaturationArrayIndex = 1;          // Array index for saturation component
-        private const Int32 RedArrayIndex = 0;                 // Array index for red component
-        private const Int32 GreenArrayIndex = 1;               // Array index for green component
-        private const Int32 BlueArrayIndex = 2;                // Array index for blue component
-
         // --- Network and Timing Constants ---
         private const Int32 AuthTimeoutSeconds = 60;           // Authentication timeout in seconds
         private static readonly TimeSpan EchoSuppressWindow = TimeSpan.FromSeconds(3); // Echo suppression window
@@ -199,7 +185,6 @@ namespace Loupedeck.HomeAssistantPlugin
 
         // Tune these if you want
         private const Int32 SendDebounceMs = 10;               // how long to wait after the last tick before sending
-        private const Int32 ReconcileIdleMs = 500;             // idle pause before doing a single get_states as truth
         private const Int32 MaxPctPerEvent = 10;               // cap huge coalesced diffs to keep UI sane
 
         private readonly HaEventListener _events = new();
@@ -484,178 +469,54 @@ namespace Loupedeck.HomeAssistantPlugin
 
 
 
-        // --- WHEEL: rotation handler (like your CounterAdjustment.ApplyAdjustment)
+        // --- WHEEL: rotation handler using Command Pattern
         public override void ApplyAdjustment(String actionParameter, Int32 diff)
         {
-            if (actionParameter == AdjBri && diff != 0)
+            if (diff == 0) return;
+
+            try
             {
-
-
-                try
+                // Handle brightness adjustment - special case for root view counter
+                if (actionParameter == AdjBri)
                 {
                     if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
                     {
-                        var entityId = this._currentEntityId;
-
-                        // current brightness from LightStateManager (fallback to mid)
-                        var hsb = this._lightStateManager?.GetHsbValues(entityId) ?? (DefaultHue, MinSaturation, MidBrightness);
-                        var curB = hsb.B;
-                        var isCurrentlyOn = this._lightStateManager?.IsLightOn(entityId) ?? false;
-
-                        // compute target absolutely (± WheelStepPercent per tick), with cap
-                        var stepPct = diff * WheelStepPercent;
-                        stepPct = Math.Sign(stepPct) * Math.Min(Math.Abs(stepPct), MaxPctPerEvent);
-                        var deltaB = (Int32)Math.Round(BrightnessScale * stepPct / PercentageScale);
-                        var targetB = HSBHelper.Clamp(curB + deltaB, BrightnessOff, MaxBrightness);
-
-                        PluginLog.Verbose(() => $"[BrightnessAdjust] BEFORE - Entity: {entityId}, isOn={isCurrentlyOn}, currentB={curB}, targetB={targetB}, diff={diff}");
-
-                        // BUG FIX: When adjusting brightness to > 0 on an OFF light, we need to update the ON state
-                        // because SetBrightness will call turn_on in Home Assistant
-                        if (!isCurrentlyOn && targetB > BrightnessOff)
-                        {
-                            // Update both brightness and ON state optimistically since we're about to turn it on
-                            this._lightStateManager?.UpdateLightState(entityId, true, targetB);
-                            PluginLog.Verbose(() => $"[BrightnessAdjust] FIX - Turning ON light {entityId} with brightness={targetB} (was OFF)");
-                        }
-                        else
-                        {
-                            // Just update cached brightness without changing ON/OFF state
-                            this._lightStateManager?.SetCachedBrightness(entityId, targetB);
-                        }
-                        
-                        PluginLog.Debug(() => $"[BrightnessAdjust] Updated LightStateManager for {entityId}: brightness={targetB} (was {curB})");
-
-                        this.AdjustmentValueChanged(actionParameter);
-                        this.AdjustmentValueChanged(AdjSat);
-                        this.AdjustmentValueChanged(AdjHue);
-                        this.AdjustmentValueChanged(AdjTemp); // temp tile also reflects effB
-
-
-                        this.MarkCommandSent(entityId);
-
-                        this._lightSvc?.SetBrightness(entityId, targetB);
-
+                        // Device view: use command pattern
+                        var brightnessCommand = this._adjustmentCommandFactory?.CreateBrightnessCommand();
+                        brightnessCommand?.Execute(this._currentEntityId, diff);
                     }
                     else
                     {
-                        // root view: your counter behavior (if you keep it)
+                        // Root view: counter behavior for diagnostics
                         this._wheelCounter += diff;
                         this.AdjustmentValueChanged(actionParameter);
                     }
+                    return;
                 }
-                catch (Exception ex)
-                {
-                    PluginLog.Error(ex, "[wheel] ApplyAdjustment exception");
-                    HealthBus.Error("Wheel error");
-                    this.AdjustmentValueChanged(actionParameter);
-                }
-            }
 
-            if (actionParameter == AdjSat && diff != 0)
+                // For other adjustments, only work in device view
+                if (!this._inDeviceView || String.IsNullOrEmpty(this._currentEntityId))
+                {
+                    return;
+                }
+
+                // Use command pattern for device adjustments
+                IAdjustmentCommand? adjustmentCommand = actionParameter switch
+                {
+                    AdjSat => this._adjustmentCommandFactory?.CreateSaturationCommand(),
+                    AdjHue => this._adjustmentCommandFactory?.CreateHueCommand(),
+                    AdjTemp => this._adjustmentCommandFactory?.CreateTemperatureCommand(),
+                    _ => null
+                };
+
+                adjustmentCommand?.Execute(this._currentEntityId, diff);
+            }
+            catch (Exception ex)
             {
-                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
-                {
-                    if (!this.GetCaps(this._currentEntityId).ColorHs)
-                    {
-                        return;
-                    }
-
-                    var eid = this._currentEntityId;
-
-                    this._lookModeByEntity[this._currentEntityId] = LookMode.Hs;
-
-                    // Current HS from LightStateManager (fallbacks)
-                    var hsb = this._lightStateManager?.GetHsbValues(eid) ?? (DefaultHue, DefaultSaturation, MidBrightness);
-
-                    // Compute step with cap and clamp 0..100
-                    var step = diff * SatStepPctPerTick;
-                    step = Math.Sign(step) * Math.Min(Math.Abs(step), MaxSatPctPerEvent);
-                    var newS = HSBHelper.Clamp(hsb.S + step, MinSaturation, MaxSaturation);
-
-                    // Optimistic UI: update via LightStateManager
-                    this._lightStateManager?.UpdateHsColor(eid, hsb.H, newS);
-                    this.AdjustmentValueChanged(AdjSat);
-                    this.AdjustmentValueChanged(AdjHue);
-                    this.AdjustmentValueChanged(AdjTemp);
-
-                    // Get current hue from LightStateManager
-                    var curH = this._lightStateManager?.GetHsbValues(eid).H ?? DefaultHue;
-                    this.MarkCommandSent(eid);
-                    this._lightSvc?.SetHueSat(eid, curH, newS);
-
-
-                }
+                PluginLog.Error(ex, $"[ApplyAdjustment] Exception for {actionParameter}");
+                HealthBus.Error("Adjustment error");
+                this.AdjustmentValueChanged(actionParameter);
             }
-            if (actionParameter == AdjHue && diff != 0)
-            {
-                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
-                {
-                    if (!this.GetCaps(this._currentEntityId).ColorHs)
-                    {
-                        return;
-                    }
-
-                    var eid = this._currentEntityId;
-                    this._lookModeByEntity[this._currentEntityId] = LookMode.Hs;
-
-                    // Current HS from LightStateManager (fallbacks)
-                    var hsb = this._lightStateManager?.GetHsbValues(eid) ?? (DefaultHue, DefaultSaturation, MidBrightness);
-
-                    // Compute step with cap; wrap 0..360
-                    var step = diff * HueStepDegPerTick;
-                    step = Math.Sign(step) * Math.Min(Math.Abs(step), MaxHueDegPerEvent);
-                    var newH = HSBHelper.Wrap360(hsb.H + step);
-
-                    // Optimistic UI: update via LightStateManager
-                    this._lightStateManager?.UpdateHsColor(eid, newH, hsb.S);
-                    this.AdjustmentValueChanged(AdjHue);
-                    this.AdjustmentValueChanged(AdjSat);
-                    this.AdjustmentValueChanged(AdjTemp); // temp tile also reflects effB
-
-                    // Get current saturation from LightStateManager
-                    var curS = this._lightStateManager?.GetHsbValues(eid).S ?? DefaultSaturation;
-                    this.MarkCommandSent(eid);
-                    this._lightSvc?.SetHueSat(eid, newH, curS);
-
-                }
-
-            }
-
-
-            if (actionParameter == AdjTemp && diff != 0)
-            {
-                if (this._inDeviceView && !String.IsNullOrEmpty(this._currentEntityId))
-                {
-                    if (!this.GetCaps(this._currentEntityId).ColorTemp)
-                    {
-                        return;
-                    }
-
-                    var eid = this._currentEntityId;
-                    this._lookModeByEntity[this._currentEntityId] = LookMode.Temp;
-
-                    var temp = this._lightStateManager?.GetColorTempMired(eid) ?? (DefaultMinMireds, DefaultMaxMireds, DefaultWarmMired);
-                    var (minM, maxM, curM) = temp;
-
-                    var step = diff * TempStepMireds;
-                    step = Math.Sign(step) * Math.Min(Math.Abs(step), MaxMiredsPerEvent);
-
-                    var targetM = HSBHelper.Clamp(curM + step, minM, maxM);
-
-                    // Optimistic UI: update via LightStateManager
-                    this._lightStateManager?.SetCachedTempMired(eid, null, null, targetM);
-                    this.AdjustmentValueChanged(AdjTemp);
-                    this.AdjustmentValueChanged(AdjHue);
-                    this.AdjustmentValueChanged(AdjSat);
-                    this.MarkCommandSent(eid);
-                    this._lightSvc?.SetTempMired(eid, targetM);
-                }
-            }
-
-
-
-            return;
         }
 
 
@@ -671,6 +532,9 @@ namespace Loupedeck.HomeAssistantPlugin
         private IHomeAssistantDataParser? _dataParser;
         private ILightStateManager? _lightStateManager;
         private IRegistryService? _registryService;
+        
+        // Command pattern for adjustment handling
+        private IAdjustmentCommandFactory? _adjustmentCommandFactory;
 
         public HomeAssistantLightsDynamicFolder()
         {
@@ -881,176 +745,195 @@ namespace Loupedeck.HomeAssistantPlugin
 
         public override void RunCommand(String actionParameter)
         {
-
             PluginLog.Debug(() => $"RunCommand: {actionParameter}");
 
-
-            if (actionParameter == CmdBack)
+            try
             {
-                if (this._level == ViewLevel.Device)
+                // Use switch expression to dispatch to focused command handlers
+                var handled = actionParameter switch
                 {
-                    if (!String.IsNullOrEmpty(this._currentEntityId))
-                    {
-                        this._lightSvc?.CancelPending(this._currentEntityId);
-                    }
-                    this._inDeviceView = false;
-                    this._currentEntityId = null;
-                    this._level = ViewLevel.Area;
-                    this.ButtonActionNamesChanged();
-                    this.EncoderActionNamesChanged();
-                }
-                else if (this._level == ViewLevel.Area)
+                    CmdBack => HandleBackCommand(),
+                    CmdRetry => HandleRetryCommand(),
+                    CmdStatus => HandleStatusCommand(),
+                    var cmd when cmd.StartsWith(CmdArea, StringComparison.OrdinalIgnoreCase) => HandleAreaCommand(cmd),
+                    var cmd when cmd.StartsWith(PfxDevice, StringComparison.OrdinalIgnoreCase) => HandleDeviceCommand(cmd),
+                    var cmd when cmd.StartsWith(PfxActOn, StringComparison.OrdinalIgnoreCase) => HandleLightOnCommand(cmd),
+                    var cmd when cmd.StartsWith(PfxActOff, StringComparison.OrdinalIgnoreCase) => HandleLightOffCommand(cmd),
+                    _ => false
+                };
+
+                if (!handled)
                 {
-                    this._currentAreaId = null;
-                    this._level = ViewLevel.Root;
-                    this.ButtonActionNamesChanged();
-                    this.EncoderActionNamesChanged();
+                    PluginLog.Warning($"Unhandled command: {actionParameter}");
                 }
-                else // Root
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Error(ex, $"[RunCommand] Exception for {actionParameter}");
+                HealthBus.Error("Command error");
+            }
+        }
+
+        private Boolean HandleBackCommand()
+        {
+            if (this._level == ViewLevel.Device)
+            {
+                if (!String.IsNullOrEmpty(this._currentEntityId))
                 {
-                    this.Close();
+                    this._lightSvc?.CancelPending(this._currentEntityId);
                 }
-                return;
+                this._inDeviceView = false;
+                this._currentEntityId = null;
+                this._level = ViewLevel.Area;
+                this.ButtonActionNamesChanged();
+                this.EncoderActionNamesChanged();
+            }
+            else if (this._level == ViewLevel.Area)
+            {
+                this._currentAreaId = null;
+                this._level = ViewLevel.Root;
+                this.ButtonActionNamesChanged();
+                this.EncoderActionNamesChanged();
+            }
+            else // Root
+            {
+                this.Close();
+            }
+            return true;
+        }
+
+        private Boolean HandleRetryCommand()
+        {
+            this.AuthenticateSync();
+            return true;
+        }
+
+        private Boolean HandleStatusCommand()
+        {
+            var ok = HealthBus.State == HealthState.Ok;
+            this.Plugin.OnPluginStatusChanged(ok ? PluginStatus.Normal : PluginStatus.Error,
+                ok ? "Home Assistant is connected." : HealthBus.LastMessage);
+            return true;
+        }
+
+        private Boolean HandleAreaCommand(String actionParameter)
+        {
+            var areaId = actionParameter.Substring(CmdArea.Length);
+            if (this._areaIdToName.ContainsKey(areaId) || String.Equals(areaId, UnassignedAreaId, StringComparison.OrdinalIgnoreCase))
+            {
+                this._currentAreaId = areaId;
+                this._level = ViewLevel.Area;
+                this._inDeviceView = false;
+                this._currentEntityId = null;
+                this.ButtonActionNamesChanged();
+                this.EncoderActionNamesChanged();
+                PluginLog.Debug(() => $"ENTER area view: {areaId}");
+                return true;
+            }
+            return false;
+        }
+
+        private Boolean HandleDeviceCommand(String actionParameter)
+        {
+            PluginLog.Info($"Entering Device view");
+            var entityId = actionParameter.Substring(PfxDevice.Length);
+            if (!this._lightsByEntity.ContainsKey(entityId))
+            {
+                return false;
             }
 
-            if (actionParameter == CmdRetry)
+            this._inDeviceView = true;
+            this._level = ViewLevel.Device;
+            this._currentEntityId = entityId;
+            this._wheelCounter = WheelCounterReset; // avoids showing previous ticks anywhere
+
+            // Initialize defaults in LightStateManager if needed - it handles all state internally
+            var caps = this.GetCaps(entityId);
+            var hsb = this._lightStateManager?.GetHsbValues(entityId) ?? (DefaultHue, MinSaturation, BrightnessOff);
+            if (hsb.B <= BrightnessOff && hsb.H == DefaultHue && hsb.S == MinSaturation)
             {
-                this.AuthenticateSync();
-                return;
+                // Light not yet initialized in state manager, set defaults
+                this._lightStateManager?.SetCachedBrightness(entityId, BrightnessOff);
+                this._lightStateManager?.UpdateHsColor(entityId, DefaultHue, MinSaturation);
             }
 
-            if (actionParameter == CmdStatus)
+            // Initialize color temp cache if device supports it
+            if (caps.ColorTemp)
             {
-                var ok = HealthBus.State == HealthState.Ok;
-                this.Plugin.OnPluginStatusChanged(ok ? PluginStatus.Normal : PluginStatus.Error,
-                    ok ? "Home Assistant is connected." : HealthBus.LastMessage);
-                return;
+                var temp = this._lightStateManager?.GetColorTempMired(entityId);
+                if (!temp.HasValue)
+                {
+                    this._lightStateManager?.SetCachedTempMired(entityId, DefaultMinMireds, DefaultMaxMireds, DefaultWarmMired);
+                }
             }
 
-            if (actionParameter.StartsWith(CmdArea, StringComparison.OrdinalIgnoreCase))
+            this.ButtonActionNamesChanged();       // swap to device actions
+
+            // 🔸 brightness-style UI refresh: force all wheels to redraw immediately
+            this.AdjustmentValueChanged(AdjBri);
+            this.AdjustmentValueChanged(AdjTemp);
+            this.AdjustmentValueChanged(AdjHue);
+            this.AdjustmentValueChanged(AdjSat);
+
+            PluginLog.Debug(() => $"ENTER device view: {entityId}  level={this._level} inDevice={this._inDeviceView}");
+            return true;
+        }
+
+        private Boolean HandleLightOnCommand(String actionParameter)
+        {
+            var entityId = actionParameter.Substring(PfxActOn.Length);
+
+            // Optimistic: mark ON immediately using LightStateManager (UI becomes responsive)
+            var caps = this.GetCaps(entityId);
+            Int32? brightness = null;
+            if (caps.Brightness)
             {
-                var areaId = actionParameter.Substring(CmdArea.Length);
-                if (this._areaIdToName.ContainsKey(areaId) || String.Equals(areaId, UnassignedAreaId, StringComparison.OrdinalIgnoreCase))
-                {
-                    this._currentAreaId = areaId;
-                    this._level = ViewLevel.Area;
-                    this._inDeviceView = false;
-                    this._currentEntityId = null;
-                    this.ButtonActionNamesChanged();
-                    this.EncoderActionNamesChanged();
-                    PluginLog.Debug(() => $"ENTER area view: {areaId}");
-                }
-                return;
+                var hsb = this._lightStateManager?.GetHsbValues(entityId) ?? (DefaultHue, MinSaturation, BrightnessOff);
+                brightness = HSBHelper.Clamp(Math.Max(MinBrightness, hsb.B), MinBrightness, MaxBrightness);
             }
 
+            this._lightStateManager?.UpdateLightState(entityId, true, brightness);
+            PluginLog.Debug(() => $"[TurnOn] Updated LightStateManager for {entityId}: ON=true, brightness={brightness}");
 
-            // Enter device view
-            if (actionParameter.StartsWith(PfxDevice, StringComparison.OrdinalIgnoreCase))
+            this.CommandImageChanged(this.CreateCommandName($"{PfxDevice}{entityId}"));
+            if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
             {
-                PluginLog.Info($"Entering Device view");
-                var entityId = actionParameter.Substring(PfxDevice.Length);
-                if (this._lightsByEntity.ContainsKey(entityId))
-                {
-
-
-                    this._inDeviceView = true;
-                    this._level = ViewLevel.Device;
-                    this._currentEntityId = entityId;
-                    this._wheelCounter = WheelCounterReset; // avoids showing previous ticks anywhere
-
-                    // Initialize defaults in LightStateManager if needed - it handles all state internally
-                    var caps = this.GetCaps(entityId);
-                    var hsb = this._lightStateManager?.GetHsbValues(entityId) ?? (DefaultHue, MinSaturation, BrightnessOff);
-                    if (hsb.B <= BrightnessOff && hsb.H == DefaultHue && hsb.S == MinSaturation)
-                    {
-                        // Light not yet initialized in state manager, set defaults
-                        this._lightStateManager?.SetCachedBrightness(entityId, BrightnessOff);
-                        this._lightStateManager?.UpdateHsColor(entityId, DefaultHue, MinSaturation);
-                    }
-
-                    // Initialize color temp cache if device supports it
-                    if (caps.ColorTemp)
-                    {
-                        var temp = this._lightStateManager?.GetColorTempMired(entityId);
-                        if (!temp.HasValue)
-                        {
-                            this._lightStateManager?.SetCachedTempMired(entityId, DefaultMinMireds, DefaultMaxMireds, DefaultWarmMired);
-                        }
-                    }
-
-
-                    this.ButtonActionNamesChanged();       // swap to device actions
-
-                    // 🔸 brightness-style UI refresh: force all wheels to redraw immediately
-                    this.AdjustmentValueChanged(AdjBri);
-                    this.AdjustmentValueChanged(AdjTemp);
-                    this.AdjustmentValueChanged(AdjHue);
-                    this.AdjustmentValueChanged(AdjSat);
-
-                    PluginLog.Debug(() => $"ENTER device view: {entityId}  level={this._level} inDevice={this._inDeviceView}");
-
-                }
-                return;
+                this.AdjustmentValueChanged(AdjBri);
+                this.AdjustmentValueChanged(AdjSat);
+                this.AdjustmentValueChanged(AdjHue);
+                this.AdjustmentValueChanged(AdjTemp);
             }
 
-
-            // Actions
-            if (actionParameter.StartsWith(PfxActOn, StringComparison.OrdinalIgnoreCase))
+            JsonElement? data = null;
+            if (brightness.HasValue)
             {
-                var entityId = actionParameter.Substring(PfxActOn.Length);
-
-                // Optimistic: mark ON immediately using LightStateManager (UI becomes responsive)
-                var caps = this.GetCaps(entityId);
-                Int32? brightness = null;
-                if (caps.Brightness)
-                {
-                    var hsb = this._lightStateManager?.GetHsbValues(entityId) ?? (DefaultHue, MinSaturation, BrightnessOff);
-                    brightness = HSBHelper.Clamp(Math.Max(MinBrightness, hsb.B), MinBrightness, MaxBrightness);
-                }
-
-                this._lightStateManager?.UpdateLightState(entityId, true, brightness);
-                PluginLog.Debug(() => $"[TurnOn] Updated LightStateManager for {entityId}: ON=true, brightness={brightness}");
-
-                this.CommandImageChanged(this.CreateCommandName($"{PfxDevice}{entityId}"));
-                if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
-                {
-                    this.AdjustmentValueChanged(AdjBri);
-                    this.AdjustmentValueChanged(AdjSat);
-                    this.AdjustmentValueChanged(AdjHue);
-                    this.AdjustmentValueChanged(AdjTemp);
-                }
-
-                JsonElement? data = null;
-                if (brightness.HasValue)
-                {
-                    data = JsonSerializer.SerializeToElement(new { brightness = brightness.Value });
-                }
-                this.MarkCommandSent(entityId);
-                _ = this._lightSvc?.TurnOnAsync(entityId, data);
-                return;
+                data = JsonSerializer.SerializeToElement(new { brightness = brightness.Value });
             }
-            if (actionParameter.StartsWith(PfxActOff, StringComparison.OrdinalIgnoreCase))
+            this.MarkCommandSent(entityId);
+            _ = this._lightSvc?.TurnOnAsync(entityId, data);
+            return true;
+        }
+
+        private Boolean HandleLightOffCommand(String actionParameter)
+        {
+            var entityId = actionParameter.Substring(PfxActOff.Length);
+
+            // Optimistic: mark OFF using LightStateManager (don't touch cached brightness)
+            this._lightStateManager?.UpdateLightState(entityId, false);
+            PluginLog.Debug(() => $"[TurnOff] Updated LightStateManager for {entityId}: ON=false");
+
+            this.CommandImageChanged(this.CreateCommandName($"{PfxDevice}{entityId}"));
+            if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
             {
-                var entityId = actionParameter.Substring(PfxActOff.Length);
-
-                // Optimistic: mark OFF using LightStateManager (don't touch cached brightness)
-                this._lightStateManager?.UpdateLightState(entityId, false);
-                PluginLog.Debug(() => $"[TurnOff] Updated LightStateManager for {entityId}: ON=false");
-
-                this.CommandImageChanged(this.CreateCommandName($"{PfxDevice}{entityId}"));
-                if (this._inDeviceView && String.Equals(this._currentEntityId, entityId, StringComparison.OrdinalIgnoreCase))
-                {
-                    this.AdjustmentValueChanged(AdjBri);
-                    this.AdjustmentValueChanged(AdjSat);
-                    this.AdjustmentValueChanged(AdjHue);
-                    this.AdjustmentValueChanged(AdjTemp);
-                }
-
-                this._lightSvc?.TurnOffAsync(entityId);
-                this.MarkCommandSent(entityId);
-                return;
+                this.AdjustmentValueChanged(AdjBri);
+                this.AdjustmentValueChanged(AdjSat);
+                this.AdjustmentValueChanged(AdjHue);
+                this.AdjustmentValueChanged(AdjTemp);
             }
 
+            this._lightSvc?.TurnOffAsync(entityId);
+            this.MarkCommandSent(entityId);
+            return true;
         }
 
 
@@ -1102,6 +985,17 @@ namespace Loupedeck.HomeAssistantPlugin
                         HueSatDebounceMs,
                         TempDebounceMs
                     );
+
+                    // Initialize adjustment command factory
+                    var adjustmentContext = new AdjustmentCommandContext(
+                        this._lightStateManager,
+                        this._lightSvc,
+                        this._lookModeByEntity,
+                        this.MarkCommandSent,
+                        this.AdjustmentValueChanged,
+                        this.GetCaps
+                    );
+                    this._adjustmentCommandFactory = new AdjustmentCommandFactory(adjustmentContext);
 
                     PluginLog.Info("[LightsDynamicFolder] Load() - All dependencies initialized successfully");
                 }
