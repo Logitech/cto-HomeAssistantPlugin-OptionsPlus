@@ -222,41 +222,71 @@ The `.lplug4` format is a zip-like package with metadata; it’s registered with
 
 ```
 src/
-  HomeAssistantPlugin/                # Loupedeck plugin (UI-only)
-    Actions/
-      ConfigureHomeAssistantAction.cs
-      RunScriptAction.cs
-      HomeAssistantLightsDynamicFolder.cs   # now Areas → Lights → Commands
-    Services/
-      IconService.cs                  # one-time icon load and cache
-      DebouncedSender.cs
-      LightControlService.cs
-      CapabilityService.cs            # capability inference
-      ActionParam.cs                  # action parameter codec
-      Hs.cs
-      IHaClient.cs
-    Models/
-      LightCaps.cs
-    Util/
-      ColorTemp.cs
-      JsonExt.cs
-      TilePainter.cs                  # center/pad/glyph helpers
-    Helpers/
-      HSBHelper.cs
-      HaWebSocketClient.cs
-      HaEventListener.cs
-      HealthBus.cs                    # simple health propagation
-      HaEventListener.cs
-      PluginLog.cs
-      PluginResources.cs
+  Actions/
+    ConfigureHomeAssistantAction.cs
+    HomeAssistantLightsDynamicFolder.cs   # Areas → Lights → Commands (refactored)
+    RunScriptAction.cs
+    ToggleLightAction.cs
+  Services/
+    # Core Services
+    LightControlService.cs            # light control with debouncing
+    LightStateManager.cs              # centralized state management
+    HomeAssistantDataService.cs       # HA API data fetching
+    HomeAssistantDataParser.cs        # JSON parsing and validation
+    RegistryService.cs                # device/entity/area registry
+    CapabilityService.cs              # capability inference
+    IconService.cs                    # icon loading and caching
+    DebouncedSender.cs               # request debouncing
+    HueSaturation.cs                 # color space utilities
+    # Command Pattern Architecture (NEW)
+    AdjustmentCommandContext.cs       # shared command dependencies
+    AdjustmentCommandFactory.cs       # command factory
+    Commands/
+      BrightnessAdjustmentCommand.cs  # brightness control logic
+      HueAdjustmentCommand.cs        # hue control logic
+      SaturationAdjustmentCommand.cs # saturation control logic
+      TemperatureAdjustmentCommand.cs # color temperature logic
+    Interfaces/
+      IAdjustmentCommand.cs          # command interface
+      IAdjustmentCommandFactory.cs   # factory interface
+      ILightControlService.cs        # service contracts
+      ILightStateManager.cs          # state management contract
+      # ... (additional service interfaces)
+  Models/
+    LightCaps.cs                     # light capability model
+    LightData.cs                     # light entity data
+    ParsedRegistryData.cs            # registry data structures
+  Util/
+    ColorTemp.cs                     # color temperature conversions
+    JsonExt.cs                       # JSON utilities
+    TilePainter.cs                   # UI rendering helpers
+  Helpers/
+    ColorConv.cs                     # color space conversions
+    HaEventListener.cs               # WebSocket event handling
+    HaWebSocketClient.cs             # WebSocket client
+    HealthBus.cs                     # health status propagation
+    HSBHelper.cs                     # HSB color utilities
+    PluginLog.cs                     # logging infrastructure
+    PluginResources.cs               # resource management
 ```
 
-**Key ideas**
+**Key Architecture Principles**
 
-* **UI layer** renders folders/tiles/dials and translates user input → service calls.
-* **Core/services** own WebSocket, event stream, state inference, debouncing, JSON payloads.
-* **CapabilityService** centralizes capability inference from HA attributes.
-* **IconService/TilePainter** remove duplicated icon math and resource loading.
+* **Clean Architecture**: Clear separation between UI, business logic, and data layers
+* **Command Pattern**: Adjustment operations use focused, testable command classes
+* **Dependency Injection**: Services use interface-based dependency injection
+* **Single Responsibility**: Each class has one clear purpose (post-refactoring)
+* **State Management**: Centralized light state management with optimistic UI updates
+* **Debounced Operations**: User actions are debounced to reduce Home Assistant traffic
+
+**Recent Architectural Improvements**
+
+* **Method Decomposition**: Major refactoring of mega-methods using Command Pattern
+  - `ApplyAdjustment()`: 171 → 48 lines (72% reduction)
+  - `RunCommand()`: 172 → 29 lines (83% reduction)
+* **Command Pattern Implementation**: Brightness, hue, saturation, and temperature adjustments now use focused command classes
+* **Enhanced Testability**: All business logic extracted into independently testable units
+* **Maintainable Codebase**: All methods now <50 lines with single responsibilities
 
 ---
 
@@ -288,16 +318,34 @@ dotnet build
 
 Add tests under `HomeAssistant.Tests`:
 
+**Core Business Logic**
+* **Command Pattern**: Test all adjustment commands (`BrightnessAdjustmentCommand`, `HueAdjustmentCommand`, etc.)
+* **Command Factory**: Test `AdjustmentCommandFactory` command creation and dependency injection
+* **State Management**: Test `LightStateManager` state updates and caching
+
+**Utilities & Helpers**
 * **Color math**: `HSBHelper` conversions, Kelvin↔Mired round-trips
 * **DebouncedSender**: last-write-wins, one send per burst
 * **CapabilityService**: `LightCaps.FromAttributes` samples (ct-only, hs-only, onoff)
-* **ActionParam**: encode/parse round-trip
+
+**Data Processing**
+* **HomeAssistantDataParser**: JSON parsing and validation
+* **RegistryService**: Device/entity/area mapping
+
+**Integration Tests**
+* **Method Decomposition**: Verify refactored mega-methods maintain functionality
+* **UI State Consistency**: Test optimistic UI updates with backend state
 
 Run:
 
 ```bash
 dotnet test
 ```
+
+**Test Coverage Goals**
+* Command classes: 100% (focused, single-responsibility classes)
+* State management: 90%+ (critical for UI consistency)
+* Color utilities: 95%+ (mathematical functions)
 
 ---
 
