@@ -132,35 +132,61 @@ namespace Loupedeck.HomeAssistantPlugin.Services
 
         public void InitializeLightStates(IEnumerable<LightData> lights)
         {
-            PluginLog.Info(() => $"[LightStateManager] Initializing light states for {lights.Count()} lights");
+            var existingCount = this._hsbByEntity.Count;
+            var preservedCount = 0;
+            var updatedCount = 0;
+            
+            PluginLog.Info(() => $"[LightStateManager] Initializing light states for {lights.Count()} lights with {existingCount} existing cached states");
 
-            // Clear existing data
-            this._hsbByEntity.Clear();
-            this._isOnByEntity.Clear();
+            // Backup existing user-adjusted values before updating base state
+            var preservedHsb = new Dictionary<String, (Double H, Double S, Int32 B)>(this._hsbByEntity, StringComparer.OrdinalIgnoreCase);
+            var preservedTemp = new Dictionary<String, (Int32 Min, Int32 Max, Int32 Cur)>(this._tempMiredByEntity, StringComparer.OrdinalIgnoreCase);
+            
+            // Only clear capabilities - we'll preserve user state and update base state selectively
             this._capsByEntity.Clear();
-            this._tempMiredByEntity.Clear();
 
             foreach (var light in lights)
             {
-                // Set on/off state
+                // Always update on/off state from Home Assistant (this is current truth)
                 this._isOnByEntity[light.EntityId] = light.IsOn;
 
-                // Set HSB values
-                this._hsbByEntity[light.EntityId] = (light.Hue, light.Saturation, light.Brightness);
-
-                // Set capabilities
+                // Always update capabilities from Home Assistant
                 this._capsByEntity[light.EntityId] = light.Capabilities;
 
-                // Set color temperature data only if supported
-                if (light.Capabilities.ColorTemp)
+                // For HSB: preserve existing cached values if they exist (user adjustments), otherwise use HA values
+                if (preservedHsb.TryGetValue(light.EntityId, out var existingHsb))
                 {
-                    this._tempMiredByEntity[light.EntityId] = (light.MinMired, light.MaxMired, light.ColorTempMired);
+                    // Keep existing cached HSB values (user's last adjustments)
+                    this._hsbByEntity[light.EntityId] = existingHsb;
+                    preservedCount++;
+                    PluginLog.Verbose(() => $"[LightStateManager] PRESERVED cached values for {light.EntityId}: HSB=({existingHsb.H:F1},{existingHsb.S:F1},{existingHsb.B})");
+                }
+                else
+                {
+                    // New light or no cached values, use HA state
+                    this._hsbByEntity[light.EntityId] = (light.Hue, light.Saturation, light.Brightness);
+                    updatedCount++;
+                    PluginLog.Verbose(() => $"[LightStateManager] NEW light {light.EntityId}: HSB=({light.Hue:F1},{light.Saturation:F1},{light.Brightness})");
                 }
 
-                PluginLog.Verbose(() => $"[LightStateManager] Initialized {light.EntityId}: isOn={light.IsOn}, HSB=({light.Hue:F1},{light.Saturation:F1},{light.Brightness}), temp={light.ColorTempMired}");
+                // For color temperature: preserve cached values if they exist, otherwise use HA values
+                if (light.Capabilities.ColorTemp)
+                {
+                    if (preservedTemp.TryGetValue(light.EntityId, out var existingTemp))
+                    {
+                        // Keep existing cached temp values, but update min/max from HA if needed
+                        this._tempMiredByEntity[light.EntityId] = (light.MinMired, light.MaxMired, existingTemp.Cur);
+                        PluginLog.Verbose(() => $"[LightStateManager] PRESERVED cached temp for {light.EntityId}: {existingTemp.Cur} mired");
+                    }
+                    else
+                    {
+                        // New temp support or no cached values
+                        this._tempMiredByEntity[light.EntityId] = (light.MinMired, light.MaxMired, light.ColorTempMired);
+                    }
+                }
             }
 
-            PluginLog.Debug("Light state initialization completed");
+            PluginLog.Info(() => $"[LightStateManager] State initialization completed: {preservedCount} preserved, {updatedCount} new/updated, {lights.Count()} total");
         }
 
         /// <summary>
