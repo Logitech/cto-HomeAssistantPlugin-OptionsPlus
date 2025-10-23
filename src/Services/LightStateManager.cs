@@ -112,9 +112,11 @@ namespace Loupedeck.HomeAssistantPlugin.Services
 
         public LightCaps GetCapabilities(String entityId)
         {
-            return this._capsByEntity.TryGetValue(entityId, out var caps)
+            var result = this._capsByEntity.TryGetValue(entityId, out var caps)
                 ? caps
                 : new LightCaps(true, false, false, false); // Safe default: on/off only
+            
+            return result;
         }
 
         public (Int32 Min, Int32 Max, Int32 Cur)? GetColorTempMired(String entityId) => this._tempMiredByEntity.TryGetValue(entityId, out var temp) ? temp : null;

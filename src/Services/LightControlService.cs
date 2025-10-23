@@ -228,6 +228,11 @@ namespace Loupedeck.HomeAssistantPlugin
                 
                 PluginLog.Info($"[light] Sending hue/saturation command to {entityId} with data: {data}");
                 
+                // DEBUG: Log detailed format information
+                var dataJson = JsonSerializer.Serialize(data);
+                PluginLog.Info($"[light] DEBUG - Working HS format JSON: {dataJson}");
+                PluginLog.Info($"[light] DEBUG - hs_color array type: {typeof(Object[])}, values: [{hs.H:F1}, {hs.S:F1}]");
+                
                 var (ok, err) = await this._ha.CallServiceAsync("light", "turn_on", entityId, data, cts.Token).ConfigureAwait(false);
                 if (ok)
                 {
