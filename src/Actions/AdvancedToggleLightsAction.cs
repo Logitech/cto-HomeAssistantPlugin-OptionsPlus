@@ -1,3 +1,5 @@
+//TODO fix bug when first launching the plugin the state of the lights is not known, unless the user opens the all lights dynamic folder first. Fix this, idk with this command where its best to load or update the state.
+
 namespace Loupedeck.HomeAssistantPlugin
 {
     using System;
@@ -13,7 +15,7 @@ namespace Loupedeck.HomeAssistantPlugin
     public sealed class AdvancedToggleLightsAction : ActionEditorCommand, IDisposable
     {
         private const String LogPrefix = "[AdvancedToggleLights]";
-        
+
         // Service dependencies - modern dependency injection pattern
         private IHaClient? _ha;
         private ILightControlService? _lightSvc;
@@ -21,7 +23,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private IHomeAssistantDataService? _dataService;
         private IHomeAssistantDataParser? _dataParser;
         private IRegistryService? _registryService;
-        
+
         private readonly CapabilityService _capSvc = new();
         private Boolean _disposed = false;
 
@@ -114,25 +116,25 @@ namespace Loupedeck.HomeAssistantPlugin
         protected override Boolean OnLoad()
         {
             PluginLog.Info($"{LogPrefix} OnLoad() START");
-            
+
             try
             {
                 if (this.Plugin is HomeAssistantPlugin haPlugin)
                 {
                     PluginLog.Info($"{LogPrefix} Initializing dependencies using modern service architecture");
-                    
+
                     // Initialize dependency injection - use the shared HaClient from Plugin
                     this._ha = new HaClientAdapter(haPlugin.HaClient);
                     this._dataService = new HomeAssistantDataService(this._ha);
                     this._dataParser = new HomeAssistantDataParser(this._capSvc);
-                    
+
                     // Use the singleton LightStateManager from the main plugin
                     this._lightStateManager = haPlugin.LightStateManager;
                     var existingCount = this._lightStateManager.GetTrackedEntityIds().Count();
                     PluginLog.Info($"{LogPrefix} Using singleton LightStateManager with {existingCount} existing tracked entities");
-                    
+
                     this._registryService = new RegistryService();
-                    
+
                     // Initialize light control service with debounce settings
                     this._lightSvc = new LightControlService(
                         this._ha,
@@ -140,7 +142,7 @@ namespace Loupedeck.HomeAssistantPlugin
                         DebounceMs,
                         DebounceMs
                     );
-                    
+
                     PluginLog.Info($"{LogPrefix} All dependencies initialized successfully");
                     return true;
                 }
@@ -170,19 +172,19 @@ namespace Loupedeck.HomeAssistantPlugin
                 return;
 
             PluginLog.Info($"{LogPrefix} Disposing resources");
-            
+
             try
             {
                 this._lightSvc?.Dispose();
                 this._lightSvc = null;
-                
+
                 // Don't dispose shared services - they're managed by the main plugin
                 this._ha = null;
                 this._dataService = null;
                 this._dataParser = null;
                 this._lightStateManager = null;
                 this._registryService = null;
-                
+
                 this._disposed = true;
             }
             catch (Exception ex)
@@ -239,7 +241,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     HealthBus.Error(msg ?? "Auth failed");
                     PluginLog.Warning($"{LogPrefix} Auth failed: {msg}");
                 }
-                
+
                 return ok;
             }
             catch (Exception ex)
@@ -267,7 +269,7 @@ namespace Loupedeck.HomeAssistantPlugin
             }
 
             var allCaps = new List<LightCaps>();
-            
+
             foreach (var entityId in entityIds)
             {
                 var caps = this._lightStateManager.GetCapabilities(entityId);
@@ -302,7 +304,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 // Get selected lights
                 var selectedLights = new List<String>();
-                
+
                 // Add primary light
                 if (ps.TryGetString(ControlLights, out var primaryLight) && !String.IsNullOrWhiteSpace(primaryLight))
                 {
@@ -315,7 +317,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     var additionalList = additionalLights.Split(',', StringSplitOptions.RemoveEmptyEntries)
                         .Select(s => s.Trim())
                         .Where(s => !String.IsNullOrEmpty(s) && !selectedLights.Contains(s, StringComparer.OrdinalIgnoreCase));
-                    
+
                     selectedLights.AddRange(additionalList);
                 }
 
@@ -408,11 +410,11 @@ namespace Loupedeck.HomeAssistantPlugin
             Double? hue, Double? saturation, Int32? whiteLevel)
         {
             PluginLog.Info($"{LogPrefix} Processing light: {entityId}");
-            
+
             // Get individual light capabilities for preferred color mode
             var individualCaps = this._lightStateManager?.GetCapabilities(entityId) ?? caps;
             var preferredColorMode = individualCaps.PreferredColorMode ?? "hs";
-            
+
             PluginLog.Info($"{LogPrefix} Light capabilities: onoff={caps.OnOff} brightness={caps.Brightness} colorTemp={caps.ColorTemp} colorHs={caps.ColorHs} preferredColorMode={preferredColorMode}");
             PluginLog.Info($"{LogPrefix} Input parameters: brightness={brightness} temperature={temperature}K hue={hue}° saturation={saturation}% whiteLevel={whiteLevel}");
 
@@ -428,7 +430,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 PluginLog.Info($"{LogPrefix} No parameters provided, using simple toggle for '{entityId}'");
                 var success = this._lightSvc.ToggleAsync(entityId).GetAwaiter().GetResult();
                 PluginLog.Info($"{LogPrefix} HA SERVICE CALL: toggle entity_id={entityId} -> success={success}");
-                
+
                 if (success && this._lightStateManager != null)
                 {
                     // Update local state - toggle the current state
@@ -436,7 +438,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     this._lightStateManager.UpdateLightState(entityId, !wasOn);
                     PluginLog.Info($"{LogPrefix} Updated local state: {entityId} toggled from {wasOn} to {!wasOn}");
                 }
-                
+
                 if (!success)
                 {
                     var friendlyName = entityId; // Could be enhanced to get friendly name
@@ -444,7 +446,7 @@ namespace Loupedeck.HomeAssistantPlugin
                         $"Failed to toggle light {friendlyName}",
                         "Check Home Assistant logs for details");
                 }
-                
+
                 return success;
             }
 
@@ -458,14 +460,14 @@ namespace Loupedeck.HomeAssistantPlugin
                 PluginLog.Info($"{LogPrefix} Light {entityId} is ON, turning OFF for toggle behavior");
                 var success = this._lightSvc.TurnOffAsync(entityId).GetAwaiter().GetResult();
                 PluginLog.Info($"{LogPrefix} HA SERVICE CALL: turn_off entity_id={entityId} -> success={success}");
-                
+
                 if (success && this._lightStateManager != null)
                 {
                     // Update local state - light is now off
                     this._lightStateManager.UpdateLightState(entityId, false);
                     PluginLog.Info($"{LogPrefix} Updated local state: {entityId} turned OFF");
                 }
-                
+
                 if (!success)
                 {
                     var friendlyName = entityId; // Could be enhanced to get friendly name
@@ -473,7 +475,7 @@ namespace Loupedeck.HomeAssistantPlugin
                         $"Failed to turn off light {friendlyName}",
                         "Check Home Assistant logs for details");
                 }
-                
+
                 return success;
             }
 
@@ -510,7 +512,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 var mired = ColorTemp.KelvinToMired(kelvin);
                 serviceData["color_temp"] = mired;
                 PluginLog.Info($"{LogPrefix} Added color temp: {temperature.Value}K -> {kelvin}K -> {mired} mireds (color temp takes priority over HS)");
-                
+
                 if (hue.HasValue || saturation.HasValue)
                 {
                     PluginLog.Info($"{LogPrefix} Skipping HS color because color temperature was specified (HA doesn't allow both)");
@@ -520,10 +522,10 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 var h = HSBHelper.Wrap360(hue.Value);
                 var s = HSBHelper.Clamp(saturation.Value, MinSaturation, MaxSaturation);
-                
+
                 // Use the preferred color mode for this light
                 PluginLog.Info($"{LogPrefix} Using preferred color mode: {preferredColorMode}");
-                
+
                 switch (preferredColorMode.ToLowerInvariant())
                 {
                     case "rgbww":
@@ -532,21 +534,21 @@ namespace Loupedeck.HomeAssistantPlugin
                         serviceData["rgbww_color"] = new Object[] { r1, g1, b1, 0, 0 }; // No white channels for pure color
                         PluginLog.Info($"{LogPrefix} Added rgbww_color: HS({h:F1}°,{s:F1}%) -> RGBWW({r1},{g1},{b1},0,0)");
                         break;
-                        
+
                     case "rgbw":
                         // Convert HS to RGBW (R,G,B,White)
                         var (r2, g2, b2) = HSBHelper.HsbToRgb(h, s, FullColorValue);
                         serviceData["rgbw_color"] = new Object[] { r2, g2, b2, 0 }; // No white channel for pure color
                         PluginLog.Info($"{LogPrefix} Added rgbw_color: HS({h:F1}°,{s:F1}%) -> RGBW({r2},{g2},{b2},0)");
                         break;
-                        
+
                     case "rgb":
                         // Convert HS to RGB
                         var (r3, g3, b3) = HSBHelper.HsbToRgb(h, s, FullColorValue);
                         serviceData["rgb_color"] = new Object[] { r3, g3, b3 };
                         PluginLog.Info($"{LogPrefix} Added rgb_color: HS({h:F1}°,{s:F1}%) -> RGB({r3},{g3},{b3})");
                         break;
-                        
+
                     case "hs":
                     default:
                         // Use HS color (force decimal serialization while keeping in valid ranges)
@@ -570,14 +572,14 @@ namespace Loupedeck.HomeAssistantPlugin
 
             // FIXED: Send separate requests for better compatibility with WiZ and other lights
             var overallSuccess = true;
-            
+
             if (serviceData.Any())
             {
                 // Separate brightness and color attributes for better compatibility
                 var brightnessData = new Dictionary<String, Object>();
                 var colorData = new Dictionary<String, Object>();
                 var tempData = new Dictionary<String, Object>();
-                
+
                 // Separate the attributes
                 foreach (var kvp in serviceData)
                 {
@@ -601,20 +603,20 @@ namespace Loupedeck.HomeAssistantPlugin
                             break;
                     }
                 }
-                
+
                 PluginLog.Info($"{LogPrefix} Separated into {brightnessData.Count} brightness attrs, {colorData.Count} color attrs, {tempData.Count} temp attrs");
-                
+
                 // 1. First call: Turn on with brightness (most compatible)
                 if (brightnessData.Any())
                 {
                     var briData = JsonSerializer.SerializeToElement(brightnessData);
                     var briJson = JsonSerializer.Serialize(briData);
                     PluginLog.Info($"{LogPrefix} CALL 1/3: Brightness - {briJson}");
-                    
+
                     var briSuccess = this._lightSvc.TurnOnAsync(entityId, briData).GetAwaiter().GetResult();
                     PluginLog.Info($"{LogPrefix} HA SERVICE CALL 1: turn_on entity_id={entityId} data={briJson} -> success={briSuccess}");
                     overallSuccess &= briSuccess;
-                    
+
                     if (briSuccess)
                     {
                         // Small delay to ensure the light processes the brightness before color
@@ -628,65 +630,65 @@ namespace Loupedeck.HomeAssistantPlugin
                     var onSuccess = this._lightSvc.TurnOnAsync(entityId).GetAwaiter().GetResult();
                     PluginLog.Info($"{LogPrefix} HA SERVICE CALL 1: turn_on entity_id={entityId} -> success={onSuccess}");
                     overallSuccess &= onSuccess;
-                    
+
                     if (onSuccess)
                     {
                         Thread.Sleep(50);
                     }
                 }
-                
+
                 // 2. Second call: Color temperature (if specified)
                 if (tempData.Any())
                 {
                     var tempDataElement = JsonSerializer.SerializeToElement(tempData);
                     var tempJson = JsonSerializer.Serialize(tempDataElement);
                     PluginLog.Info($"{LogPrefix} CALL 2/3: Temperature - {tempJson}");
-                    
+
                     var tempSuccess = this._lightSvc.TurnOnAsync(entityId, tempDataElement).GetAwaiter().GetResult();
                     PluginLog.Info($"{LogPrefix} HA SERVICE CALL 2: turn_on entity_id={entityId} data={tempJson} -> success={tempSuccess}");
                     overallSuccess &= tempSuccess;
-                    
+
                     if (tempSuccess && colorData.Any())
                     {
                         Thread.Sleep(50);
                     }
                 }
-                
+
                 // 3. Third call: Color (if specified and no temp conflict)
                 if (colorData.Any())
                 {
                     var colorDataElement = JsonSerializer.SerializeToElement(colorData);
                     var colorJson = JsonSerializer.Serialize(colorDataElement);
                     PluginLog.Info($"{LogPrefix} CALL 3/3: Color - {colorJson}");
-                    
+
                     var colorSuccess = this._lightSvc.TurnOnAsync(entityId, colorDataElement).GetAwaiter().GetResult();
                     PluginLog.Info($"{LogPrefix} HA SERVICE CALL 3: turn_on entity_id={entityId} data={colorJson} -> success={colorSuccess}");
                     overallSuccess &= colorSuccess;
                 }
-                
+
                 // Update local state if any call succeeded
                 if (overallSuccess && this._lightStateManager != null)
                 {
                     // Update local state - light is now on with the specified brightness
                     var brightnessValue = brightness ?? whiteLevel;
                     this._lightStateManager.UpdateLightState(entityId, true, brightnessValue);
-                    
+
                     // Update HSB values if hue/saturation were specified
                     if (hue.HasValue || saturation.HasValue)
                     {
                         this._lightStateManager.UpdateHsColor(entityId, hue, saturation);
                     }
-                    
+
                     // Update color temperature if specified
                     if (temperature.HasValue)
                     {
                         var kelvin = HSBHelper.Clamp(temperature.Value, MinTemperature, MaxTemperature);
                         this._lightStateManager.UpdateColorTemp(entityId, null, kelvin, null, null);
                     }
-                    
+
                     PluginLog.Info($"{LogPrefix} Updated local state: {entityId} turned ON with parameters");
                 }
-                
+
                 if (!overallSuccess)
                 {
                     var friendlyName = entityId; // Could be enhanced to get friendly name
@@ -694,7 +696,7 @@ namespace Loupedeck.HomeAssistantPlugin
                         $"Failed to control light {friendlyName}",
                         "Check Home Assistant logs for details");
                 }
-                
+
                 return overallSuccess;
             }
             else
@@ -703,14 +705,14 @@ namespace Loupedeck.HomeAssistantPlugin
                 PluginLog.Info($"{LogPrefix} No valid parameters after capability check, turning ON without specific parameters for '{entityId}'");
                 var success = this._lightSvc.TurnOnAsync(entityId).GetAwaiter().GetResult();
                 PluginLog.Info($"{LogPrefix} HA SERVICE CALL: turn_on entity_id={entityId} data=null -> success={success}");
-                
+
                 if (success && this._lightStateManager != null)
                 {
                     // Update local state - light is now on (no specific brightness)
                     this._lightStateManager.UpdateLightState(entityId, true);
                     PluginLog.Info($"{LogPrefix} Updated local state: {entityId} turned ON without parameters");
                 }
-                
+
                 if (!success)
                 {
                     var friendlyName = entityId; // Could be enhanced to get friendly name
@@ -718,7 +720,7 @@ namespace Loupedeck.HomeAssistantPlugin
                         $"Failed to turn on light {friendlyName}",
                         "Check Home Assistant logs for details");
                 }
-                
+
                 return success;
             }
         }
