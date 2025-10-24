@@ -92,6 +92,19 @@ namespace Loupedeck.HomeAssistantPlugin.Services
         void InitializeLightStates(IEnumerable<LightData> lights);
 
         /// <summary>
+        /// Initializes or updates light states by fetching data from Home Assistant
+        /// This method handles all the data fetching and parsing internally
+        /// </summary>
+        /// <param name="dataService">Service for fetching data from Home Assistant</param>
+        /// <param name="dataParser">Service for parsing Home Assistant data</param>
+        /// <param name="cancellationToken">Cancellation token</param>
+        /// <returns>Task with success status and optional error message</returns>
+        System.Threading.Tasks.Task<(Boolean Success, String? ErrorMessage)> InitOrUpdateAsync(
+            IHomeAssistantDataService dataService,
+            IHomeAssistantDataParser dataParser,
+            System.Threading.CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// Sets cached color temperature for a light entity
         /// </summary>
         /// <param name="entityId">Light entity ID</param>

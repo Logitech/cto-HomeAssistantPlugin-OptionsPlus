@@ -570,6 +570,13 @@ namespace Loupedeck.HomeAssistantPlugin
             PluginLog.Info($"{LogPrefix} ListboxItemsRequested({e.ControlName}) using modern service architecture");
             try
             {
+                // Check if we need to authenticate/load - only show loading indicator then
+                var needsAuth = this._ha == null || !this._ha.IsAuthenticated;
+                if (needsAuth)
+                {
+                    e.AddItem("!loading", "Loading areas...", "Connecting to Home Assistant");
+                }
+
                 // Ensure we're connected before asking HA for areas
                 if (!this.EnsureHaReadyAsync().GetAwaiter().GetResult())
                 {
@@ -618,6 +625,17 @@ namespace Loupedeck.HomeAssistantPlugin
                 var registryData = this._dataParser.ParseRegistries(devJson, entJson, areasJson);
                 this._registryService.UpdateRegistries(registryData);
 
+                // Initialize LightStateManager using self-contained method
+                // This fixes the bug where light states are unknown when first launching the plugin
+                if (this._lightStateManager != null && this._dataService != null && this._dataParser != null)
+                {
+                    var (success, errorMessage) = this._lightStateManager.InitOrUpdateAsync(this._dataService, this._dataParser, CancellationToken.None).GetAwaiter().GetResult();
+                    if (!success)
+                    {
+                        PluginLog.Warning($"{LogPrefix} LightStateManager.InitOrUpdateAsync failed: {errorMessage}");
+                    }
+                }
+
                 // Find all light entity IDs first
                 var allLightIds = new List<String>();
                 using var statesDoc = JsonDocument.Parse(statesJson);
@@ -656,6 +674,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     .OrderBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase)
                     .ToList();
 
+                // The loading indicator will be replaced by actual items
                 var count = 0;
                 foreach (var area in sortedAreas)
                 {

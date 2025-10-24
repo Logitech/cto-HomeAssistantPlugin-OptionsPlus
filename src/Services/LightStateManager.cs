@@ -3,6 +3,8 @@ namespace Loupedeck.HomeAssistantPlugin.Services
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Threading;
+    using System.Threading.Tasks;
 
     using Loupedeck.HomeAssistantPlugin.Models;
 
@@ -230,5 +232,71 @@ namespace Loupedeck.HomeAssistantPlugin.Services
         /// </summary>
         /// <returns>Collection of entity IDs</returns>
         public IEnumerable<String> GetTrackedEntityIds() => this._hsbByEntity.Keys.ToList();
+
+        /// <summary>
+        /// Initializes or updates light states by fetching data from Home Assistant
+        /// This method handles all the data fetching and parsing internally
+        /// </summary>
+        /// <param name="dataService">Service for fetching data from Home Assistant</param>
+        /// <param name="dataParser">Service for parsing Home Assistant data</param>
+        /// <param name="cancellationToken">Cancellation token</param>
+        /// <returns>Task with success status and optional error message</returns>
+        public async Task<(Boolean Success, String? ErrorMessage)> InitOrUpdateAsync(
+            IHomeAssistantDataService dataService,
+            IHomeAssistantDataParser dataParser,
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                PluginLog.Info("[LightStateManager] InitOrUpdateAsync: Starting self-contained initialization");
+
+                
+
+                // Fetch all required data from Home Assistant APIs
+                var (okStates, statesJson, errStates) = await dataService.FetchStatesAsync(cancellationToken).ConfigureAwait(false);
+                if (!okStates)
+                {
+                    var errorMsg = $"Failed to fetch states: {errStates}";
+                    PluginLog.Error($"[LightStateManager] InitOrUpdateAsync: {errorMsg}");
+                    return (false, errorMsg);
+                }
+
+                // Validate statesJson is not null even if fetch succeeded
+                if (String.IsNullOrEmpty(statesJson))
+                {
+                    const String errorMsg = "FetchStatesAsync succeeded but returned null or empty JSON data";
+                    PluginLog.Error($"[LightStateManager] InitOrUpdateAsync: {errorMsg}");
+                    return (false, errorMsg);
+                }
+
+                // Fetch registry data (optional - don't fail if these aren't available)
+                var (okEnt, entJson, errEnt) = await dataService.FetchEntityRegistryAsync(cancellationToken).ConfigureAwait(false);
+                var (okDev, devJson, errDev) = await dataService.FetchDeviceRegistryAsync(cancellationToken).ConfigureAwait(false);
+                var (okArea, areaJson, errArea) = await dataService.FetchAreaRegistryAsync(cancellationToken).ConfigureAwait(false);
+
+                if (!okEnt || !okDev || !okArea)
+                {
+                    PluginLog.Warning($"[LightStateManager] InitOrUpdateAsync: Some registry data unavailable (ent:{okEnt}, dev:{okDev}, area:{okArea}) - continuing with basic initialization");
+                }
+
+                // Parse registry data
+                var registryData = dataParser.ParseRegistries(devJson, entJson, areaJson);
+
+                // Parse light states - this gives us complete LightData objects
+                var lights = dataParser.ParseLightStates(statesJson, registryData);
+
+                // Initialize light state manager with parsed lights
+                this.InitializeLightStates(lights);
+
+                PluginLog.Info($"[LightStateManager] InitOrUpdateAsync: Successfully initialized with {lights.Count} lights");
+                return (true, null);
+            }
+            catch (Exception ex)
+            {
+                var errorMsg = $"InitOrUpdateAsync failed: {ex.Message}";
+                PluginLog.Error(ex, $"[LightStateManager] {errorMsg}");
+                return (false, errorMsg);
+            }
+        }
     }
 }

@@ -1,5 +1,3 @@
-//TODO fix bug when first launching the plugin the state of the lights is not known, unless the user opens the all lights dynamic folder first. Fix this, idk with this command where its best to load or update the state.
-
 namespace Loupedeck.HomeAssistantPlugin
 {
     using System;
@@ -59,7 +57,7 @@ namespace Loupedeck.HomeAssistantPlugin
             this.Description = "Toggle multiple Home Assistant lights with advanced controls for brightness, color, and temperature.";
 
             // Primary light selection (single)
-            this.ActionEditor.AddControlEx(new ActionEditorListbox(ControlLights, "Primary Light"));
+            this.ActionEditor.AddControlEx(new ActionEditorListbox(ControlLights, "Primary Light(retry if empty)"));
 
             // Additional lights (comma-separated entity IDs)
             this.ActionEditor.AddControlEx(
@@ -735,6 +733,8 @@ namespace Loupedeck.HomeAssistantPlugin
             PluginLog.Info($"{LogPrefix} ListboxItemsRequested({e.ControlName}) using modern service architecture");
             try
             {
+                
+
                 // Ensure we're connected before asking HA for states
                 if (!this.EnsureHaReadyAsync().GetAwaiter().GetResult())
                 {
@@ -754,7 +754,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 if (this._dataService == null)
                 {
                     PluginLog.Error($"{LogPrefix} ListboxItemsRequested: DataService not available");
-                    e.AddItem("!no_service", "Data service not initialized", "Plugin initialization error");
+                    e.AddItem("!no_service", "Data service not available", "Plugin initialization error");
                     return;
                 }
 
@@ -769,6 +769,18 @@ namespace Loupedeck.HomeAssistantPlugin
                     return;
                 }
 
+                // Initialize LightStateManager using self-contained method
+                // This fixes the bug where light states are unknown when first launching the plugin
+                if (this._lightStateManager != null && this._dataService != null && this._dataParser != null)
+                {
+                    var (success, errorMessage) = this._lightStateManager.InitOrUpdateAsync(this._dataService, this._dataParser, CancellationToken.None).GetAwaiter().GetResult();
+                    if (!success)
+                    {
+                        PluginLog.Warning($"{LogPrefix} LightStateManager.InitOrUpdateAsync failed: {errorMessage}");
+                    }
+                }
+
+                // The loading indicator will be replaced by actual items
                 var count = 0;
                 using var doc = JsonDocument.Parse(json);
                 foreach (var el in doc.RootElement.EnumerateArray())

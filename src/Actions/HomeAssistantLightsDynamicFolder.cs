@@ -1182,22 +1182,16 @@ namespace Loupedeck.HomeAssistantPlugin
                     return false;
                 }
 
-                // Fetch all required data from Home Assistant APIs using the data service
-                var (okStates, statesJson, errStates) = this._dataService.FetchStatesAsync(this._cts.Token).GetAwaiter().GetResult();
-                if (!okStates)
+                // Use the new self-contained InitOrUpdateAsync method for light state initialization
+                var (lightSuccess, lightError) = this._lightStateManager.InitOrUpdateAsync(this._dataService, this._dataParser, this._cts.Token).GetAwaiter().GetResult();
+                if (!lightSuccess)
                 {
-                    PluginLog.Error(() => $"Failed to fetch states: {errStates}");
+                    PluginLog.Error($"[LightsDynamicFolder] Light state initialization failed: {lightError}");
+                    HealthBus.Error("Light init failed");
                     return false;
                 }
 
-                // Validate statesJson is not null even if fetch succeeded
-                if (String.IsNullOrEmpty(statesJson))
-                {
-                    PluginLog.Error("FetchStatesAsync succeeded but returned null or empty JSON data");
-                    HealthBus.Error("Invalid states data");
-                    return false;
-                }
-
+                // Fetch services data (unique to DynamicFolder - not handled by InitOrUpdateAsync)
                 var (okServices, servicesJson, errServices) = this._dataService.FetchServicesAsync(this._cts.Token).GetAwaiter().GetResult();
                 if (!okServices)
                 {
@@ -1213,35 +1207,40 @@ namespace Loupedeck.HomeAssistantPlugin
                     return false;
                 }
 
+                // We need to re-fetch some data that InitOrUpdateAsync already fetched, but we need it for additional processing
+                var (okStates, statesJson, errStates) = this._dataService.FetchStatesAsync(this._cts.Token).GetAwaiter().GetResult();
                 var (okEnt, entJson, errEnt) = this._dataService.FetchEntityRegistryAsync(this._cts.Token).GetAwaiter().GetResult();
                 var (okDev, devJson, errDev) = this._dataService.FetchDeviceRegistryAsync(this._cts.Token).GetAwaiter().GetResult();
                 var (okArea, areaJson, errArea) = this._dataService.FetchAreaRegistryAsync(this._cts.Token).GetAwaiter().GetResult();
 
-                // Validate required JSON data using the parser
-                if (!this._dataParser.ValidateJsonData(statesJson, servicesJson))
+                if (!okStates || String.IsNullOrEmpty(statesJson))
                 {
-                    PluginLog.Error("JSON data validation failed");
-                    return false;
+                    PluginLog.Error($"[LightsDynamicFolder] Failed to re-fetch states for additional processing: {errStates}");
+                    // Don't fail here since light initialization succeeded - just log warning
+                    PluginLog.Warning("[LightsDynamicFolder] Continuing without additional state processing");
+                }
+                else
+                {
+                    // Validate required JSON data using the parser (unique to DynamicFolder)
+                    if (!this._dataParser.ValidateJsonData(statesJson, servicesJson))
+                    {
+                        PluginLog.Warning("[LightsDynamicFolder] JSON data validation failed - continuing without validation");
+                    }
+
+                    // Parse registry data and update registry service (unique to DynamicFolder)
+                    var registryData = this._dataParser.ParseRegistries(devJson, entJson, areaJson);
+                    this._registryService.UpdateRegistries(registryData);
+
+                    // Parse light states for internal cache updates (unique to DynamicFolder)
+                    var lights = this._dataParser.ParseLightStates(statesJson, registryData);
+                    
+                    // Update internal caches for compatibility with existing code (unique to DynamicFolder)
+                    // TODO: Eventually remove these and use services directly
+                    this.UpdateInternalCachesFromServices(lights, registryData);
                 }
 
-                // Parse registry data using the parser
-                var registryData = this._dataParser.ParseRegistries(devJson, entJson, areaJson);
-
-                // Update the registry service
-                this._registryService.UpdateRegistries(registryData);
-
-                // Parse light states using the parser - statesJson is now guaranteed to be non-null
-                var lights = this._dataParser.ParseLightStates(statesJson, registryData);
-
-                // Initialize light state manager with parsed lights
-                this._lightStateManager.InitializeLightStates(lights);
-
-                // Process services using the parser
+                // Process services using the parser (unique to DynamicFolder)
                 this._dataParser.ProcessServices(servicesJson);
-
-                // Update our internal caches for compatibility with existing code
-                // TODO: Eventually remove these and use services directly
-                this.UpdateInternalCachesFromServices(lights, registryData);
 
                 HealthBus.Ok("Fetched lights/services");
                 return true;
