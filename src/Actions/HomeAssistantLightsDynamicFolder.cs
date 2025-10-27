@@ -128,32 +128,6 @@ namespace Loupedeck.HomeAssistantPlugin
         private const Int32 StatusErrorGreen = 30;             // Error status green component
         private const Int32 StatusErrorBlue = 30;              // Error status blue component
 
-        // --- sRGB to Linear Conversion Constants (IEC 61966-2-1) ---
-        private const Double SrgbLinearThreshold = 0.04045;    // Threshold for sRGB to linear conversion
-        private const Double SrgbLinearDivisor = 12.92;        // Divisor for linear portion of sRGB conversion
-        private const Double SrgbGammaOffset = 0.055;          // Offset for gamma correction in sRGB
-        private const Double SrgbGammaMultiplier = 1.055;      // Multiplier for gamma correction in sRGB
-        private const Double SrgbGammaExponent = 2.4;          // Gamma exponent for sRGB conversion
-        private const Double LinearSrgbThreshold = 0.0031308;  // Threshold for linear to sRGB conversion
-
-        // --- Kelvin to RGB Conversion Constants ---
-        private const Int32 MinKelvinRange = 1800;             // Minimum Kelvin temperature for household lamps
-        private const Int32 MaxKelvinRange = 6500;             // Maximum Kelvin temperature for household lamps
-        private const Double KelvinScaleFactor = 100.0;        // Scale factor for Kelvin calculations
-        private const Double KelvinThreshold = 66.0;           // Threshold for different Kelvin calculation methods
-        private const Double KelvinLowThreshold = 19.0;        // Low threshold for blue component calculation
-        private const Double KelvinRedMax = 255.0;             // Maximum red value for low Kelvin
-        private const Double KelvinGreenCoeff1 = 99.4708025861; // Green coefficient 1 for Kelvin conversion
-        private const Double KelvinGreenOffset1 = 161.1195681661; // Green offset 1 for Kelvin conversion
-        private const Double KelvinBlueCoeff = 138.5177312231;  // Blue coefficient for Kelvin conversion
-        private const Double KelvinBlueOffset1 = 10.0;         // Blue offset 1 for Kelvin conversion
-        private const Double KelvinBlueOffset2 = 305.0447927307; // Blue offset 2 for Kelvin conversion
-        private const Double KelvinRedCoeff = 329.698727446;    // Red coefficient for high Kelvin
-        private const Double KelvinRedExp = -0.1332047592;      // Red exponent for high Kelvin
-        private const Double KelvinGreenCoeff2 = 288.1221695283; // Green coefficient 2 for high Kelvin
-        private const Double KelvinGreenExp = -0.0755148492;    // Green exponent for high Kelvin
-        private const Double KelvinHighOffset = 60.0;          // Offset for high Kelvin calculations
-        private const Double KelvinBlueMax = 255.0;            // Maximum blue value for high Kelvin
 
         // --- Network and Timing Constants ---
         private const Int32 AuthTimeoutSeconds = 60;           // Authentication timeout in seconds
@@ -273,60 +247,6 @@ namespace Loupedeck.HomeAssistantPlugin
         }
 
 
-        // --- sRGB <-> linear helpers (IEC 61966-2-1) ---
-        private static Double SrgbToLinear01(Double c)
-            => (c <= SrgbLinearThreshold) ? (c / SrgbLinearDivisor) : Math.Pow((c + SrgbGammaOffset) / SrgbGammaMultiplier, SrgbGammaExponent);
-
-        private static Double LinearToSrgb01(Double c)
-        {
-            c = Math.Max(0.0, Math.Min(1.0, c));
-            return (c <= LinearSrgbThreshold) ? (SrgbLinearDivisor * c) : (SrgbGammaMultiplier * Math.Pow(c, 1.0 / SrgbGammaExponent) - SrgbGammaOffset);
-        }
-
-        // --- Kelvin (blackbody) -> sRGB, using Tanner Helland / Neil Bartlett coeffs ---
-        private static (Int32 R, Int32 G, Int32 B) KelvinToSrgb(Int32 kelvin)
-        {
-            // Clamp to a sensible household lamp range to avoid cartoonish extremes
-            var K = HSBHelper.Clamp(kelvin, MinKelvinRange, MaxKelvinRange) / KelvinScaleFactor; // Temp in hundreds of K
-            Double r, g, b;
-
-            if (K <= KelvinThreshold)
-            {
-                r = KelvinRedMax;
-                g = KelvinGreenCoeff1 * Math.Log(K) - KelvinGreenOffset1;
-                b = (K <= KelvinLowThreshold) ? BlackColorValue : KelvinBlueCoeff * Math.Log(K - KelvinBlueOffset1) - KelvinBlueOffset2;
-            }
-            else
-            {
-                r = KelvinRedCoeff * Math.Pow(K - KelvinHighOffset, KelvinRedExp);
-                g = KelvinGreenCoeff2 * Math.Pow(K - KelvinHighOffset, KelvinGreenExp);
-                b = KelvinBlueMax;
-            }
-
-            var R = HSBHelper.Clamp((Int32)Math.Round(r), RgbMinValue, RgbMaxValue);
-            var G = HSBHelper.Clamp((Int32)Math.Round(g), RgbMinValue, RgbMaxValue);
-            var B = HSBHelper.Clamp((Int32)Math.Round(b), RgbMinValue, RgbMaxValue);
-            return (R, G, B);
-        }
-
-        // Scale an sRGB color by brightness in *linear* light, then encode back to sRGB
-        private static (Int32 R, Int32 G, Int32 B) ApplyBrightnessLinear((Int32 R, Int32 G, Int32 B) srgb, Int32 effB)
-        {
-            var l = HSBHelper.Clamp(effB, BrightnessOff, MaxBrightness) / BrightnessScale;     // 0..1
-            if (l <= 0.0)
-            {
-                return (BlackColorValue, BlackColorValue, BlackColorValue);
-            }
-
-            var lr = SrgbToLinear01(srgb.R / BrightnessScale) * l;
-            var lg = SrgbToLinear01(srgb.G / BrightnessScale) * l;
-            var lb = SrgbToLinear01(srgb.B / BrightnessScale) * l;
-
-            var R = HSBHelper.Clamp((Int32)Math.Round(LinearToSrgb01(lr) * BrightnessScale), RgbMinValue, RgbMaxValue);
-            var G = HSBHelper.Clamp((Int32)Math.Round(LinearToSrgb01(lg) * BrightnessScale), RgbMinValue, RgbMaxValue);
-            var B = HSBHelper.Clamp((Int32)Math.Round(LinearToSrgb01(lb) * BrightnessScale), RgbMinValue, RgbMaxValue);
-            return (R, G, B);
-        }
 
 
         // Simulate how the light *actually* looks, honoring last-look mode (HS vs Temp),
@@ -370,7 +290,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 // double l = effB / 255.0;
                 // if (l < 0.10) { sr = (int)(sr * (0.9 + l)); sg = (int)(sg * (0.9 + l)); sb = (int)(sb * (0.9 + l)); }
 
-                return ApplyBrightnessLinear((sr, sg, sb), effB);
+                return ColorConv.ApplyBrightnessLinear((sr, sg, sb), effB);
             }
 
             // --- Preferred: Color Temp look ---
@@ -383,8 +303,8 @@ namespace Loupedeck.HomeAssistantPlugin
                 }
 
                 var k = ColorTemp.MiredToKelvin(temp.Value.Cur);
-                var srgb = KelvinToSrgb(k);                // blackbody approximate in sRGB
-                return ApplyBrightnessLinear(srgb, effB);  // dim in linear light, back to sRGB
+                var srgb = ColorTemp.KelvinToSrgb(k);      // blackbody approximate in sRGB
+                return ColorConv.ApplyBrightnessLinear(srgb, effB);  // dim in linear light, back to sRGB
             }
 
             (Int32 R, Int32 G, Int32 B) rgb;

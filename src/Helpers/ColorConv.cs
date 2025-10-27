@@ -31,7 +31,9 @@ namespace Loupedeck.HomeAssistantPlugin
         private const Double XyzToSrgb_B_Z = 1.0570;            // Blue component from Z
 
         // --- sRGB Gamma Correction Constants (IEC 61966-2-1) ---
-        private const Double LinearSrgbThreshold = 0.0031308;   // Threshold for linear portion of sRGB curve
+        private const Double SrgbLinearThreshold = 0.04045;     // Threshold for sRGB to linear conversion
+        private const Double SrgbLinearDivisor = 12.92;         // Divisor for linear portion of sRGB conversion
+        private const Double LinearSrgbThreshold = 0.0031308;   // Threshold for linear to sRGB conversion
         private const Double SrgbLinearMultiplier = 12.92;      // Multiplier for linear portion
         private const Double SrgbGammaMultiplier = 1.055;       // Multiplier for gamma portion
         private const Double SrgbGammaExponent = 2.4;           // Gamma exponent for sRGB
@@ -134,6 +136,57 @@ namespace Loupedeck.HomeAssistantPlugin
                 PluginLog.Warning(() => $"[ColorConv] Returning fallback RGB({fallbackValue},{fallbackValue},{fallbackValue})");
                 return (fallbackValue, fallbackValue, fallbackValue);
             }
+        }
+
+        /// <summary>
+        /// Convert sRGB component to linear light (IEC 61966-2-1)
+        /// </summary>
+        /// <param name="c">sRGB component value (0-1)</param>
+        /// <returns>Linear light component (0-1)</returns>
+        public static Double SrgbToLinear01(Double c)
+            => (c <= SrgbLinearThreshold) ? (c / SrgbLinearDivisor) : Math.Pow((c + SrgbGammaOffset) / SrgbGammaMultiplier, SrgbGammaExponent);
+
+        /// <summary>
+        /// Convert linear light component to sRGB (IEC 61966-2-1)
+        /// </summary>
+        /// <param name="c">Linear light component (0-1)</param>
+        /// <returns>sRGB component value (0-1)</returns>
+        public static Double LinearToSrgb01(Double c)
+        {
+            c = Math.Max(MinRgbComponent, Math.Min(MaxRgbComponent, c));
+            return (c <= LinearSrgbThreshold) ? (SrgbLinearMultiplier * c) : (SrgbGammaMultiplier * Math.Pow(c, MaxRgbComponent / SrgbGammaExponent) - SrgbGammaOffset);
+        }
+
+        /// <summary>
+        /// Scale an sRGB color by brightness in linear light space, then encode back to sRGB
+        /// This provides perceptually correct brightness scaling
+        /// </summary>
+        /// <param name="srgb">Input sRGB color (0-255 each component)</param>
+        /// <param name="brightness">Brightness value (0-255)</param>
+        /// <returns>Brightness-scaled sRGB color (0-255 each component)</returns>
+        public static (Int32 R, Int32 G, Int32 B) ApplyBrightnessLinear((Int32 R, Int32 G, Int32 B) srgb, Int32 brightness)
+        {
+            const Double BrightnessScale = 255.0;
+            const Int32 BrightnessOff = 0;
+            const Int32 MaxBrightness = 255;
+            const Int32 BlackColorValue = 0;
+            const Int32 RgbMinValue = 0;
+            const Int32 RgbMaxValue = 255;
+
+            var l = Math.Max(BrightnessOff, Math.Min(MaxBrightness, brightness)) / BrightnessScale; // 0..1
+            if (l <= 0.0)
+            {
+                return (BlackColorValue, BlackColorValue, BlackColorValue);
+            }
+
+            var lr = SrgbToLinear01(srgb.R / BrightnessScale) * l;
+            var lg = SrgbToLinear01(srgb.G / BrightnessScale) * l;
+            var lb = SrgbToLinear01(srgb.B / BrightnessScale) * l;
+
+            var R = Math.Max(RgbMinValue, Math.Min(RgbMaxValue, (Int32)Math.Round(LinearToSrgb01(lr) * BrightnessScale)));
+            var G = Math.Max(RgbMinValue, Math.Min(RgbMaxValue, (Int32)Math.Round(LinearToSrgb01(lg) * BrightnessScale)));
+            var B = Math.Max(RgbMinValue, Math.Min(RgbMaxValue, (Int32)Math.Round(LinearToSrgb01(lb) * BrightnessScale)));
+            return (R, G, B);
         }
     }
 }
