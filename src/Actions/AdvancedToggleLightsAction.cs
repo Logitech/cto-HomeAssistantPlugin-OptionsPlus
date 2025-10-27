@@ -743,10 +743,18 @@ namespace Loupedeck.HomeAssistantPlugin
                         !this.Plugin.TryGetPluginSetting(HomeAssistantPlugin.SettingToken, out var _))
                     {
                         e.AddItem("!not_configured", "Home Assistant not configured", "Open plugin settings");
+                        // Report configuration error to user
+                        this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
+                            "Home Assistant not configured",
+                            "Please set Base URL and Token in plugin settings");
                     }
                     else
                     {
                         e.AddItem("!not_connected", "Could not connect to Home Assistant", "Check URL/token");
+                        // Report connection error to user
+                        this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
+                            "Could not connect to Home Assistant",
+                            "Please check your Base URL and Token settings");
                     }
                     return;
                 }
@@ -755,6 +763,10 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     PluginLog.Error($"{LogPrefix} ListboxItemsRequested: DataService not available");
                     e.AddItem("!no_service", "Data service not available", "Plugin initialization error");
+                    // Report service error to user
+                    this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
+                        "Plugin initialization error",
+                        "Data service not available - please restart plugin");
                     return;
                 }
 
@@ -766,6 +778,8 @@ namespace Loupedeck.HomeAssistantPlugin
                 if (!ok || String.IsNullOrEmpty(json))
                 {
                     e.AddItem("!no_states", $"Failed to fetch states: {error ?? "unknown"}", "Check connection");
+                    Plugin.OnPluginStatusChanged(PluginStatus.Error,
+                        $"Failed to fetch entity states error: {error}");
                     return;
                 }
 
@@ -777,6 +791,13 @@ namespace Loupedeck.HomeAssistantPlugin
                     if (!success)
                     {
                         PluginLog.Warning($"{LogPrefix} LightStateManager.InitOrUpdateAsync failed: {errorMessage}");
+                        // Report initialization error to user
+                        this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
+                            "Failed to load light data",
+                            errorMessage ?? "Unknown error occurred while fetching lights from Home Assistant");
+                        // Still show the dropdown with error message
+                        e.AddItem("!init_failed", "Failed to load lights", errorMessage ?? "Check connection to Home Assistant");
+                        return;
                     }
                 }
 
@@ -810,6 +831,14 @@ namespace Loupedeck.HomeAssistantPlugin
                 }
 
                 PluginLog.Info($"{LogPrefix} List populated with {count} light(s) using modern service architecture");
+
+                // Clear any previous error status since we successfully loaded lights
+                if (count > 0)
+                {
+                    this.Plugin.OnPluginStatusChanged(PluginStatus.Normal,
+                        $"Successfully loaded {count} lights",
+                        null);
+                }
 
                 // Keep current selection
                 var current = e.ActionEditorState?.GetControlValue(ControlLights) as String;

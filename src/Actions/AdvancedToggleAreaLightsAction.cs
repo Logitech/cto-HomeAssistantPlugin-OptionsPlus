@@ -585,10 +585,18 @@ namespace Loupedeck.HomeAssistantPlugin
                         !this.Plugin.TryGetPluginSetting(HomeAssistantPlugin.SettingToken, out var _))
                     {
                         e.AddItem("!not_configured", "Home Assistant not configured", "Open plugin settings");
+                        // Report configuration error to user
+                        this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
+                            "Home Assistant not configured",
+                            "Please set Base URL and Token in plugin settings");
                     }
                     else
                     {
                         e.AddItem("!not_connected", "Could not connect to Home Assistant", "Check URL/token");
+                        // Report connection error to user
+                        this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
+                            "Could not connect to Home Assistant",
+                            "Please check your Base URL and Token settings");
                     }
                     return;
                 }
@@ -597,6 +605,10 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     PluginLog.Error($"{LogPrefix} ListboxItemsRequested: Required services not available");
                     e.AddItem("!no_service", "Data services not initialized", "Plugin initialization error");
+                    // Report service error to user
+                    this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
+                        "Plugin initialization error",
+                        "Data services not available - please restart plugin");
                     return;
                 }
 
@@ -617,7 +629,12 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 if (!okAreas || !okStates || String.IsNullOrEmpty(areasJson) || String.IsNullOrEmpty(statesJson))
                 {
-                    e.AddItem("!no_data", $"Failed to fetch data: {errAreas ?? errStates ?? "unknown"}", "Check connection");
+                    var error = errAreas ?? errStates ?? "unknown";
+                    e.AddItem("!no_data", $"Failed to fetch data: {error}", "Check connection");
+                    // Report data fetch error to user
+                    this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
+                        "Failed to fetch area data",
+                        $"Could not load areas from Home Assistant: {error}");
                     return;
                 }
 
@@ -633,6 +650,13 @@ namespace Loupedeck.HomeAssistantPlugin
                     if (!success)
                     {
                         PluginLog.Warning($"{LogPrefix} LightStateManager.InitOrUpdateAsync failed: {errorMessage}");
+                        // Report initialization error to user
+                        this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
+                            "Failed to load light data",
+                            errorMessage ?? "Unknown error occurred while fetching lights from Home Assistant");
+                        // Still show the dropdown with error message
+                        e.AddItem("!init_failed", "Failed to load areas", errorMessage ?? "Check connection to Home Assistant");
+                        return;
                     }
                 }
 
@@ -683,6 +707,14 @@ namespace Loupedeck.HomeAssistantPlugin
                 }
 
                 PluginLog.Info($"{LogPrefix} List populated with {count} area(s) that have lights using modern service architecture");
+
+                // Clear any previous error status since we successfully loaded areas
+                if (count > 0)
+                {
+                    this.Plugin.OnPluginStatusChanged(PluginStatus.Normal,
+                        $"Successfully loaded {count} areas with lights",
+                        null);
+                }
 
                 // Keep current selection
                 var current = e.ActionEditorState?.GetControlValue(ControlArea) as String;
