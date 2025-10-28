@@ -33,6 +33,7 @@ namespace Loupedeck.HomeAssistantPlugin
         private const String ControlHue = "ha_hue";
         private const String ControlSaturation = "ha_saturation";
         private const String ControlWhiteLevel = "ha_white_level";
+        private const String ControlColdWhiteLevel = "ha_cold_white_level";
 
         // Constants - extracted and organized like the newer code
         private const Int32 MinBrightness = 1;
@@ -89,9 +90,15 @@ namespace Loupedeck.HomeAssistantPlugin
                     .SetPlaceholder("100")
             );
 
-            // White level (0-255)
+            // White level (0-255) - for RGBW lights or warm white in RGBWW
             this.ActionEditor.AddControlEx(
-                new ActionEditorTextbox(ControlWhiteLevel, "White Level (0-255)")
+                new ActionEditorTextbox(ControlWhiteLevel, "White Level / Warm White (0-255)")
+                    .SetPlaceholder("255")
+            );
+
+            // Cold white level (0-255) - for RGBWW lights only
+            this.ActionEditor.AddControlEx(
+                new ActionEditorTextbox(ControlColdWhiteLevel, "Cold White Level (0-255)")
                     .SetPlaceholder("255")
             );
 
@@ -336,6 +343,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 var hue = this.ParseDoubleParameter(ps, ControlHue, MinHue, MaxHue);
                 var saturation = this.ParseDoubleParameter(ps, ControlSaturation, MinSaturation, MaxSaturation);
                 var whiteLevel = this.ParseIntParameter(ps, ControlWhiteLevel, 0, MaxBrightness);
+                var coldWhiteLevel = this.ParseIntParameter(ps, ControlColdWhiteLevel, 0, MaxBrightness);
 
                 // Process each light
                 var success = true;
@@ -343,7 +351,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     try
                     {
-                        success &= this.ProcessSingleLight(entityId, commonCaps, brightness, temperature, hue, saturation, whiteLevel);
+                        success &= this.ProcessSingleLight(entityId, commonCaps, brightness, temperature, hue, saturation, whiteLevel, coldWhiteLevel);
                     }
                     catch (Exception ex)
                     {
@@ -405,7 +413,7 @@ namespace Loupedeck.HomeAssistantPlugin
         }
 
         private Boolean ProcessSingleLight(String entityId, LightCaps caps, Int32? brightness, Int32? temperature,
-            Double? hue, Double? saturation, Int32? whiteLevel)
+            Double? hue, Double? saturation, Int32? whiteLevel, Int32? coldWhiteLevel)
         {
             PluginLog.Info($"{LogPrefix} Processing light: {entityId}");
 
@@ -414,7 +422,7 @@ namespace Loupedeck.HomeAssistantPlugin
             var preferredColorMode = individualCaps.PreferredColorMode ?? "hs";
 
             PluginLog.Info($"{LogPrefix} Light capabilities: onoff={caps.OnOff} brightness={caps.Brightness} colorTemp={caps.ColorTemp} colorHs={caps.ColorHs} preferredColorMode={preferredColorMode}");
-            PluginLog.Info($"{LogPrefix} Input parameters: brightness={brightness} temperature={temperature}K hue={hue}° saturation={saturation}% whiteLevel={whiteLevel}");
+            PluginLog.Info($"{LogPrefix} Input parameters: brightness={brightness} temperature={temperature}K hue={hue}° saturation={saturation}% whiteLevel={whiteLevel} coldWhiteLevel={coldWhiteLevel}");
 
             if (this._lightSvc == null)
             {
@@ -423,7 +431,7 @@ namespace Loupedeck.HomeAssistantPlugin
             }
 
             // If no parameters specified, just toggle
-            if (!brightness.HasValue && !temperature.HasValue && !hue.HasValue && !saturation.HasValue && !whiteLevel.HasValue)
+            if (!brightness.HasValue && !temperature.HasValue && !hue.HasValue && !saturation.HasValue && !whiteLevel.HasValue && !coldWhiteLevel.HasValue)
             {
                 PluginLog.Info($"{LogPrefix} No parameters provided, using simple toggle for '{entityId}'");
                 var success = this._lightSvc.ToggleAsync(entityId).GetAwaiter().GetResult();
@@ -490,16 +498,26 @@ namespace Loupedeck.HomeAssistantPlugin
                 serviceData["brightness"] = bri;
                 PluginLog.Info($"{LogPrefix} Added brightness: {brightness.Value} -> {bri} (clamped {MinBrightness}-{MaxBrightness})");
             }
-            else if (whiteLevel.HasValue && caps.Brightness)
+            else if ((whiteLevel.HasValue || coldWhiteLevel.HasValue) && caps.Brightness &&
+                     !preferredColorMode.EqualsNoCase("rgbw") && !preferredColorMode.EqualsNoCase("rgbww"))
             {
-                // White level as fallback brightness
-                var bri = HSBHelper.Clamp(whiteLevel.Value, MinBrightness, MaxBrightness);
+                // White level as fallback brightness (only for non-RGBW/RGBWW lights)
+                var whiteValue = whiteLevel ?? coldWhiteLevel ?? 0;
+                var bri = HSBHelper.Clamp(whiteValue, MinBrightness, MaxBrightness);
                 serviceData["brightness"] = bri;
-                PluginLog.Info($"{LogPrefix} Added white level as brightness: {whiteLevel.Value} -> {bri} (clamped {MinBrightness}-{MaxBrightness})");
+                PluginLog.Info($"{LogPrefix} Added white level as brightness fallback: {whiteValue} -> {bri} (clamped {MinBrightness}-{MaxBrightness})");
             }
             else if (brightness.HasValue && !caps.Brightness)
             {
                 PluginLog.Warning($"{LogPrefix} Brightness {brightness.Value} requested but not supported by {entityId}");
+            }
+            else if ((whiteLevel.HasValue || coldWhiteLevel.HasValue) &&
+                     (preferredColorMode.EqualsNoCase("rgbw") || preferredColorMode.EqualsNoCase("rgbww")))
+            {
+                var whiteLevels = new List<String>();
+                if (whiteLevel.HasValue) whiteLevels.Add($"warm={whiteLevel.Value}");
+                if (coldWhiteLevel.HasValue) whiteLevels.Add($"cold={coldWhiteLevel.Value}");
+                PluginLog.Info($"{LogPrefix} White levels ({String.Join(", ", whiteLevels)}) will be used for white channels in {preferredColorMode} mode (not as brightness)");
             }
 
             // Add color controls - prioritize temperature over HS to avoid conflicts
@@ -529,15 +547,65 @@ namespace Loupedeck.HomeAssistantPlugin
                     case "rgbww":
                         // Convert HS to RGBWW (R,G,B,ColdWhite,WarmWhite)
                         var (r1, g1, b1) = HSBHelper.HsbToRgb(h, s, FullColorValue);
-                        serviceData["rgbww_color"] = new Object[] { r1, g1, b1, 0, 0 }; // No white channels for pure color
-                        PluginLog.Info($"{LogPrefix} Added rgbww_color: HS({h:F1}°,{s:F1}%) -> RGBWW({r1},{g1},{b1},0,0)");
+                        
+                        // Use separate cold and warm white levels if specified
+                        var coldWhite = 0;
+                        var warmWhite = 0;
+                        
+                        // Priority 1: Use separate cold/warm white levels if specified
+                        if (coldWhiteLevel.HasValue || whiteLevel.HasValue)
+                        {
+                            if (coldWhiteLevel.HasValue && whiteLevel.HasValue)
+                            {
+                                // Both specified - use them directly
+                                coldWhite = HSBHelper.Clamp(coldWhiteLevel.Value, 0, MaxBrightness);
+                                warmWhite = HSBHelper.Clamp(whiteLevel.Value, 0, MaxBrightness);
+                                PluginLog.Info($"{LogPrefix} Using separate white levels: cold={coldWhite}, warm={warmWhite}");
+                            }
+                            else if (coldWhiteLevel.HasValue)
+                            {
+                                // Only cold white specified - use it for both channels
+                                coldWhite = HSBHelper.Clamp(coldWhiteLevel.Value, 0, MaxBrightness);
+                                warmWhite = coldWhite;
+                                PluginLog.Info($"{LogPrefix} Only cold white specified: using {coldWhite} for both channels");
+                            }
+                            else if (whiteLevel.HasValue)
+                            {
+                                // Only warm white specified - use it for both channels
+                                warmWhite = HSBHelper.Clamp(whiteLevel.Value, 0, MaxBrightness);
+                                coldWhite = warmWhite;
+                                PluginLog.Info($"{LogPrefix} Only warm white specified: using {warmWhite} for both channels");
+                            }
+                        }
+                        // Priority 2: Use temperature-based distribution (legacy behavior)
+                        else if (whiteLevel.HasValue && temperature.HasValue)
+                        {
+                            var white = HSBHelper.Clamp(whiteLevel.Value, 0, MaxBrightness);
+                            var kelvin = HSBHelper.Clamp(temperature.Value, MinTemperature, MaxTemperature);
+                            // Convert temperature to cold/warm ratio (2000K = warm, 6500K = cold)
+                            var tempRatio = (kelvin - MinTemperature) / (double)(MaxTemperature - MinTemperature);
+                            coldWhite = (int)(white * tempRatio);
+                            warmWhite = (int)(white * (1.0 - tempRatio));
+                            PluginLog.Info($"{LogPrefix} Using temperature-based distribution: {kelvin}K -> cold={coldWhite}, warm={warmWhite}");
+                        }
+                        
+                        serviceData["rgbww_color"] = new Object[] { r1, g1, b1, coldWhite, warmWhite };
+                        PluginLog.Info($"{LogPrefix} Added rgbww_color: HS({h:F1}°,{s:F1}%) -> RGBWW({r1},{g1},{b1},{coldWhite},{warmWhite})");
                         break;
 
                     case "rgbw":
                         // Convert HS to RGBW (R,G,B,White)
                         var (r2, g2, b2) = HSBHelper.HsbToRgb(h, s, FullColorValue);
-                        serviceData["rgbw_color"] = new Object[] { r2, g2, b2, 0 }; // No white channel for pure color
-                        PluginLog.Info($"{LogPrefix} Added rgbw_color: HS({h:F1}°,{s:F1}%) -> RGBW({r2},{g2},{b2},0)");
+                        
+                        // Use whiteLevel for white channel if specified
+                        var whiteChannel = 0;
+                        if (whiteLevel.HasValue)
+                        {
+                            whiteChannel = HSBHelper.Clamp(whiteLevel.Value, 0, MaxBrightness);
+                        }
+                        
+                        serviceData["rgbw_color"] = new Object[] { r2, g2, b2, whiteChannel };
+                        PluginLog.Info($"{LogPrefix} Added rgbw_color: HS({h:F1}°,{s:F1}%) + white({whiteLevel}) -> RGBW({r2},{g2},{b2},{whiteChannel})");
                         break;
 
                     case "rgb":
