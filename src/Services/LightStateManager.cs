@@ -38,6 +38,12 @@ namespace Loupedeck.HomeAssistantPlugin.Services
         private readonly Dictionary<String, (Int32 Min, Int32 Max, Int32 Cur)> _tempMiredByEntity =
             new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>
+        /// Updates the on/off state and optionally brightness for a light.
+        /// </summary>
+        /// <param name="entityId">Light entity ID.</param>
+        /// <param name="isOn">Whether the light is on.</param>
+        /// <param name="brightness">Optional brightness value (0-255).</param>
         public void UpdateLightState(String entityId, Boolean isOn, Int32? brightness = null)
         {
             PluginLog.Verbose(() => $"[LightStateManager] UpdateLightState: {entityId} isOn={isOn} brightness={brightness}");
@@ -50,6 +56,12 @@ namespace Loupedeck.HomeAssistantPlugin.Services
             }
         }
 
+        /// <summary>
+        /// Updates the hue and saturation values for a light.
+        /// </summary>
+        /// <param name="entityId">Light entity ID.</param>
+        /// <param name="hue">Hue value in degrees (0-360).</param>
+        /// <param name="saturation">Saturation value as percentage (0-100).</param>
         public void UpdateHsColor(String entityId, Double? hue, Double? saturation)
         {
             PluginLog.Verbose(() => $"[LightStateManager] UpdateHsColor: {entityId} hue={hue} saturation={saturation}");
@@ -65,6 +77,14 @@ namespace Loupedeck.HomeAssistantPlugin.Services
             this._hsbByEntity[entityId] = (newH, newS, hsb.B);
         }
 
+        /// <summary>
+        /// Updates the color temperature for a light.
+        /// </summary>
+        /// <param name="entityId">Light entity ID.</param>
+        /// <param name="mired">Color temperature in mireds.</param>
+        /// <param name="kelvin">Color temperature in Kelvin.</param>
+        /// <param name="minM">Minimum mireds supported.</param>
+        /// <param name="maxM">Maximum mireds supported.</param>
         public void UpdateColorTemp(String entityId, Int32? mired, Int32? kelvin, Int32? minM, Int32? maxM)
         {
             PluginLog.Verbose(() => $"[LightStateManager] UpdateColorTemp: {entityId} mired={mired} kelvin={kelvin} minM={minM} maxM={maxM}");
@@ -89,6 +109,11 @@ namespace Loupedeck.HomeAssistantPlugin.Services
             this._tempMiredByEntity[entityId] = (min, max, cur);
         }
 
+        /// <summary>
+        /// Gets the current HSB values for a light.
+        /// </summary>
+        /// <param name="entityId">Light entity ID.</param>
+        /// <returns>Tuple of hue, saturation, and brightness.</returns>
         public (Double H, Double S, Int32 B) GetHsbValues(String entityId)
         {
             return this._hsbByEntity.TryGetValue(entityId, out var hsb)
@@ -96,6 +121,11 @@ namespace Loupedeck.HomeAssistantPlugin.Services
                 : (DefaultHue, MinSaturation, BrightnessOff);
         }
 
+        /// <summary>
+        /// Gets the effective brightness for display (0 if off, cached brightness if on).
+        /// </summary>
+        /// <param name="entityId">Light entity ID.</param>
+        /// <returns>Brightness value (0-255).</returns>
         public Int32 GetEffectiveBrightness(String entityId)
         {
             // If we know it's OFF, show 0; otherwise show cached B
@@ -104,14 +134,29 @@ namespace Loupedeck.HomeAssistantPlugin.Services
                 : this._hsbByEntity.TryGetValue(entityId, out var hsb) ? hsb.B : BrightnessOff;
         }
 
+        /// <summary>
+        /// Checks if a light is currently on.
+        /// </summary>
+        /// <param name="entityId">Light entity ID.</param>
+        /// <returns>True if the light is on.</returns>
         public Boolean IsLightOn(String entityId) => this._isOnByEntity.TryGetValue(entityId, out var isOn) && isOn;
 
+        /// <summary>
+        /// Sets the capabilities for a light entity.
+        /// </summary>
+        /// <param name="entityId">Light entity ID.</param>
+        /// <param name="caps">Light capabilities.</param>
         public void SetCapabilities(String entityId, LightCaps caps)
         {
             this._capsByEntity[entityId] = caps;
             PluginLog.Verbose(() => $"[LightStateManager] Set capabilities for {entityId}: onoff={caps.OnOff} bri={caps.Brightness} ctemp={caps.ColorTemp} color={caps.ColorHs}");
         }
 
+        /// <summary>
+        /// Gets the capabilities for a light entity.
+        /// </summary>
+        /// <param name="entityId">Light entity ID.</param>
+        /// <returns>Light capabilities.</returns>
         public LightCaps GetCapabilities(String entityId)
         {
             var result = this._capsByEntity.TryGetValue(entityId, out var caps)
@@ -121,8 +166,18 @@ namespace Loupedeck.HomeAssistantPlugin.Services
             return result;
         }
 
+        /// <summary>
+        /// Gets the color temperature range and current value for a light.
+        /// </summary>
+        /// <param name="entityId">Light entity ID.</param>
+        /// <returns>Tuple of min, max, and current mireds, or null if not supported.</returns>
         public (Int32 Min, Int32 Max, Int32 Cur)? GetColorTempMired(String entityId) => this._tempMiredByEntity.TryGetValue(entityId, out var temp) ? temp : null;
 
+        /// <summary>
+        /// Sets cached brightness for a light entity.
+        /// </summary>
+        /// <param name="entityId">Light entity ID.</param>
+        /// <param name="brightness">Brightness value (0-255).</param>
         public void SetCachedBrightness(String entityId, Int32 brightness)
         {
             PluginLog.Verbose(() => $"[LightStateManager] SetCachedBrightness: {entityId} brightness={brightness}");
@@ -134,6 +189,10 @@ namespace Loupedeck.HomeAssistantPlugin.Services
                 : (DefaultHue, MinSaturation, clampedBrightness);
         }
 
+        /// <summary>
+        /// Initializes light state from parsed light data.
+        /// </summary>
+        /// <param name="lights">Collection of light data.</param>
         public void InitializeLightStates(IEnumerable<LightData> lights)
         {
             var existingCount = this._hsbByEntity.Count;

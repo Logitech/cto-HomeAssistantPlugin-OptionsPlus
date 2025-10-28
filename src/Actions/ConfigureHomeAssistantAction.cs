@@ -6,20 +6,42 @@ namespace Loupedeck.HomeAssistantPlugin
 
     using Loupedeck;
 
+    /// <summary>
+    /// Configuration action for setting up Home Assistant connection parameters.
+    /// Provides user interface controls for base URL, access token, and connection testing.
+    /// This action serves as a configuration surface and does not perform runtime operations.
+    /// </summary>
     public sealed class ConfigureHomeAssistantAction : ActionEditorCommand
     {
-        // ====================================================================
-        // CONSTANTS - Configure Home Assistant Action Configuration
-        // ====================================================================
+        /// <summary>
+        /// Default port number for Home Assistant installations.
+        /// </summary>
+        private const Int32 DefaultHomeAssistantPort = 8123;
+        
+        /// <summary>
+        /// Timeout in seconds for connection testing operations.
+        /// </summary>
+        private const Int32 ConnectionTestTimeoutSeconds = 8;
 
-        // --- Connection Configuration ---
-        private const Int32 DefaultHomeAssistantPort = 8123;          // Default Home Assistant port
-        private const Int32 ConnectionTestTimeoutSeconds = 8;         // Timeout for connection testing
-
+        /// <summary>
+        /// Control name for the base URL input field.
+        /// </summary>
         private const String CtlBaseUrl = "BaseUrl";
+        
+        /// <summary>
+        /// Control name for the access token input field.
+        /// </summary>
         private const String CtlToken = "Token";
+        
+        /// <summary>
+        /// Control name for the connection test button.
+        /// </summary>
         private const String CtlTest = "Test";
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ConfigureHomeAssistantAction"/> class.
+        /// Sets up action editor controls for Home Assistant configuration and connection testing.
+        /// </summary>
         public ConfigureHomeAssistantAction()
         {
             this.Name = "ConfigureHomeAssistant";
@@ -43,12 +65,26 @@ namespace Loupedeck.HomeAssistantPlugin
             this.ActionEditor.ControlValueChanged += this.OnControlValueChanged;
         }
 
-
+        /// <summary>
+        /// Loads the configuration action.
+        /// </summary>
+        /// <returns>Always <c>true</c> as this action requires no initialization.</returns>
         protected override Boolean OnLoad() => true;
 
-        // This action is just a config surface, not something to "run"
+        /// <summary>
+        /// Executes the configuration command.
+        /// This action serves as a configuration surface only and does not perform runtime operations.
+        /// </summary>
+        /// <param name="_">Action editor parameters (unused for configuration actions).</param>
+        /// <returns>Always <c>true</c> as this is a configuration-only action.</returns>
         protected override Boolean RunCommand(ActionEditorActionParameters _) => true;
 
+        /// <summary>
+        /// Handles the action editor started event to update the display name with current configuration.
+        /// Updates the action title to include the configured Home Assistant host name if available.
+        /// </summary>
+        /// <param name="sender">Event sender.</param>
+        /// <param name="e">Action editor started event arguments.</param>
         private void OnActionEditorStarted(Object? sender, ActionEditorStartedEventArgs e)
         {
             // Reflect current config in the editor header
@@ -71,6 +107,13 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
+        /// <summary>
+        /// Handles control value changes for configuration inputs and connection testing.
+        /// Saves configuration values to plugin settings and performs connection testing when requested.
+        /// Updates the display name dynamically based on the configured base URL.
+        /// </summary>
+        /// <param name="sender">Event sender.</param>
+        /// <param name="e">Control value changed event arguments.</param>
         private void OnControlValueChanged(Object? sender, ActionEditorControlValueChangedEventArgs e)
         {
             try

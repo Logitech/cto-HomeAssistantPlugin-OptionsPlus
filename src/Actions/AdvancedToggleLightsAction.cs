@@ -10,46 +10,162 @@ namespace Loupedeck.HomeAssistantPlugin
     using Loupedeck;
     using Loupedeck.HomeAssistantPlugin.Services;
 
+    /// <summary>
+    /// Advanced action for toggling multiple Home Assistant lights with comprehensive control options.
+    /// Supports brightness, color temperature, hue/saturation, and white level adjustments across RGB, RGBW, and RGBWW light types.
+    /// Uses modern dependency injection pattern with debounced light control for optimal performance.
+    /// </summary>
     public sealed class AdvancedToggleLightsAction : ActionEditorCommand, IDisposable
     {
+        /// <summary>
+        /// Logging prefix for this action's log messages.
+        /// </summary>
         private const String LogPrefix = "[AdvancedToggleLights]";
 
-        // Service dependencies - modern dependency injection pattern
+        /// <summary>
+        /// Home Assistant client interface for WebSocket communication.
+        /// </summary>
         private IHaClient? _ha;
+        
+        /// <summary>
+        /// Light control service with debounced adjustments.
+        /// </summary>
         private ILightControlService? _lightSvc;
+        
+        /// <summary>
+        /// Light state manager for tracking light properties and capabilities.
+        /// </summary>
         private ILightStateManager? _lightStateManager;
+        
+        /// <summary>
+        /// Data service for fetching Home Assistant entity states.
+        /// </summary>
         private IHomeAssistantDataService? _dataService;
+        
+        /// <summary>
+        /// Data parser for processing Home Assistant JSON responses.
+        /// </summary>
         private IHomeAssistantDataParser? _dataParser;
+        
+        /// <summary>
+        /// Registry service for device, entity, and area management.
+        /// </summary>
         private IRegistryService? _registryService;
 
+        /// <summary>
+        /// Capability service for analyzing light feature support.
+        /// </summary>
         private readonly CapabilityService _capSvc = new();
+        
+        /// <summary>
+        /// Indicates whether this instance has been disposed.
+        /// </summary>
         private Boolean _disposed = false;
 
-        // Control names
+        /// <summary>
+        /// Control name for primary light selection dropdown.
+        /// </summary>
         private const String ControlLights = "ha_lights";
+        
+        /// <summary>
+        /// Control name for additional lights text input (comma-separated entity IDs).
+        /// </summary>
         private const String ControlAdditionalLights = "ha_additional_lights";
+        
+        /// <summary>
+        /// Control name for brightness adjustment (0-255).
+        /// </summary>
         private const String ControlBrightness = "ha_brightness";
+        
+        /// <summary>
+        /// Control name for color temperature adjustment (2000K-6500K).
+        /// </summary>
         private const String ControlTemperature = "ha_temperature";
+        
+        /// <summary>
+        /// Control name for hue adjustment (0-360 degrees).
+        /// </summary>
         private const String ControlHue = "ha_hue";
+        
+        /// <summary>
+        /// Control name for saturation adjustment (0-100%).
+        /// </summary>
         private const String ControlSaturation = "ha_saturation";
+        
+        /// <summary>
+        /// Control name for white level adjustment (0-255) for RGBW lights or warm white in RGBWW.
+        /// </summary>
         private const String ControlWhiteLevel = "ha_white_level";
+        
+        /// <summary>
+        /// Control name for cold white level adjustment (0-255) for RGBWW lights.
+        /// </summary>
         private const String ControlColdWhiteLevel = "ha_cold_white_level";
 
-        // Constants - extracted and organized like the newer code
+        /// <summary>
+        /// Minimum brightness value supported by Home Assistant (1-255 range).
+        /// </summary>
         private const Int32 MinBrightness = 1;
+        
+        /// <summary>
+        /// Maximum brightness value supported by Home Assistant (1-255 range).
+        /// </summary>
         private const Int32 MaxBrightness = 255;
+        
+        /// <summary>
+        /// Minimum color temperature in Kelvin (warm white).
+        /// </summary>
         private const Int32 MinTemperature = 2000;
+        
+        /// <summary>
+        /// Maximum color temperature in Kelvin (cool white).
+        /// </summary>
         private const Int32 MaxTemperature = 6500;
+        
+        /// <summary>
+        /// Minimum hue value in degrees (0-360 range).
+        /// </summary>
         private const Double MinHue = 0.0;
+        
+        /// <summary>
+        /// Maximum hue value in degrees (0-360 range).
+        /// </summary>
         private const Double MaxHue = 360.0;
+        
+        /// <summary>
+        /// Minimum saturation value as percentage (0-100 range).
+        /// </summary>
         private const Double MinSaturation = 0.0;
+        
+        /// <summary>
+        /// Maximum saturation value as percentage (0-100 range).
+        /// </summary>
         private const Double MaxSaturation = 100.0;
+        
+        /// <summary>
+        /// Full color value used for HSB to RGB conversion (100%).
+        /// </summary>
         private const Double FullColorValue = 100.0;
+        
+        /// <summary>
+        /// Authentication timeout in seconds for Home Assistant connections.
+        /// </summary>
         private const Int32 AuthTimeoutSeconds = 8;
+        
+        /// <summary>
+        /// Debounce interval in milliseconds for light control adjustments.
+        /// </summary>
         private const Int32 DebounceMs = 100;
 
+        /// <summary>
+        /// Icon service for rendering action button graphics.
+        /// </summary>
         private readonly IconService _icons;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="AdvancedToggleLightsAction"/> class.
+        /// Sets up action editor controls for light selection and parameter configuration.
+        /// </summary>
         public AdvancedToggleLightsAction()
         {
             this.Name = "HomeAssistant.AdvancedToggleLights";
@@ -112,10 +228,22 @@ namespace Loupedeck.HomeAssistantPlugin
             PluginLog.Info($"{LogPrefix} Constructor completed - dependency initialization deferred to OnLoad()");
         }
 
+        /// <summary>
+        /// Gets the command image for the action button.
+        /// </summary>
+        /// <param name="parameters">Action editor parameters.</param>
+        /// <param name="width">Requested image width.</param>
+        /// <param name="height">Requested image height.</param>
+        /// <returns>Bitmap image showing a light bulb icon.</returns>
         protected override BitmapImage GetCommandImage(ActionEditorActionParameters parameters, Int32 width, Int32 height) =>
             // Always show bulb icon for now
             this._icons.Get(IconId.Bulb);
 
+        /// <summary>
+        /// Loads the action and initializes service dependencies using modern dependency injection pattern.
+        /// Creates adapters for Home Assistant client, data services, and light control.
+        /// </summary>
+        /// <returns><c>true</c> if initialization succeeded; otherwise, <c>false</c>.</returns>
         protected override Boolean OnLoad()
         {
             PluginLog.Info($"{LogPrefix} OnLoad() START");
@@ -162,6 +290,10 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
+        /// <summary>
+        /// Unloads the action and disposes of resources.
+        /// </summary>
+        /// <returns>Always <c>true</c> indicating successful unload.</returns>
         protected override Boolean OnUnload()
         {
             PluginLog.Info($"{LogPrefix} OnUnload()");
@@ -169,6 +301,10 @@ namespace Loupedeck.HomeAssistantPlugin
             return true;
         }
 
+        /// <summary>
+        /// Disposes of managed resources, particularly the light control service.
+        /// Shared services are managed by the main plugin and are not disposed here.
+        /// </summary>
         public void Dispose()
         {
             if (this._disposed)
@@ -198,7 +334,11 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
-        // Ensure we have an authenticated connection using modern service architecture
+        /// <summary>
+        /// Ensures Home Assistant connection is established and authenticated.
+        /// Validates configuration settings and attempts connection if not already authenticated.
+        /// </summary>
+        /// <returns><c>true</c> if connection is ready; otherwise, <c>false</c>.</returns>
         private async Task<Boolean> EnsureHaReadyAsync()
         {
             if (this._ha == null)
@@ -257,8 +397,19 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
+        /// <summary>
+        /// Gets the capabilities for a single light from its attributes.
+        /// </summary>
+        /// <param name="attrs">JSON element containing light attributes from Home Assistant.</param>
+        /// <returns>Light capabilities indicating supported features.</returns>
         private LightCaps GetLightCapabilities(JsonElement attrs) => this._capSvc.ForLight(attrs);
 
+        /// <summary>
+        /// Calculates the common capabilities supported by all specified lights.
+        /// Returns the intersection of capabilities to ensure all lights support the requested operations.
+        /// </summary>
+        /// <param name="entityIds">Collection of light entity IDs to analyze.</param>
+        /// <returns>Common light capabilities supported by all specified lights.</returns>
         private LightCaps GetCommonCapabilities(IEnumerable<String> entityIds)
         {
             if (!entityIds.Any())
@@ -295,6 +446,13 @@ namespace Loupedeck.HomeAssistantPlugin
             return new LightCaps(commonOnOff, commonBrightness, commonColorTemp, commonColorHs, null);
         }
 
+        /// <summary>
+        /// Executes the advanced toggle lights command with comprehensive light control.
+        /// Processes multiple lights with brightness, color temperature, hue/saturation, and white level parameters.
+        /// Implements toggle behavior - if lights are on with parameters, turns them off; if off, turns on with parameters.
+        /// </summary>
+        /// <param name="ps">Action editor parameters containing user-configured values.</param>
+        /// <returns><c>true</c> if all light operations succeeded; otherwise, <c>false</c>.</returns>
         protected override Boolean RunCommand(ActionEditorActionParameters ps)
         {
             try
@@ -375,6 +533,15 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
+        /// <summary>
+        /// Parses and validates an integer parameter from action editor parameters.
+        /// Clamps the value to the specified range and logs warnings for invalid inputs.
+        /// </summary>
+        /// <param name="ps">Action editor parameters.</param>
+        /// <param name="controlName">Name of the control to parse.</param>
+        /// <param name="min">Minimum allowed value (inclusive).</param>
+        /// <param name="max">Maximum allowed value (inclusive).</param>
+        /// <returns>Parsed and clamped integer value, or <c>null</c> if parsing failed or value was empty.</returns>
         private Int32? ParseIntParameter(ActionEditorActionParameters ps, String controlName, Int32 min, Int32 max)
         {
             if (!ps.TryGetString(controlName, out var valueStr) || String.IsNullOrWhiteSpace(valueStr))
@@ -396,6 +563,15 @@ namespace Loupedeck.HomeAssistantPlugin
             return null;
         }
 
+        /// <summary>
+        /// Parses and validates a double parameter from action editor parameters.
+        /// Clamps the value to the specified range and logs warnings for invalid inputs.
+        /// </summary>
+        /// <param name="ps">Action editor parameters.</param>
+        /// <param name="controlName">Name of the control to parse.</param>
+        /// <param name="min">Minimum allowed value (inclusive).</param>
+        /// <param name="max">Maximum allowed value (inclusive).</param>
+        /// <returns>Parsed and clamped double value, or <c>null</c> if parsing failed or value was empty.</returns>
         private Double? ParseDoubleParameter(ActionEditorActionParameters ps, String controlName, Double min, Double max)
         {
             if (!ps.TryGetString(controlName, out var valueStr) || String.IsNullOrWhiteSpace(valueStr))

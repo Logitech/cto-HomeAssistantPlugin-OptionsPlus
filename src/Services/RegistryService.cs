@@ -31,6 +31,10 @@ namespace Loupedeck.HomeAssistantPlugin.Services
         private Dictionary<String, String> _areaIdToName =
             new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>
+        /// Updates all registry data from parsed registry information.
+        /// </summary>
+        /// <param name="data">Parsed registry data.</param>
         public void UpdateRegistries(ParsedRegistryData data)
         {
             PluginLog.Info(() => $"[RegistryService] Updating registries: {data.DeviceById.Count} devices, {data.EntityDevice.Count} entities, {data.AreaIdToName.Count} areas");
@@ -50,8 +54,18 @@ namespace Loupedeck.HomeAssistantPlugin.Services
             PluginLog.Debug("Registry update completed");
         }
 
+        /// <summary>
+        /// Gets the area ID for a device.
+        /// </summary>
+        /// <param name="deviceId">Device ID.</param>
+        /// <returns>Area ID or null if not found.</returns>
         public String? GetDeviceArea(String deviceId) => this._deviceAreaById.TryGetValue(deviceId, out var areaId) ? areaId : null;
 
+        /// <summary>
+        /// Gets the area ID for an entity (checks entity area first, then device area).
+        /// </summary>
+        /// <param name="entityId">Entity ID.</param>
+        /// <returns>Area ID or null if not found.</returns>
         public String? GetEntityArea(String entityId)
         {
             // Check entity area first (higher priority)
@@ -67,8 +81,18 @@ namespace Loupedeck.HomeAssistantPlugin.Services
                 : null;
         }
 
+        /// <summary>
+        /// Gets the friendly name for an area.
+        /// </summary>
+        /// <param name="areaId">Area ID.</param>
+        /// <returns>Area name or null if not found.</returns>
         public String? GetAreaName(String areaId) => this._areaIdToName.TryGetValue(areaId, out var name) ? name : null;
 
+        /// <summary>
+        /// Gets device information (name, manufacturer, model).
+        /// </summary>
+        /// <param name="deviceId">Device ID.</param>
+        /// <returns>Tuple of device name, manufacturer, and model.</returns>
         public (String name, String manufacturer, String model) GetDeviceInfo(String deviceId)
         {
             return this._deviceById.TryGetValue(deviceId, out var info)
@@ -76,6 +100,11 @@ namespace Loupedeck.HomeAssistantPlugin.Services
                 : ("", "", ""); // Return empty strings if not found
         }
 
+        /// <summary>
+        /// Gets all area IDs that contain lights.
+        /// </summary>
+        /// <param name="lightEntityIds">Collection of light entity IDs.</param>
+        /// <returns>Collection of area IDs with lights.</returns>
         public IEnumerable<String> GetAreasWithLights(IEnumerable<String> lightEntityIds)
         {
             var areaIds = new HashSet<String>(StringComparer.OrdinalIgnoreCase);
@@ -93,6 +122,12 @@ namespace Loupedeck.HomeAssistantPlugin.Services
                 .Select(t => t.aid);
         }
 
+        /// <summary>
+        /// Gets all light entity IDs in a specific area.
+        /// </summary>
+        /// <param name="areaId">Area ID.</param>
+        /// <param name="lightEntityIds">Collection of all light entity IDs.</param>
+        /// <returns>Collection of light entity IDs in the area.</returns>
         public IEnumerable<String> GetLightsInArea(String areaId, IEnumerable<String> lightEntityIds)
         {
             return lightEntityIds.Where(entityId =>
@@ -102,6 +137,11 @@ namespace Loupedeck.HomeAssistantPlugin.Services
             });
         }
 
+        /// <summary>
+        /// Gets the device ID associated with an entity.
+        /// </summary>
+        /// <param name="entityId">Entity ID.</param>
+        /// <returns>Device ID or null if not found.</returns>
         public String? GetEntityDeviceId(String entityId)
         {
             return this._entityDevice.TryGetValue(entityId, out var info)
@@ -109,6 +149,11 @@ namespace Loupedeck.HomeAssistantPlugin.Services
                 : null;
         }
 
+        /// <summary>
+        /// Gets the original name for an entity from the registry.
+        /// </summary>
+        /// <param name="entityId">Entity ID.</param>
+        /// <returns>Original name or null if not found.</returns>
         public String? GetEntityOriginalName(String entityId)
         {
             return this._entityDevice.TryGetValue(entityId, out var info)
@@ -116,6 +161,11 @@ namespace Loupedeck.HomeAssistantPlugin.Services
                 : null;
         }
 
+        /// <summary>
+        /// Checks if an area exists in the registry.
+        /// </summary>
+        /// <param name="areaId">Area ID.</param>
+        /// <returns>True if area exists.</returns>
         public Boolean AreaExists(String areaId) => this._areaIdToName.ContainsKey(areaId);
 
         /// <summary>

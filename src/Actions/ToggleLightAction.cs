@@ -9,21 +9,41 @@ namespace Loupedeck.HomeAssistantPlugin
     using Loupedeck;
     using Loupedeck.HomeAssistantPlugin.Services;
 
+    /// <summary>
+    /// Simple action for toggling Home Assistant lights on/off.
+    /// Provides basic light control functionality with automatic entity discovery.
+    /// </summary>
     public sealed class ToggleLightAction : ActionEditorCommand
     {
-        // ====================================================================
-        // CONSTANTS - Toggle Light Action Configuration
-        // ====================================================================
+        /// <summary>
+        /// Timeout in seconds for Home Assistant authentication operations.
+        /// </summary>
+        private const Int32 ConnectionTimeoutSeconds = 8;
 
-        // --- Connection Constants ---
-        private const Int32 ConnectionTimeoutSeconds = 8;              // Timeout for Home Assistant authentication
-
+        /// <summary>
+        /// Logging prefix for this action's log messages.
+        /// </summary>
         private const String LogPrefix = "[ToggleLight]";
+        
+        /// <summary>
+        /// Home Assistant WebSocket client for communication.
+        /// </summary>
         private HaWebSocketClient? _client;
 
+        /// <summary>
+        /// Control name for the light selection dropdown.
+        /// </summary>
         private const String ControlLight = "ha_light";
+        
+        /// <summary>
+        /// Icon service for rendering action button graphics.
+        /// </summary>
         private readonly IconService _icons;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ToggleLightAction"/> class.
+        /// Sets up the action editor controls for light selection.
+        /// </summary>
         public ToggleLightAction()
         {
             this.Name = "HomeAssistant.ToggleLight";
@@ -41,6 +61,13 @@ namespace Loupedeck.HomeAssistantPlugin
             });
         }
 
+        /// <summary>
+        /// Gets the command image for the action button.
+        /// </summary>
+        /// <param name="parameters">Action editor parameters.</param>
+        /// <param name="width">Requested image width.</param>
+        /// <param name="height">Requested image height.</param>
+        /// <returns>Bitmap image showing a light bulb icon.</returns>
         protected override BitmapImage GetCommandImage(ActionEditorActionParameters parameters, Int32 width, Int32 height)
         {
             if (parameters.TryGetString(ControlLight, out var entityId) && !String.IsNullOrWhiteSpace(entityId))
@@ -52,6 +79,10 @@ namespace Loupedeck.HomeAssistantPlugin
             return this._icons.Get(IconId.Bulb);
         }
 
+        /// <summary>
+        /// Loads the action and initializes the Home Assistant WebSocket client.
+        /// </summary>
+        /// <returns><c>true</c> if initialization succeeded; otherwise, <c>false</c>.</returns>
         protected override Boolean OnLoad()
         {
             PluginLog.Info($"{LogPrefix} OnLoad()");
@@ -64,7 +95,11 @@ namespace Loupedeck.HomeAssistantPlugin
             return false;
         }
 
-        // Ensure we have an authenticated WS
+        /// <summary>
+        /// Ensures Home Assistant connection is established and authenticated.
+        /// Validates configuration settings and attempts connection if not already authenticated.
+        /// </summary>
+        /// <returns><c>true</c> if connection is ready; otherwise, <c>false</c>.</returns>
         private async Task<Boolean> EnsureHaReadyAsync()
         {
             if (this._client?.IsAuthenticated == true)
@@ -104,13 +139,19 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
+        /// <summary>
+        /// Executes the toggle light command.
+        /// Sends a toggle service call to Home Assistant for the selected light entity.
+        /// </summary>
+        /// <param name="ps">Action editor parameters containing the selected light entity ID.</param>
+        /// <returns><c>true</c> if the toggle command succeeded; otherwise, <c>false</c>.</returns>
         protected override Boolean RunCommand(ActionEditorActionParameters ps)
         {
             try
             {
                 PluginLog.Info($"{LogPrefix} RunCommand START");
 
-                // Make sure we’re online before doing anything
+                // Make sure we're online before doing anything
                 if (!this.EnsureHaReadyAsync().GetAwaiter().GetResult())
                 {
                     PluginLog.Warning($"{LogPrefix} RunCommand: EnsureHaReady failed");
@@ -142,6 +183,13 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
+        /// <summary>
+        /// Handles listbox items requested event to populate the light selection dropdown.
+        /// Fetches available light entities from Home Assistant and displays them with friendly names.
+        /// Provides error handling for connection issues and configuration problems.
+        /// </summary>
+        /// <param name="sender">Event sender.</param>
+        /// <param name="e">Listbox items requested event arguments.</param>
         private void OnListboxItemsRequested(Object? sender, ActionEditorListboxItemsRequestedEventArgs e)
         {
             if (!e.ControlName.EqualsNoCase(ControlLight))
@@ -152,7 +200,7 @@ namespace Loupedeck.HomeAssistantPlugin
             PluginLog.Debug(() => $"{LogPrefix} ListboxItemsRequested({e.ControlName})");
             try
             {
-                // Ensure we’re connected before asking HA for states
+                // Ensure we're connected before asking HA for states
                 if (!this.EnsureHaReadyAsync().GetAwaiter().GetResult())
                 {
                     PluginLog.Warning($"{LogPrefix} List: EnsureHaReady failed (not connected/authenticated)");
