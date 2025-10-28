@@ -112,11 +112,9 @@ namespace Loupedeck.HomeAssistantPlugin
             PluginLog.Info($"{LogPrefix} Constructor completed - dependency initialization deferred to OnLoad()");
         }
 
-        protected override BitmapImage GetCommandImage(ActionEditorActionParameters parameters, Int32 width, Int32 height)
-        {
+        protected override BitmapImage GetCommandImage(ActionEditorActionParameters parameters, Int32 width, Int32 height) =>
             // Always show bulb icon for now
-            return this._icons.Get(IconId.Bulb);
-        }
+            this._icons.Get(IconId.Bulb);
 
         protected override Boolean OnLoad()
         {
@@ -174,7 +172,9 @@ namespace Loupedeck.HomeAssistantPlugin
         public void Dispose()
         {
             if (this._disposed)
+            {
                 return;
+            }
 
             PluginLog.Info($"{LogPrefix} Disposing resources");
 
@@ -257,15 +257,14 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
-        private LightCaps GetLightCapabilities(JsonElement attrs)
-        {
-            return this._capSvc.ForLight(attrs);
-        }
+        private LightCaps GetLightCapabilities(JsonElement attrs) => this._capSvc.ForLight(attrs);
 
         private LightCaps GetCommonCapabilities(IEnumerable<String> entityIds)
         {
             if (!entityIds.Any())
+            {
                 return new LightCaps(false, false, false, false, null);
+            }
 
             if (this._lightStateManager == null)
             {
@@ -282,7 +281,9 @@ namespace Loupedeck.HomeAssistantPlugin
             }
 
             if (!allCaps.Any())
+            {
                 return new LightCaps(true, false, false, false, null);
+            }
 
             // Return intersection of all capabilities (what ALL lights support)
             var commonOnOff = allCaps.All(c => c.OnOff);
@@ -377,7 +378,9 @@ namespace Loupedeck.HomeAssistantPlugin
         private Int32? ParseIntParameter(ActionEditorActionParameters ps, String controlName, Int32 min, Int32 max)
         {
             if (!ps.TryGetString(controlName, out var valueStr) || String.IsNullOrWhiteSpace(valueStr))
+            {
                 return null;
+            }
 
             if (Int32.TryParse(valueStr, out var value))
             {
@@ -396,7 +399,9 @@ namespace Loupedeck.HomeAssistantPlugin
         private Double? ParseDoubleParameter(ActionEditorActionParameters ps, String controlName, Double min, Double max)
         {
             if (!ps.TryGetString(controlName, out var valueStr) || String.IsNullOrWhiteSpace(valueStr))
+            {
                 return null;
+            }
 
             if (Double.TryParse(valueStr, out var value))
             {
@@ -449,8 +454,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     var friendlyName = entityId; // Could be enhanced to get friendly name
                     this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
-                        $"Failed to toggle light {friendlyName}",
-                        "Check Home Assistant logs for details");
+                        $"Failed to toggle light {friendlyName}");
                 }
 
                 return success;
@@ -478,8 +482,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     var friendlyName = entityId; // Could be enhanced to get friendly name
                     this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
-                        $"Failed to turn off light {friendlyName}",
-                        "Check Home Assistant logs for details");
+                        $"Failed to turn off light {friendlyName}");
                 }
 
                 return success;
@@ -515,8 +518,16 @@ namespace Loupedeck.HomeAssistantPlugin
                      (preferredColorMode.EqualsNoCase("rgbw") || preferredColorMode.EqualsNoCase("rgbww")))
             {
                 var whiteLevels = new List<String>();
-                if (whiteLevel.HasValue) whiteLevels.Add($"warm={whiteLevel.Value}");
-                if (coldWhiteLevel.HasValue) whiteLevels.Add($"cold={coldWhiteLevel.Value}");
+                if (whiteLevel.HasValue)
+                {
+                    whiteLevels.Add($"warm={whiteLevel.Value}");
+                }
+
+                if (coldWhiteLevel.HasValue)
+                {
+                    whiteLevels.Add($"cold={coldWhiteLevel.Value}");
+                }
+
                 PluginLog.Info($"{LogPrefix} White levels ({String.Join(", ", whiteLevels)}) will be used for white channels in {preferredColorMode} mode (not as brightness)");
             }
 
@@ -583,9 +594,9 @@ namespace Loupedeck.HomeAssistantPlugin
                             var white = HSBHelper.Clamp(whiteLevel.Value, 0, MaxBrightness);
                             var kelvin = HSBHelper.Clamp(temperature.Value, MinTemperature, MaxTemperature);
                             // Convert temperature to cold/warm ratio (2000K = warm, 6500K = cold)
-                            var tempRatio = (kelvin - MinTemperature) / (double)(MaxTemperature - MinTemperature);
-                            coldWhite = (int)(white * tempRatio);
-                            warmWhite = (int)(white * (1.0 - tempRatio));
+                            var tempRatio = (kelvin - MinTemperature) / (Double)(MaxTemperature - MinTemperature);
+                            coldWhite = (Int32)(white * tempRatio);
+                            warmWhite = (Int32)(white * (1.0 - tempRatio));
                             PluginLog.Info($"{LogPrefix} Using temperature-based distribution: {kelvin}K -> cold={coldWhite}, warm={warmWhite}");
                         }
                         
@@ -759,8 +770,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     var friendlyName = entityId; // Could be enhanced to get friendly name
                     this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
-                        $"Failed to control light {friendlyName}",
-                        "Check Home Assistant logs for details");
+                        $"Failed to control light {friendlyName}");
                 }
 
                 return overallSuccess;
@@ -783,15 +793,14 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     var friendlyName = entityId; // Could be enhanced to get friendly name
                     this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
-                        $"Failed to turn on light {friendlyName}",
-                        "Check Home Assistant logs for details");
+                        $"Failed to turn on light {friendlyName}");
                 }
 
                 return success;
             }
         }
 
-        private void OnListboxItemsRequested(Object sender, ActionEditorListboxItemsRequestedEventArgs e)
+        private void OnListboxItemsRequested(Object? sender, ActionEditorListboxItemsRequestedEventArgs e)
         {
             if (!e.ControlName.EqualsNoCase(ControlLights))
             {
@@ -813,16 +822,14 @@ namespace Loupedeck.HomeAssistantPlugin
                         e.AddItem("!not_configured", "Home Assistant not configured", "Open plugin settings");
                         // Report configuration error to user
                         this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
-                            "Home Assistant not configured",
-                            "Please set Base URL and Token in plugin settings");
+                            "Home Assistant URL and Token not configured");
                     }
                     else
                     {
                         e.AddItem("!not_connected", "Could not connect to Home Assistant", "Check URL/token");
                         // Report connection error to user
                         this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
-                            "Could not connect to Home Assistant",
-                            "Please check your Base URL and Token settings");
+                            "Could not connect to Home Assistant");
                     }
                     return;
                 }
@@ -833,8 +840,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     e.AddItem("!no_service", "Data service not available", "Plugin initialization error");
                     // Report service error to user
                     this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
-                        "Plugin initialization error",
-                        "Data service not available - please restart plugin");
+                        "Plugin initialization error");
                     return;
                 }
 
@@ -846,7 +852,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 if (!ok || String.IsNullOrEmpty(json))
                 {
                     e.AddItem("!no_states", $"Failed to fetch states: {error ?? "unknown"}", "Check connection");
-                    Plugin.OnPluginStatusChanged(PluginStatus.Error,
+                    this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
                         $"Failed to fetch entity states error: {error}");
                     return;
                 }
@@ -861,8 +867,7 @@ namespace Loupedeck.HomeAssistantPlugin
                         PluginLog.Warning($"{LogPrefix} LightStateManager.InitOrUpdateAsync failed: {errorMessage}");
                         // Report initialization error to user
                         this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
-                            "Failed to load light data",
-                            errorMessage ?? "Unknown error occurred while fetching lights from Home Assistant");
+                            $"Failed to load light data: {errorMessage}");
                         // Still show the dropdown with error message
                         e.AddItem("!init_failed", "Failed to load lights", errorMessage ?? "Check connection to Home Assistant");
                         return;
@@ -904,8 +909,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 if (count > 0)
                 {
                     this.Plugin.OnPluginStatusChanged(PluginStatus.Normal,
-                        $"Successfully loaded {count} lights",
-                        null);
+                        $"Successfully loaded {count} lights");
                 }
 
                 // Keep current selection
