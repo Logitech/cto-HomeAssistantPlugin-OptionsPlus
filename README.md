@@ -90,6 +90,66 @@ Toggle a single `light.*` on/off via Home Assistant.
 
 ---
 
+### Advanced Toggle Lights
+
+Advanced multi-light control with comprehensive settings and capability-aware parameter management.
+
+* **Press** → intelligently toggles selected lights with smart parameter handling:
+  - **Lights ON with parameters** → turn OFF
+  - **Lights OFF** → turn ON with your configured parameters (brightness, color temperature, hue, saturation, white levels)
+
+**To configure:**
+
+1. Place **Advanced Toggle Lights** on your layout.
+2. In the popup:
+   
+   * **Select Lights**: Choose one light from the dropdown, or add additional lights by entering entity IDs in the field below (e.g., `light.living_room,light.kitchen`)
+   * **Brightness**: Set desired brightness level (0-255)
+   * **Color Temperature**: Set color temperature if supported by lights
+   * **Hue & Saturation**: Set color values if supported by lights
+   * **White Levels**: Configure white channel levels for RGBW lights (requires hue and saturation to also be set)
+
+**Key Features:**
+
+* **Smart Toggle Behavior**: Automatically determines whether to turn lights on or off based on current state
+* **Debounced Service Calls**: Smooth operation with optimized Home Assistant API calls
+* **Full Parameter Control**: Complete control over all supported light parameters
+
+**Best for**: Controlling multiple lights of similar capabilities where you want consistent behavior across all selected lights.
+
+---
+
+### Area Toggle Lights
+
+Area-based light control that automatically discovers and controls all lights in a selected area with individual capability optimization.
+
+* **Press** → toggles all lights in the selected area with intelligent per-light parameter handling:
+  - Each light gets the **maximum parameters it individually supports**
+  - **Mixed capability areas** work seamlessly (RGB + brightness-only lights together)
+
+**To configure:**
+
+1. Place **Area Toggle Lights** on your layout.
+2. In the popup:
+   
+   * **Select Area**: Choose from dropdown showing "Area Name (X lights)" format
+   * **Brightness**: Set desired brightness level (0-255)
+   * **Color Temperature**: Set color temperature for capable lights
+   * **Hue & Saturation**: Set color values for capable lights
+   * **White Levels**: Configure white channel levels for RGBW-capable lights (requires hue and saturation to also be set)
+
+**Key Features:**
+
+* **Individual Capability Filtering**: Each light gets maximum possible parameters it supports (not limited by other lights in area)
+* **Automatic Light Discovery**: Finds all lights in selected area automatically
+* **Mixed Capability Support**: Perfect for areas with different light types (smart bulbs + dimmers + switches)
+* **Smart Per-Light Toggle**: Each light toggles individually based on its own current state
+* **Area-Centric Control**: No need to select individual lights - just pick the area
+
+**Best for**: Controlling entire areas/rooms where lights have different capabilities, maximizing each light's potential.
+
+---
+
 ### All Light Controls (Areas → Lights → Commands)
 
 Browse all lights and control them with capability-aware dials.
@@ -144,11 +204,27 @@ The Long-Lived Token must allow:
 * **Run Home Assistant Scripts (Action)**
   A dedicated action to trigger any **Home Assistant `script.*`** (with optional variables) and stop/toggle when running.
 
+* **Toggle Single Light (Action)**
+  Simple toggle action for individual light entities with basic on/off control.
+
+* **Advanced Multi-Light Control (Action)**
+  Sophisticated action for controlling multiple selected lights with capability intersection approach - uses parameters that ALL selected lights support for consistent behavior.
+
+* **Area-Based Light Control (Action)**
+  Intelligent area control that automatically discovers all lights in a selected area and maximizes each light's individual capabilities with smart parameter filtering.
+
 * **Control All Lights (Action) with Area-First Navigation**
   One action to browse **Areas → Lights → Commands**: pick an area, select a light, then use per-device controls.
 
 * **Capability-Aware Controls**
   Only shows controls a device actually supports (on/off, brightness, color temperature, hue, saturation).
+
+* **Smart Toggle Behavior**
+  Intelligent toggle logic that turns lights OFF when they're ON with parameters, or turns them ON with configured parameters when OFF.
+
+* **Dual Capability Approaches**
+  - **Intersection Approach** (Advanced Toggle): Parameters limited to what ALL lights support
+  - **Individual Filtering** (Area Toggle): Each light gets maximum parameters it individually supports
 
 * **Optimistic UI + Debounced Sends**
   Dials update instantly while changes are coalesced to reduce Home Assistant traffic and avoid jitter.
@@ -226,7 +302,9 @@ src/
     ConfigureHomeAssistantAction.cs
     HomeAssistantLightsDynamicFolder.cs   # Areas → Lights → Commands (refactored)
     RunScriptAction.cs
-    ToggleLightAction.cs
+    ToggleLightAction.cs                  # Simple individual light toggle
+    AdvancedToggleLightsAction.cs         # Multi-light control with capability intersection
+    AreaToggleLightsAction.cs             # Area-based control with individual capability filtering
   Services/
     # Core Services
     LightControlService.cs            # light control with debouncing
