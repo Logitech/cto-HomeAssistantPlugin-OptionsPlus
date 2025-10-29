@@ -171,7 +171,7 @@ namespace Loupedeck.HomeAssistantPlugin
         public AreaToggleLightsAction()
         {
             this.Name = "HomeAssistant.AreaToggleLights";
-            this.DisplayName = "Area Toggle Lights";
+            this.DisplayName = "Advanced Toggle Area Lights";
             this.GroupName = "Lights";
             this.Description = "Toggle all lights in a Home Assistant area with advanced controls for brightness, color, and temperature.";
 
