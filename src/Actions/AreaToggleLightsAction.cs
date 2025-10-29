@@ -8,19 +8,20 @@ namespace Loupedeck.HomeAssistantPlugin
     using System.Threading.Tasks;
 
     using Loupedeck;
+    using Loupedeck.HomeAssistantPlugin.Models;
     using Loupedeck.HomeAssistantPlugin.Services;
 
     /// <summary>
-    /// Advanced action for toggling multiple Home Assistant lights with comprehensive control options.
-    /// Supports brightness, color temperature, hue/saturation, and white level adjustments across RGB, RGBW, and RGBWW light types.
-    /// Uses modern dependency injection pattern with debounced light control for optimal performance.
+    /// Area-based action for toggling all Home Assistant lights in a selected area.
+    /// Supports brightness, color temperature, hue/saturation, and white level adjustments.
+    /// Uses individual light capability filtering to send maximum possible settings to each light.
     /// </summary>
-    public sealed class AdvancedToggleLightsAction : ActionEditorCommand, IDisposable
+    public sealed class AreaToggleLightsAction : ActionEditorCommand, IDisposable
     {
         /// <summary>
         /// Logging prefix for this action's log messages.
         /// </summary>
-        private const String LogPrefix = "[AdvancedToggleLights]";
+        private const String LogPrefix = "[AreaToggleLights]";
 
         /// <summary>
         /// Home Assistant client interface for WebSocket communication.
@@ -47,10 +48,6 @@ namespace Loupedeck.HomeAssistantPlugin
         /// </summary>
         private IHomeAssistantDataParser? _dataParser;
         
-        /// <summary>
-        /// Registry service for device, entity, and area management.
-        /// </summary>
-        private IRegistryService? _registryService;
 
         /// <summary>
         /// Capability service for analyzing light feature support.
@@ -63,14 +60,9 @@ namespace Loupedeck.HomeAssistantPlugin
         private Boolean _disposed = false;
 
         /// <summary>
-        /// Control name for primary light selection dropdown.
+        /// Control name for area selection dropdown.
         /// </summary>
-        private const String ControlLights = "ha_lights";
-        
-        /// <summary>
-        /// Control name for additional lights text input (comma-separated entity IDs).
-        /// </summary>
-        private const String ControlAdditionalLights = "ha_additional_lights";
+        private const String ControlArea = "ha_area";
         
         /// <summary>
         /// Control name for brightness adjustment (0-255).
@@ -163,56 +155,55 @@ namespace Loupedeck.HomeAssistantPlugin
         private readonly IconService _icons;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="AdvancedToggleLightsAction"/> class.
-        /// Sets up action editor controls for light selection and parameter configuration.
+        /// Area mapping: Area ID to friendly name from registry data.
         /// </summary>
-        public AdvancedToggleLightsAction()
+        private readonly Dictionary<String, String> _areaIdToName = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Entity mapping: Entity ID to Area ID from lights data.
+        /// </summary>
+        private readonly Dictionary<String, String> _entityToAreaId = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="AreaToggleLightsAction"/> class.
+        /// Sets up action editor controls for area selection and parameter configuration.
+        /// </summary>
+        public AreaToggleLightsAction()
         {
-            this.Name = "HomeAssistant.AdvancedToggleLights";
-            this.DisplayName = "Advanced Toggle Lights";
+            this.Name = "HomeAssistant.AreaToggleLights";
+            this.DisplayName = "Area Toggle Lights";
             this.GroupName = "Lights";
-            this.Description = "Toggle multiple Home Assistant lights with advanced controls for brightness, color, and temperature. For rgbw and rgbww lights for white levels to be sent hue and saturation must also be provided.";
+            this.Description = "Toggle all lights in a Home Assistant area with advanced controls for brightness, color, and temperature.";
 
-            // Primary light selection (single)
-            this.ActionEditor.AddControlEx(new ActionEditorListbox(ControlLights, "Primary Light(retry if empty)"));
+            // Area selection dropdown (replaces individual light selection)
+            this.ActionEditor.AddControlEx(new ActionEditorListbox(ControlArea, "Area (retry if empty)"));
 
-            // Additional lights (comma-separated entity IDs)
-            this.ActionEditor.AddControlEx(
-                new ActionEditorTextbox(ControlAdditionalLights, "Additional Lights (comma-separated)")
-                    .SetPlaceholder("light.living_room,light.kitchen")
-            );
-
-            // Brightness control (0-255)
+            // Parameter controls (identical to AdvancedToggleLights)
             this.ActionEditor.AddControlEx(
                 new ActionEditorTextbox(ControlBrightness, "Brightness (0-255)")
                     .SetPlaceholder("128")
             );
 
-            // Color temperature in Kelvin (2000-6500)
             this.ActionEditor.AddControlEx(
                 new ActionEditorTextbox(ControlTemperature, "Temperature (2000K-6500K)")
                     .SetPlaceholder("3000")
             );
 
-            // Hue (0-360 degrees)
             this.ActionEditor.AddControlEx(
                 new ActionEditorTextbox(ControlHue, "Hue (0-360°)")
                     .SetPlaceholder("0")
             );
 
-            // Saturation (0-100%)
             this.ActionEditor.AddControlEx(
                 new ActionEditorTextbox(ControlSaturation, "Saturation (0-100%)")
                     .SetPlaceholder("100")
             );
 
-            // White level (0-255) - for RGBW lights or warm white in RGBWW
             this.ActionEditor.AddControlEx(
                 new ActionEditorTextbox(ControlWhiteLevel, "White Level / Warm White (0-255)")
                     .SetPlaceholder("255")
             );
 
-            // Cold white level (0-255) - for RGBWW lights only
             this.ActionEditor.AddControlEx(
                 new ActionEditorTextbox(ControlColdWhiteLevel, "Cold White Level (0-255)")
                     .SetPlaceholder("255")
@@ -222,7 +213,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
             this._icons = new IconService(new Dictionary<String, String>
             {
-                { IconId.Bulb, "light_bulb_icon.svg" }
+                { IconId.Area, "area_icon.svg" }
             });
 
             PluginLog.Info($"{LogPrefix} Constructor completed - dependency initialization deferred to OnLoad()");
@@ -234,10 +225,10 @@ namespace Loupedeck.HomeAssistantPlugin
         /// <param name="parameters">Action editor parameters.</param>
         /// <param name="width">Requested image width.</param>
         /// <param name="height">Requested image height.</param>
-        /// <returns>Bitmap image showing a light bulb icon.</returns>
+        /// <returns>Bitmap image showing an area icon.</returns>
         protected override BitmapImage GetCommandImage(ActionEditorActionParameters parameters, Int32 width, Int32 height) =>
-            // Always show bulb icon for now
-            this._icons.Get(IconId.Bulb);
+            // Show area icon for area-based control
+            this._icons.Get(IconId.Area);
 
         /// <summary>
         /// Loads the action and initializes service dependencies using modern dependency injection pattern.
@@ -264,7 +255,6 @@ namespace Loupedeck.HomeAssistantPlugin
                     var existingCount = this._lightStateManager.GetTrackedEntityIds().Count();
                     PluginLog.Info($"{LogPrefix} Using singleton LightStateManager with {existingCount} existing tracked entities");
 
-                    this._registryService = new RegistryService();
 
                     // Initialize light control service with debounce settings
                     this._lightSvc = new LightControlService(
@@ -324,7 +314,6 @@ namespace Loupedeck.HomeAssistantPlugin
                 this._dataService = null;
                 this._dataParser = null;
                 this._lightStateManager = null;
-                this._registryService = null;
 
                 this._disposed = true;
             }
@@ -398,58 +387,9 @@ namespace Loupedeck.HomeAssistantPlugin
         }
 
         /// <summary>
-        /// Gets the capabilities for a single light from its attributes.
-        /// </summary>
-        /// <param name="attrs">JSON element containing light attributes from Home Assistant.</param>
-        /// <returns>Light capabilities indicating supported features.</returns>
-        private LightCaps GetLightCapabilities(JsonElement attrs) => this._capSvc.ForLight(attrs);
-
-        /// <summary>
-        /// Calculates the common capabilities supported by all specified lights.
-        /// Returns the intersection of capabilities to ensure all lights support the requested operations.
-        /// </summary>
-        /// <param name="entityIds">Collection of light entity IDs to analyze.</param>
-        /// <returns>Common light capabilities supported by all specified lights.</returns>
-        private LightCaps GetCommonCapabilities(IEnumerable<String> entityIds)
-        {
-            if (!entityIds.Any())
-            {
-                return new LightCaps(false, false, false, false, null);
-            }
-
-            if (this._lightStateManager == null)
-            {
-                PluginLog.Warning($"{LogPrefix} GetCommonCapabilities: LightStateManager not available, using default caps");
-                return new LightCaps(true, false, false, false, null);
-            }
-
-            var allCaps = new List<LightCaps>();
-
-            foreach (var entityId in entityIds)
-            {
-                var caps = this._lightStateManager.GetCapabilities(entityId);
-                allCaps.Add(caps);
-            }
-
-            if (!allCaps.Any())
-            {
-                return new LightCaps(true, false, false, false, null);
-            }
-
-            // Return intersection of all capabilities (what ALL lights support)
-            var commonOnOff = allCaps.All(c => c.OnOff);
-            var commonBrightness = allCaps.All(c => c.Brightness);
-            var commonColorTemp = allCaps.All(c => c.ColorTemp);
-            var commonColorHs = allCaps.All(c => c.ColorHs);
-
-            PluginLog.Debug($"{LogPrefix} Common capabilities for {entityIds.Count()} lights: OnOff={commonOnOff}, Brightness={commonBrightness}, ColorTemp={commonColorTemp}, ColorHs={commonColorHs}");
-            return new LightCaps(commonOnOff, commonBrightness, commonColorTemp, commonColorHs, null);
-        }
-
-        /// <summary>
-        /// Executes the advanced toggle lights command with comprehensive light control.
-        /// Processes multiple lights with brightness, color temperature, hue/saturation, and white level parameters.
-        /// Implements toggle behavior - if lights are on with parameters, turns them off; if off, turns on with parameters.
+        /// Executes the area toggle lights command with comprehensive light control.
+        /// Processes all lights in the selected area with brightness, color temperature, hue/saturation, and white level parameters.
+        /// Uses individual light capability filtering to send maximum possible settings to each light.
         /// </summary>
         /// <param name="ps">Action editor parameters containing user-configured values.</param>
         /// <returns><c>true</c> if all light operations succeeded; otherwise, <c>false</c>.</returns>
@@ -466,35 +406,40 @@ namespace Loupedeck.HomeAssistantPlugin
                     return false;
                 }
 
-                // Get selected lights
-                var selectedLights = new List<String>();
-
-                // Add primary light
-                if (ps.TryGetString(ControlLights, out var primaryLight) && !String.IsNullOrWhiteSpace(primaryLight))
+                // Get selected area
+                if (!ps.TryGetString(ControlArea, out var selectedArea) || String.IsNullOrWhiteSpace(selectedArea))
                 {
-                    selectedLights.Add(primaryLight.Trim());
-                }
-
-                // Add additional lights
-                if (ps.TryGetString(ControlAdditionalLights, out var additionalLights) && !String.IsNullOrWhiteSpace(additionalLights))
-                {
-                    var additionalList = additionalLights.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                        .Select(s => s.Trim())
-                        .Where(s => !String.IsNullOrEmpty(s) && !selectedLights.Contains(s, StringComparer.OrdinalIgnoreCase));
-
-                    selectedLights.AddRange(additionalList);
-                }
-
-                if (!selectedLights.Any())
-                {
-                    PluginLog.Warning($"{LogPrefix} RunCommand: No lights selected");
+                    PluginLog.Warning($"{LogPrefix} No area selected");
+                    this.Plugin.OnPluginStatusChanged(PluginStatus.Error, "No area selected");
                     return false;
                 }
 
-                PluginLog.Info($"{LogPrefix} Press: Processing {selectedLights.Count} lights");
+                // Validate area exists using internal cache
+                if (!this._areaIdToName.ContainsKey(selectedArea))
+                {
+                    PluginLog.Warning($"{LogPrefix} Selected area '{selectedArea}' does not exist in cache");
+                    this.Plugin.OnPluginStatusChanged(PluginStatus.Error, $"Area '{selectedArea}' not found");
+                    return false;
+                }
 
-                // Get common capabilities
-                var commonCaps = this.GetCommonCapabilities(selectedLights);
+                // Get all available lights (from LightStateManager)
+                var allLights = this._lightStateManager?.GetTrackedEntityIds() ?? Enumerable.Empty<String>();
+                
+                // Get lights in selected area using internal cache
+                var areaLights = allLights.Where(entityId =>
+                    this._entityToAreaId.TryGetValue(entityId, out var lightAreaId) &&
+                    String.Equals(lightAreaId, selectedArea, StringComparison.OrdinalIgnoreCase)
+                ).ToList();
+                
+                if (!areaLights.Any())
+                {
+                    var areaName = this._areaIdToName.TryGetValue(selectedArea, out var name) ? name : selectedArea;
+                    PluginLog.Warning($"{LogPrefix} No lights found in area '{areaName}'");
+                    this.Plugin.OnPluginStatusChanged(PluginStatus.Error, $"No lights found in area '{areaName}'");
+                    return false;
+                }
+
+                PluginLog.Info($"{LogPrefix} Processing {areaLights.Count} lights in area '{selectedArea}'");
 
                 // Parse control values using defined constants
                 var brightness = this.ParseIntParameter(ps, ControlBrightness, 0, MaxBrightness);
@@ -504,20 +449,8 @@ namespace Loupedeck.HomeAssistantPlugin
                 var whiteLevel = this.ParseIntParameter(ps, ControlWhiteLevel, 0, MaxBrightness);
                 var coldWhiteLevel = this.ParseIntParameter(ps, ControlColdWhiteLevel, 0, MaxBrightness);
 
-                // Process each light
-                var success = true;
-                foreach (var entityId in selectedLights)
-                {
-                    try
-                    {
-                        success &= this.ProcessSingleLight(entityId, commonCaps, brightness, temperature, hue, saturation, whiteLevel, coldWhiteLevel);
-                    }
-                    catch (Exception ex)
-                    {
-                        PluginLog.Error(ex, $"{LogPrefix} Failed to process light {entityId}");
-                        success = false;
-                    }
-                }
+                // Process lights with individual capability filtering
+                var success = this.ProcessAreaLights(areaLights, brightness, temperature, hue, saturation, whiteLevel, coldWhiteLevel);
 
                 PluginLog.Info($"{LogPrefix} RunCommand completed with success={success}");
                 return success;
@@ -531,6 +464,44 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 PluginLog.Info($"{LogPrefix} RunCommand END");
             }
+        }
+
+        /// <summary>
+        /// Processes all lights in the area with individual capability filtering.
+        /// Key difference from AdvancedToggleLights: processes each light with its own capabilities instead of intersection.
+        /// </summary>
+        /// <param name="areaLights">Collection of light entity IDs in the area.</param>
+        /// <param name="brightness">Brightness value (0-255) or null.</param>
+        /// <param name="temperature">Color temperature in Kelvin or null.</param>
+        /// <param name="hue">Hue value (0-360) or null.</param>
+        /// <param name="saturation">Saturation value (0-100) or null.</param>
+        /// <param name="whiteLevel">White level (0-255) or null.</param>
+        /// <param name="coldWhiteLevel">Cold white level (0-255) or null.</param>
+        /// <returns><c>true</c> if all lights processed successfully; otherwise, <c>false</c>.</returns>
+        private Boolean ProcessAreaLights(IEnumerable<String> areaLights, Int32? brightness, Int32? temperature,
+            Double? hue, Double? saturation, Int32? whiteLevel, Int32? coldWhiteLevel)
+        {
+            var success = true;
+            
+            foreach (var entityId in areaLights)
+            {
+                try
+                {
+                    // Get INDIVIDUAL capabilities for this specific light
+                    var individualCaps = this._lightStateManager?.GetCapabilities(entityId) 
+                        ?? new LightCaps(true, false, false, false, null);
+                        
+                    // Process this light with ITS OWN capabilities
+                    success &= this.ProcessSingleLight(entityId, individualCaps, brightness, temperature, hue, saturation, whiteLevel, coldWhiteLevel);
+                }
+                catch (Exception ex)
+                {
+                    PluginLog.Error(ex, $"{LogPrefix} Failed to process light {entityId}");
+                    success = false;
+                }
+            }
+            
+            return success;
         }
 
         /// <summary>
@@ -593,16 +564,26 @@ namespace Loupedeck.HomeAssistantPlugin
             return null;
         }
 
-        private Boolean ProcessSingleLight(String entityId, LightCaps caps, Int32? brightness, Int32? temperature,
+        /// <summary>
+        /// Processes a single light with its individual capabilities.
+        /// This is the core difference from AdvancedToggleLights - uses individual capabilities instead of intersection.
+        /// </summary>
+        /// <param name="entityId">Light entity ID.</param>
+        /// <param name="individualCaps">Individual capabilities of this specific light.</param>
+        /// <param name="brightness">Brightness value or null.</param>
+        /// <param name="temperature">Color temperature or null.</param>
+        /// <param name="hue">Hue value or null.</param>
+        /// <param name="saturation">Saturation value or null.</param>
+        /// <param name="whiteLevel">White level or null.</param>
+        /// <param name="coldWhiteLevel">Cold white level or null.</param>
+        /// <returns><c>true</c> if light processed successfully; otherwise, <c>false</c>.</returns>
+        private Boolean ProcessSingleLight(String entityId, LightCaps individualCaps, Int32? brightness, Int32? temperature,
             Double? hue, Double? saturation, Int32? whiteLevel, Int32? coldWhiteLevel)
         {
             PluginLog.Info($"{LogPrefix} Processing light: {entityId}");
+            PluginLog.Info($"{LogPrefix} Individual capabilities: onoff={individualCaps.OnOff} brightness={individualCaps.Brightness} colorTemp={individualCaps.ColorTemp} colorHs={individualCaps.ColorHs}");
 
-            // Get individual light capabilities for preferred color mode
-            var individualCaps = this._lightStateManager?.GetCapabilities(entityId) ?? caps;
             var preferredColorMode = individualCaps.PreferredColorMode ?? "hs";
-
-            PluginLog.Info($"{LogPrefix} Light capabilities: onoff={caps.OnOff} brightness={caps.Brightness} colorTemp={caps.ColorTemp} colorHs={caps.ColorHs} preferredColorMode={preferredColorMode}");
             PluginLog.Info($"{LogPrefix} Input parameters: brightness={brightness} temperature={temperature}K hue={hue}° saturation={saturation}% whiteLevel={whiteLevel} coldWhiteLevel={coldWhiteLevel}");
 
             if (this._lightSvc == null)
@@ -667,67 +648,51 @@ namespace Loupedeck.HomeAssistantPlugin
             // Light is OFF, turn it ON with the specified parameters
             PluginLog.Info($"{LogPrefix} Light {entityId} is OFF, turning ON with parameters");
 
-            // Build service call data based on available parameters and capabilities
+            // Build service call data based on INDIVIDUAL capabilities
             var serviceData = new Dictionary<String, Object>();
 
-            // Add brightness if supported and specified
-            if (brightness.HasValue && caps.Brightness)
+            // Add brightness if THIS light supports it and parameter is specified
+            if (brightness.HasValue && individualCaps.Brightness)
             {
                 var bri = HSBHelper.Clamp(brightness.Value, MinBrightness, MaxBrightness);
                 serviceData["brightness"] = bri;
-                PluginLog.Info($"{LogPrefix} Added brightness: {brightness.Value} -> {bri} (clamped {MinBrightness}-{MaxBrightness})");
+                PluginLog.Info($"{LogPrefix} Added brightness for {entityId}: {bri}");
             }
-            else if ((whiteLevel.HasValue || coldWhiteLevel.HasValue) && caps.Brightness &&
+            else if (brightness.HasValue && !individualCaps.Brightness)
+            {
+                PluginLog.Info($"{LogPrefix} Skipping brightness for {entityId} - not supported");
+            }
+            else if ((whiteLevel.HasValue || coldWhiteLevel.HasValue) && individualCaps.Brightness &&
                      !preferredColorMode.EqualsNoCase("rgbw") && !preferredColorMode.EqualsNoCase("rgbww"))
             {
                 // White level as fallback brightness (only for non-RGBW/RGBWW lights)
                 var whiteValue = whiteLevel ?? coldWhiteLevel ?? 0;
                 var bri = HSBHelper.Clamp(whiteValue, MinBrightness, MaxBrightness);
                 serviceData["brightness"] = bri;
-                PluginLog.Info($"{LogPrefix} Added white level as brightness fallback: {whiteValue} -> {bri} (clamped {MinBrightness}-{MaxBrightness})");
-            }
-            else if (brightness.HasValue && !caps.Brightness)
-            {
-                PluginLog.Warning($"{LogPrefix} Brightness {brightness.Value} requested but not supported by {entityId}");
-            }
-            else if ((whiteLevel.HasValue || coldWhiteLevel.HasValue) &&
-                     (preferredColorMode.EqualsNoCase("rgbw") || preferredColorMode.EqualsNoCase("rgbww")))
-            {
-                var whiteLevels = new List<String>();
-                if (whiteLevel.HasValue)
-                {
-                    whiteLevels.Add($"warm={whiteLevel.Value}");
-                }
-
-                if (coldWhiteLevel.HasValue)
-                {
-                    whiteLevels.Add($"cold={coldWhiteLevel.Value}");
-                }
-
-                PluginLog.Info($"{LogPrefix} White levels ({String.Join(", ", whiteLevels)}) will be used for white channels in {preferredColorMode} mode (not as brightness)");
+                PluginLog.Info($"{LogPrefix} Added white level as brightness fallback for {entityId}: {whiteValue} -> {bri}");
             }
 
-            // Add color controls - prioritize temperature over HS to avoid conflicts
-            // (HA doesn't allow both color_temp and hs_color in the same call)
-            if (temperature.HasValue && caps.ColorTemp)
+            // Add color temp if THIS light supports it
+            if (temperature.HasValue && individualCaps.ColorTemp)
             {
                 var kelvin = HSBHelper.Clamp(temperature.Value, MinTemperature, MaxTemperature);
                 var mired = ColorTemp.KelvinToMired(kelvin);
                 serviceData["color_temp"] = mired;
-                PluginLog.Info($"{LogPrefix} Added color temp: {temperature.Value}K -> {kelvin}K -> {mired} mireds (color temp takes priority over HS)");
-
-                if (hue.HasValue || saturation.HasValue)
-                {
-                    PluginLog.Info($"{LogPrefix} Skipping HS color because color temperature was specified (HA doesn't allow both)");
-                }
+                PluginLog.Info($"{LogPrefix} Added color temp for {entityId}: {kelvin}K -> {mired} mireds");
             }
-            else if (hue.HasValue && saturation.HasValue && caps.ColorHs)
+            else if (temperature.HasValue && !individualCaps.ColorTemp)
+            {
+                PluginLog.Info($"{LogPrefix} Skipping color temp for {entityId} - not supported");
+            }
+
+            // Add hue/saturation if THIS light supports it
+            if (hue.HasValue && saturation.HasValue && individualCaps.ColorHs)
             {
                 var h = HSBHelper.Wrap360(hue.Value);
                 var s = HSBHelper.Clamp(saturation.Value, MinSaturation, MaxSaturation);
 
                 // Use the preferred color mode for this light
-                PluginLog.Info($"{LogPrefix} Using preferred color mode: {preferredColorMode}");
+                PluginLog.Info($"{LogPrefix} Using preferred color mode for {entityId}: {preferredColorMode}");
 
                 switch (preferredColorMode.ToLowerInvariant())
                 {
@@ -735,56 +700,39 @@ namespace Loupedeck.HomeAssistantPlugin
                         // Convert HS to RGBWW (R,G,B,ColdWhite,WarmWhite)
                         var (r1, g1, b1) = HSBHelper.HsbToRgb(h, s, FullColorValue);
                         
-                        // Use separate cold and warm white levels if specified
                         var coldWhite = 0;
                         var warmWhite = 0;
                         
-                        // Priority 1: Use separate cold/warm white levels if specified
                         if (coldWhiteLevel.HasValue || whiteLevel.HasValue)
                         {
                             if (coldWhiteLevel.HasValue && whiteLevel.HasValue)
                             {
-                                // Both specified - use them directly
                                 coldWhite = HSBHelper.Clamp(coldWhiteLevel.Value, 0, MaxBrightness);
                                 warmWhite = HSBHelper.Clamp(whiteLevel.Value, 0, MaxBrightness);
-                                PluginLog.Info($"{LogPrefix} Using separate white levels: cold={coldWhite}, warm={warmWhite}");
+                                PluginLog.Info($"{LogPrefix} Using separate white levels for {entityId}: cold={coldWhite}, warm={warmWhite}");
                             }
                             else if (coldWhiteLevel.HasValue)
                             {
-                                // Only cold white specified - use it for both channels
                                 coldWhite = HSBHelper.Clamp(coldWhiteLevel.Value, 0, MaxBrightness);
                                 warmWhite = coldWhite;
-                                PluginLog.Info($"{LogPrefix} Only cold white specified: using {coldWhite} for both channels");
+                                PluginLog.Info($"{LogPrefix} Only cold white specified for {entityId}: using {coldWhite} for both channels");
                             }
                             else if (whiteLevel.HasValue)
                             {
-                                // Only warm white specified - use it for both channels
                                 warmWhite = HSBHelper.Clamp(whiteLevel.Value, 0, MaxBrightness);
                                 coldWhite = warmWhite;
-                                PluginLog.Info($"{LogPrefix} Only warm white specified: using {warmWhite} for both channels");
+                                PluginLog.Info($"{LogPrefix} Only warm white specified for {entityId}: using {warmWhite} for both channels");
                             }
-                        }
-                        // Priority 2: Use temperature-based distribution (legacy behavior)
-                        else if (whiteLevel.HasValue && temperature.HasValue)
-                        {
-                            var white = HSBHelper.Clamp(whiteLevel.Value, 0, MaxBrightness);
-                            var kelvin = HSBHelper.Clamp(temperature.Value, MinTemperature, MaxTemperature);
-                            // Convert temperature to cold/warm ratio (2000K = warm, 6500K = cold)
-                            var tempRatio = (kelvin - MinTemperature) / (Double)(MaxTemperature - MinTemperature);
-                            coldWhite = (Int32)(white * tempRatio);
-                            warmWhite = (Int32)(white * (1.0 - tempRatio));
-                            PluginLog.Info($"{LogPrefix} Using temperature-based distribution: {kelvin}K -> cold={coldWhite}, warm={warmWhite}");
                         }
                         
                         serviceData["rgbww_color"] = new Object[] { r1, g1, b1, coldWhite, warmWhite };
-                        PluginLog.Info($"{LogPrefix} Added rgbww_color: HS({h:F1}°,{s:F1}%) -> RGBWW({r1},{g1},{b1},{coldWhite},{warmWhite})");
+                        PluginLog.Info($"{LogPrefix} Added rgbww_color for {entityId}: HS({h:F1}°,{s:F1}%) -> RGBWW({r1},{g1},{b1},{coldWhite},{warmWhite})");
                         break;
 
                     case "rgbw":
                         // Convert HS to RGBW (R,G,B,White)
                         var (r2, g2, b2) = HSBHelper.HsbToRgb(h, s, FullColorValue);
                         
-                        // Use whiteLevel for white channel if specified
                         var whiteChannel = 0;
                         if (whiteLevel.HasValue)
                         {
@@ -792,14 +740,14 @@ namespace Loupedeck.HomeAssistantPlugin
                         }
                         
                         serviceData["rgbw_color"] = new Object[] { r2, g2, b2, whiteChannel };
-                        PluginLog.Info($"{LogPrefix} Added rgbw_color: HS({h:F1}°,{s:F1}%) + white({whiteLevel}) -> RGBW({r2},{g2},{b2},{whiteChannel})");
+                        PluginLog.Info($"{LogPrefix} Added rgbw_color for {entityId}: HS({h:F1}°,{s:F1}%) + white({whiteLevel}) -> RGBW({r2},{g2},{b2},{whiteChannel})");
                         break;
 
                     case "rgb":
                         // Convert HS to RGB
                         var (r3, g3, b3) = HSBHelper.HsbToRgb(h, s, FullColorValue);
                         serviceData["rgb_color"] = new Object[] { r3, g3, b3 };
-                        PluginLog.Info($"{LogPrefix} Added rgb_color: HS({h:F1}°,{s:F1}%) -> RGB({r3},{g3},{b3})");
+                        PluginLog.Info($"{LogPrefix} Added rgb_color for {entityId}: HS({h:F1}°,{s:F1}%) -> RGB({r3},{g3},{b3})");
                         break;
 
                     case "hs":
@@ -810,20 +758,34 @@ namespace Loupedeck.HomeAssistantPlugin
                         var satForJson = Math.Abs(s % 1.0) < 0.001 ?
                             (s >= 99.9 ? s - 0.0001 : s + 0.0001) : s;
                         serviceData["hs_color"] = new Object[] { hueForJson, satForJson };
-                        PluginLog.Info($"{LogPrefix} Added hs_color: HS({h:F1}°,{s:F1}%) -> HS({hueForJson:F4}°,{satForJson:F4}%)");
+                        PluginLog.Info($"{LogPrefix} Added hs_color for {entityId}: HS({h:F1}°,{s:F1}%) -> HS({hueForJson:F4}°,{satForJson:F4}%)");
                         break;
                 }
             }
-            else if (temperature.HasValue && !caps.ColorTemp)
+            else if ((hue.HasValue || saturation.HasValue) && !individualCaps.ColorHs)
             {
-                PluginLog.Warning($"{LogPrefix} Color temperature {temperature.Value}K requested but not supported by {entityId}");
-            }
-            else if ((hue.HasValue || saturation.HasValue) && !caps.ColorHs)
-            {
-                PluginLog.Warning($"{LogPrefix} Hue/Saturation requested but not supported by {entityId}");
+                PluginLog.Info($"{LogPrefix} Skipping hue/saturation for {entityId} - not supported");
             }
 
-            // FIXED: Send separate requests for better compatibility with WiZ and other lights
+            // Send service calls using the same separation pattern as AdvancedToggleLights
+            return this.SendLightServiceCalls(entityId, serviceData, brightness, temperature, hue, saturation, whiteLevel);
+        }
+
+        /// <summary>
+        /// Sends separated service calls for better compatibility with various light types.
+        /// Uses the same pattern as AdvancedToggleLights with brightness, temperature, and color calls.
+        /// </summary>
+        /// <param name="entityId">Light entity ID.</param>
+        /// <param name="serviceData">Service call data dictionary.</param>
+        /// <param name="brightness">Original brightness parameter.</param>
+        /// <param name="temperature">Original temperature parameter.</param>
+        /// <param name="hue">Original hue parameter.</param>
+        /// <param name="saturation">Original saturation parameter.</param>
+        /// <param name="whiteLevel">Original white level parameter.</param>
+        /// <returns><c>true</c> if all service calls succeeded; otherwise, <c>false</c>.</returns>
+        private Boolean SendLightServiceCalls(String entityId, Dictionary<String, Object> serviceData,
+            Int32? brightness, Int32? temperature, Double? hue, Double? saturation, Int32? whiteLevel)
+        {
             var overallSuccess = true;
 
             if (serviceData.Any())
@@ -857,14 +819,14 @@ namespace Loupedeck.HomeAssistantPlugin
                     }
                 }
 
-                PluginLog.Info($"{LogPrefix} Separated into {brightnessData.Count} brightness attrs, {colorData.Count} color attrs, {tempData.Count} temp attrs");
+                PluginLog.Info($"{LogPrefix} Separated into {brightnessData.Count} brightness attrs, {colorData.Count} color attrs, {tempData.Count} temp attrs for {entityId}");
 
                 // 1. First call: Turn on with brightness (most compatible)
                 if (brightnessData.Any())
                 {
                     var briData = JsonSerializer.SerializeToElement(brightnessData);
                     var briJson = JsonSerializer.Serialize(briData);
-                    PluginLog.Info($"{LogPrefix} CALL 1/3: Brightness - {briJson}");
+                    PluginLog.Info($"{LogPrefix} CALL 1/3: Brightness for {entityId} - {briJson}");
 
                     var briSuccess = this._lightSvc.TurnOnAsync(entityId, briData).GetAwaiter().GetResult();
                     PluginLog.Info($"{LogPrefix} HA SERVICE CALL 1: turn_on entity_id={entityId} data={briJson} -> success={briSuccess}");
@@ -872,14 +834,13 @@ namespace Loupedeck.HomeAssistantPlugin
 
                     if (briSuccess)
                     {
-                        // Small delay to ensure the light processes the brightness before color
                         Thread.Sleep(50);
                     }
                 }
                 else
                 {
                     // Turn on without parameters first
-                    PluginLog.Info($"{LogPrefix} CALL 1/3: Simple turn_on (no brightness specified)");
+                    PluginLog.Info($"{LogPrefix} CALL 1/3: Simple turn_on for {entityId} (no brightness specified)");
                     var onSuccess = this._lightSvc.TurnOnAsync(entityId).GetAwaiter().GetResult();
                     PluginLog.Info($"{LogPrefix} HA SERVICE CALL 1: turn_on entity_id={entityId} -> success={onSuccess}");
                     overallSuccess &= onSuccess;
@@ -895,7 +856,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     var tempDataElement = JsonSerializer.SerializeToElement(tempData);
                     var tempJson = JsonSerializer.Serialize(tempDataElement);
-                    PluginLog.Info($"{LogPrefix} CALL 2/3: Temperature - {tempJson}");
+                    PluginLog.Info($"{LogPrefix} CALL 2/3: Temperature for {entityId} - {tempJson}");
 
                     var tempSuccess = this._lightSvc.TurnOnAsync(entityId, tempDataElement).GetAwaiter().GetResult();
                     PluginLog.Info($"{LogPrefix} HA SERVICE CALL 2: turn_on entity_id={entityId} data={tempJson} -> success={tempSuccess}");
@@ -912,7 +873,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     var colorDataElement = JsonSerializer.SerializeToElement(colorData);
                     var colorJson = JsonSerializer.Serialize(colorDataElement);
-                    PluginLog.Info($"{LogPrefix} CALL 3/3: Color - {colorJson}");
+                    PluginLog.Info($"{LogPrefix} CALL 3/3: Color for {entityId} - {colorJson}");
 
                     var colorSuccess = this._lightSvc.TurnOnAsync(entityId, colorDataElement).GetAwaiter().GetResult();
                     PluginLog.Info($"{LogPrefix} HA SERVICE CALL 3: turn_on entity_id={entityId} data={colorJson} -> success={colorSuccess}");
@@ -976,19 +937,24 @@ namespace Loupedeck.HomeAssistantPlugin
             }
         }
 
+        /// <summary>
+        /// Populates the area dropdown with areas that contain lights.
+        /// FIXED: Now follows HomeAssistantLightsDynamicFolder pattern - fetches lights first, then extracts areas from lights data.
+        /// </summary>
+        /// <param name="sender">Event sender.</param>
+        /// <param name="e">Event arguments containing dropdown information.</param>
         private void OnListboxItemsRequested(Object? sender, ActionEditorListboxItemsRequestedEventArgs e)
         {
-            if (!e.ControlName.EqualsNoCase(ControlLights))
+            if (!e.ControlName.EqualsNoCase(ControlArea))
             {
                 return;
             }
 
-            PluginLog.Info($"{LogPrefix} ListboxItemsRequested({e.ControlName}) using modern service architecture");
+            PluginLog.Info($"{LogPrefix} ListboxItemsRequested for areas using AdvancedToggleLights pattern");
+            
             try
             {
-                
-
-                // Ensure we're connected before asking HA for states
+                // STEP 1: Ensure HA connection (same as AdvancedToggleLights)
                 if (!this.EnsureHaReadyAsync().GetAwaiter().GetResult())
                 {
                     PluginLog.Warning($"{LogPrefix} List: EnsureHaReady failed (not connected/authenticated)");
@@ -996,100 +962,107 @@ namespace Loupedeck.HomeAssistantPlugin
                         !this.Plugin.TryGetPluginSetting(HomeAssistantPlugin.SettingToken, out var _))
                     {
                         e.AddItem("!not_configured", "Home Assistant not configured", "Open plugin settings");
-                        // Report configuration error to user
-                        this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
-                            "Home Assistant URL and Token not configured");
+                        this.Plugin.OnPluginStatusChanged(PluginStatus.Error, "Home Assistant URL and Token not configured");
                     }
                     else
                     {
                         e.AddItem("!not_connected", "Could not connect to Home Assistant", "Check URL/token");
-                        // Report connection error to user
-                        this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
-                            "Could not connect to Home Assistant");
+                        this.Plugin.OnPluginStatusChanged(PluginStatus.Error, "Could not connect to Home Assistant");
                     }
                     return;
                 }
 
+                // STEP 2: Check DataService availability (same as AdvancedToggleLights)
                 if (this._dataService == null)
                 {
                     PluginLog.Error($"{LogPrefix} ListboxItemsRequested: DataService not available");
                     e.AddItem("!no_service", "Data service not available", "Plugin initialization error");
-                    // Report service error to user
-                    this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
-                        "Plugin initialization error");
+                    this.Plugin.OnPluginStatusChanged(PluginStatus.Error, "Plugin initialization error");
                     return;
                 }
 
-                // Use modern data service instead of direct client calls
-                var (ok, json, error) = this._dataService.FetchStatesAsync(CancellationToken.None)
-                    .GetAwaiter().GetResult();
+                // STEP 3: Fetch states FIRST (same as AdvancedToggleLights)
+                PluginLog.Info($"{LogPrefix} Fetching states using modern service architecture");
+                var (ok, json, error) = this._dataService.FetchStatesAsync(CancellationToken.None).GetAwaiter().GetResult();
                 PluginLog.Info($"{LogPrefix} FetchStatesAsync ok={ok} error='{error}' bytes={json?.Length ?? 0}");
 
                 if (!ok || String.IsNullOrEmpty(json))
                 {
                     e.AddItem("!no_states", $"Failed to fetch states: {error ?? "unknown"}", "Check connection");
-                    this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
-                        $"Failed to fetch entity states error: {error}");
+                    this.Plugin.OnPluginStatusChanged(PluginStatus.Error, $"Failed to fetch entity states error: {error}");
                     return;
                 }
 
-                // Initialize LightStateManager using self-contained method
-                // This fixes the bug where light states are unknown when first launching the plugin
+                // STEP 4: Initialize LightStateManager AFTER fetching data (same as AdvancedToggleLights)
                 if (this._lightStateManager != null && this._dataService != null && this._dataParser != null)
                 {
                     var (success, errorMessage) = this._lightStateManager.InitOrUpdateAsync(this._dataService, this._dataParser, CancellationToken.None).GetAwaiter().GetResult();
                     if (!success)
                     {
                         PluginLog.Warning($"{LogPrefix} LightStateManager.InitOrUpdateAsync failed: {errorMessage}");
-                        // Report initialization error to user
-                        this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
-                            $"Failed to load light data: {errorMessage}");
-                        // Still show the dropdown with error message
+                        this.Plugin.OnPluginStatusChanged(PluginStatus.Error, $"Failed to load light data: {errorMessage}");
                         e.AddItem("!init_failed", "Failed to load lights", errorMessage ?? "Check connection to Home Assistant");
                         return;
                     }
                 }
 
-                // The loading indicator will be replaced by actual items
-                var count = 0;
-                using var doc = JsonDocument.Parse(json);
-                foreach (var el in doc.RootElement.EnumerateArray())
+                // STEP 5: Fetch additional registry data for area information
+                PluginLog.Info($"{LogPrefix} Fetching registry data for area information");
+                var (okEnt, entJson, errEnt) = this._dataService.FetchEntityRegistryAsync(CancellationToken.None).GetAwaiter().GetResult();
+                var (okDev, devJson, errDev) = this._dataService.FetchDeviceRegistryAsync(CancellationToken.None).GetAwaiter().GetResult();
+                var (okArea, areaJson, errArea) = this._dataService.FetchAreaRegistryAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+                // STEP 6: Parse registry data for area names
+                var registryData = this._dataParser.ParseRegistries(devJson, entJson, areaJson);
+
+                // STEP 7: Parse light states with registry data
+                var lights = this._dataParser.ParseLightStates(json, registryData);
+
+                // STEP 8: Update internal caches
+                this.UpdateInternalCaches(lights, registryData);
+
+                // STEP 9: Extract areas with lights and populate dropdown
+                var areaIds = new HashSet<String>(StringComparer.OrdinalIgnoreCase);
+                foreach (var light in lights)
                 {
-                    if (!el.TryGetProperty("entity_id", out var idProp))
+                    if (!String.IsNullOrEmpty(light.AreaId))
                     {
-                        continue;
+                        areaIds.Add(light.AreaId);
                     }
+                }
 
-                    var id = idProp.GetString();
-                    if (String.IsNullOrEmpty(id) || !id.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
+                // Order by area name
+                var orderedAreas = areaIds
+                    .Select(aid => (aid, name: this._areaIdToName.TryGetValue(aid, out var n) ? n : aid))
+                    .OrderBy(t => t.name, StringComparer.CurrentCultureIgnoreCase);
 
-                    var display = id;
-                    if (el.TryGetProperty("attributes", out var attrs) &&
-                        attrs.ValueKind == JsonValueKind.Object &&
-                        attrs.TryGetProperty("friendly_name", out var fn) &&
-                        fn.ValueKind == JsonValueKind.String)
-                    {
-                        display = $"{fn.GetString()} ({id})";
-                    }
-
-                    e.AddItem(name: id, displayName: display, description: "Home Assistant light");
+                var count = 0;
+                foreach (var (areaId, areaName) in orderedAreas)
+                {
+                    // Count lights in this area
+                    var lightsInArea = lights.Where(l => String.Equals(l.AreaId, areaId, StringComparison.OrdinalIgnoreCase));
+                    var lightCount = lightsInArea.Count();
+                    
+                    var displayName = $"{areaName} ({lightCount} light{(lightCount == 1 ? "" : "s")})";
+                    e.AddItem(name: areaId, displayName: displayName, description: $"Area with {lightCount} lights");
                     count++;
                 }
 
-                PluginLog.Info($"{LogPrefix} List populated with {count} light(s) using modern service architecture");
-
-                // Clear any previous error status since we successfully loaded lights
+                PluginLog.Info($"{LogPrefix} List populated with {count} area(s) using AdvancedToggleLights pattern");
+                
+                // Clear any previous error status since we successfully loaded areas
                 if (count > 0)
                 {
-                    this.Plugin.OnPluginStatusChanged(PluginStatus.Normal,
-                        $"Successfully loaded {count} lights");
+                    this.Plugin.OnPluginStatusChanged(PluginStatus.Normal, $"Successfully loaded {count} areas with lights");
                 }
-
+                else
+                {
+                    e.AddItem("!no_areas", "No areas with lights found", "Check Home Assistant configuration");
+                    this.Plugin.OnPluginStatusChanged(PluginStatus.Warning, "No areas with lights found");
+                }
+                
                 // Keep current selection
-                var current = e.ActionEditorState?.GetControlValue(ControlLights) as String;
+                var current = e.ActionEditorState?.GetControlValue(ControlArea) as String;
                 if (!String.IsNullOrEmpty(current))
                 {
                     PluginLog.Info($"{LogPrefix} Keeping current selection: '{current}'");
@@ -1098,9 +1071,43 @@ namespace Loupedeck.HomeAssistantPlugin
             }
             catch (Exception ex)
             {
-                PluginLog.Error(ex, $"{LogPrefix} List population failed");
-                e.AddItem("!error", "Error reading lights", ex.Message);
+                PluginLog.Error(ex, $"{LogPrefix} Area list population failed using corrected pattern");
+                e.AddItem("!error", "Error loading areas", ex.Message);
+                this.Plugin.OnPluginStatusChanged(PluginStatus.Error, $"Error loading areas: {ex.Message}");
             }
+        }
+
+
+        /// <summary>
+        /// Updates internal caches from services - follows the successful HomeAssistantLightsDynamicFolder pattern.
+        /// Key difference: Extracts areas from lights data, not from registry-only data.
+        /// </summary>
+        /// <param name="lights">Light data containing area assignments.</param>
+        /// <param name="registryData">Registry data for area names.</param>
+        private void UpdateInternalCaches(IEnumerable<LightData> lights, ParsedRegistryData registryData)
+        {
+            // Clear existing UI data (following HomeAssistantLightsDynamicFolder pattern)
+            this._entityToAreaId.Clear();
+            this._areaIdToName.Clear();
+
+            PluginLog.Debug($"{LogPrefix} UpdateInternalCaches: Clearing area caches, following successful HomeAssistantLightsDynamicFolder pattern");
+
+            // Update from registry data - area ID to name mapping
+            foreach (var (areaId, areaName) in registryData.AreaIdToName)
+            {
+                this._areaIdToName[areaId] = areaName;
+            }
+
+            // CRITICAL: Extract areas FROM lights data (the key working pattern)
+            foreach (var light in lights)
+            {
+                // Map entity to area (this is where areas come from - lights data, not registry!)
+                this._entityToAreaId[light.EntityId] = light.AreaId;
+            }
+
+            var lightCount = lights.Count();
+            var areaCount = registryData.AreaIdToName.Count;
+            PluginLog.Info($"{LogPrefix} Updated internal caches: {lightCount} lights, {areaCount} areas - areas extracted from lights data");
         }
     }
 }
