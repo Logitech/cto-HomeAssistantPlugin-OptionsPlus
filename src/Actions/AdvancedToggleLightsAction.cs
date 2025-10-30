@@ -8,6 +8,7 @@ namespace Loupedeck.HomeAssistantPlugin
     using System.Threading.Tasks;
 
     using Loupedeck;
+    using Loupedeck.HomeAssistantPlugin.Models;
     using Loupedeck.HomeAssistantPlugin.Services;
 
     /// <summary>
@@ -158,9 +159,24 @@ namespace Loupedeck.HomeAssistantPlugin
         private const Int32 DebounceMs = 100;
 
         /// <summary>
+        /// Cache TTL in minutes for registry data to prevent refetching on every dropdown open.
+        /// </summary>
+        private const Int32 CacheTtlMinutes = 5;
+
+        /// <summary>
         /// Icon service for rendering action button graphics.
         /// </summary>
         private readonly IconService _icons;
+
+        /// <summary>
+        /// Cache timestamp for registry data to implement basic TTL.
+        /// </summary>
+        private DateTime _cacheTimestamp = DateTime.MinValue;
+
+        /// <summary>
+        /// Cached lights list to prevent registry refetching on every dropdown open.
+        /// </summary>
+        private List<LightData>? _cachedLights = null;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="AdvancedToggleLightsAction"/> class.
@@ -404,47 +420,6 @@ namespace Loupedeck.HomeAssistantPlugin
         /// <returns>Light capabilities indicating supported features.</returns>
         private LightCaps GetLightCapabilities(JsonElement attrs) => this._capSvc.ForLight(attrs);
 
-        /// <summary>
-        /// Calculates the common capabilities supported by all specified lights.
-        /// Returns the intersection of capabilities to ensure all lights support the requested operations.
-        /// </summary>
-        /// <param name="entityIds">Collection of light entity IDs to analyze.</param>
-        /// <returns>Common light capabilities supported by all specified lights.</returns>
-        private LightCaps GetCommonCapabilities(IEnumerable<String> entityIds)
-        {
-            if (!entityIds.Any())
-            {
-                return new LightCaps(false, false, false, false, null);
-            }
-
-            if (this._lightStateManager == null)
-            {
-                PluginLog.Warning($"{LogPrefix} GetCommonCapabilities: LightStateManager not available, using default caps");
-                return new LightCaps(true, false, false, false, null);
-            }
-
-            var allCaps = new List<LightCaps>();
-
-            foreach (var entityId in entityIds)
-            {
-                var caps = this._lightStateManager.GetCapabilities(entityId);
-                allCaps.Add(caps);
-            }
-
-            if (!allCaps.Any())
-            {
-                return new LightCaps(true, false, false, false, null);
-            }
-
-            // Return intersection of all capabilities (what ALL lights support)
-            var commonOnOff = allCaps.All(c => c.OnOff);
-            var commonBrightness = allCaps.All(c => c.Brightness);
-            var commonColorTemp = allCaps.All(c => c.ColorTemp);
-            var commonColorHs = allCaps.All(c => c.ColorHs);
-
-            PluginLog.Debug($"{LogPrefix} Common capabilities for {entityIds.Count()} lights: OnOff={commonOnOff}, Brightness={commonBrightness}, ColorTemp={commonColorTemp}, ColorHs={commonColorHs}");
-            return new LightCaps(commonOnOff, commonBrightness, commonColorTemp, commonColorHs, null);
-        }
 
         /// <summary>
         /// Executes the advanced toggle lights command with comprehensive light control.
@@ -491,10 +466,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     return false;
                 }
 
-                PluginLog.Info($"{LogPrefix} Press: Processing {selectedLights.Count} lights");
-
-                // Get common capabilities
-                var commonCaps = this.GetCommonCapabilities(selectedLights);
+                PluginLog.Info($"{LogPrefix} Press: Processing {selectedLights.Count} lights with individual capabilities");
 
                 // Parse control values using defined constants
                 var brightness = this.ParseIntParameter(ps, ControlBrightness, 0, MaxBrightness);
@@ -504,20 +476,8 @@ namespace Loupedeck.HomeAssistantPlugin
                 var whiteLevel = this.ParseIntParameter(ps, ControlWhiteLevel, 0, MaxBrightness);
                 var coldWhiteLevel = this.ParseIntParameter(ps, ControlColdWhiteLevel, 0, MaxBrightness);
 
-                // Process each light
-                var success = true;
-                foreach (var entityId in selectedLights)
-                {
-                    try
-                    {
-                        success &= this.ProcessSingleLight(entityId, commonCaps, brightness, temperature, hue, saturation, whiteLevel, coldWhiteLevel);
-                    }
-                    catch (Exception ex)
-                    {
-                        PluginLog.Error(ex, $"{LogPrefix} Failed to process light {entityId}");
-                        success = false;
-                    }
-                }
+                // Process lights with individual capability filtering (NEW APPROACH)
+                var success = this.ProcessLightsIndividually(selectedLights, brightness, temperature, hue, saturation, whiteLevel, coldWhiteLevel);
 
                 PluginLog.Info($"{LogPrefix} RunCommand completed with success={success}");
                 return success;
@@ -593,14 +553,54 @@ namespace Loupedeck.HomeAssistantPlugin
             return null;
         }
 
+        /// <summary>
+        /// Processes multiple lights with individual capability filtering.
+        /// Key difference from common capabilities: each light uses its own maximum supported features.
+        /// Follows the successful AreaToggleLightsAction.ProcessAreaLights() pattern.
+        /// </summary>
+        /// <param name="entityIds">Collection of light entity IDs to process.</param>
+        /// <param name="brightness">Brightness value (0-255) or null.</param>
+        /// <param name="temperature">Color temperature in Kelvin or null.</param>
+        /// <param name="hue">Hue value (0-360) or null.</param>
+        /// <param name="saturation">Saturation value (0-100) or null.</param>
+        /// <param name="whiteLevel">White level (0-255) or null.</param>
+        /// <param name="coldWhiteLevel">Cold white level (0-255) or null.</param>
+        /// <returns><c>true</c> if all lights processed successfully; otherwise, <c>false</c>.</returns>
+        private Boolean ProcessLightsIndividually(IEnumerable<String> entityIds, Int32? brightness, Int32? temperature,
+            Double? hue, Double? saturation, Int32? whiteLevel, Int32? coldWhiteLevel)
+        {
+            var success = true;
+            
+            foreach (var entityId in entityIds)
+            {
+                try
+                {
+                    // Get INDIVIDUAL capabilities for this specific light (key change!)
+                    var individualCaps = this._lightStateManager?.GetCapabilities(entityId)
+                        ?? new LightCaps(true, false, false, false, null);
+                        
+                    PluginLog.Info($"{LogPrefix} Processing {entityId} with individual capabilities: OnOff={individualCaps.OnOff}, Brightness={individualCaps.Brightness}, ColorTemp={individualCaps.ColorTemp}, ColorHs={individualCaps.ColorHs}");
+                        
+                    // Process this light with ITS OWN capabilities (not intersection)
+                    success &= this.ProcessSingleLight(entityId, individualCaps, brightness, temperature, hue, saturation, whiteLevel, coldWhiteLevel);
+                }
+                catch (Exception ex)
+                {
+                    PluginLog.Error(ex, $"{LogPrefix} Failed to process light {entityId}");
+                    success = false;
+                }
+            }
+            
+            return success;
+        }
+
         private Boolean ProcessSingleLight(String entityId, LightCaps caps, Int32? brightness, Int32? temperature,
             Double? hue, Double? saturation, Int32? whiteLevel, Int32? coldWhiteLevel)
         {
             PluginLog.Info($"{LogPrefix} Processing light: {entityId}");
 
-            // Get individual light capabilities for preferred color mode
-            var individualCaps = this._lightStateManager?.GetCapabilities(entityId) ?? caps;
-            var preferredColorMode = individualCaps.PreferredColorMode ?? "hs";
+            // Use the individual capabilities passed in (no longer need fallback since caps are already individual)
+            var preferredColorMode = caps.PreferredColorMode ?? "hs";
 
             PluginLog.Info($"{LogPrefix} Light capabilities: onoff={caps.OnOff} brightness={caps.Brightness} colorTemp={caps.ColorTemp} colorHs={caps.ColorHs} preferredColorMode={preferredColorMode}");
             PluginLog.Info($"{LogPrefix} Input parameters: brightness={brightness} temperature={temperature}K hue={hue}° saturation={saturation}% whiteLevel={whiteLevel} coldWhiteLevel={coldWhiteLevel}");
@@ -1020,62 +1020,72 @@ namespace Loupedeck.HomeAssistantPlugin
                     return;
                 }
 
-                // Use modern data service instead of direct client calls
-                var (ok, json, error) = this._dataService.FetchStatesAsync(CancellationToken.None)
-                    .GetAwaiter().GetResult();
-                PluginLog.Info($"{LogPrefix} FetchStatesAsync ok={ok} error='{error}' bytes={json?.Length ?? 0}");
-
-                if (!ok || String.IsNullOrEmpty(json))
+                // Check cache first to avoid refetching registry data on every dropdown open
+                var now = DateTime.Now;
+                var cacheExpired = (now - this._cacheTimestamp).TotalMinutes > CacheTtlMinutes;
+                
+                List<LightData> lights;
+                if (this._cachedLights != null && !cacheExpired)
                 {
-                    e.AddItem("!no_states", $"Failed to fetch states: {error ?? "unknown"}", "Check connection");
-                    this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
-                        $"Failed to fetch entity states error: {error}");
-                    return;
+                    PluginLog.Info($"{LogPrefix} Using cached lights data ({this._cachedLights.Count} lights, age: {(now - this._cacheTimestamp).TotalMinutes:F1}min)");
+                    lights = this._cachedLights;
                 }
-
-                // Initialize LightStateManager using self-contained method
-                // This fixes the bug where light states are unknown when first launching the plugin
-                if (this._lightStateManager != null && this._dataService != null && this._dataParser != null)
+                else
                 {
-                    var (success, errorMessage) = this._lightStateManager.InitOrUpdateAsync(this._dataService, this._dataParser, CancellationToken.None).GetAwaiter().GetResult();
-                    if (!success)
+                    PluginLog.Info($"{LogPrefix} Cache expired or empty, fetching fresh registry-aware data");
+                    
+                    // Fetch states using modern data service
+                    var (ok, json, error) = this._dataService.FetchStatesAsync(CancellationToken.None)
+                        .GetAwaiter().GetResult();
+                    PluginLog.Info($"{LogPrefix} FetchStatesAsync ok={ok} error='{error}' bytes={json?.Length ?? 0}");
+
+                    if (!ok || String.IsNullOrEmpty(json))
                     {
-                        PluginLog.Warning($"{LogPrefix} LightStateManager.InitOrUpdateAsync failed: {errorMessage}");
-                        // Report initialization error to user
+                        e.AddItem("!no_states", $"Failed to fetch states: {error ?? "unknown"}", "Check connection");
                         this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
-                            $"Failed to load light data: {errorMessage}");
-                        // Still show the dropdown with error message
-                        e.AddItem("!init_failed", "Failed to load lights", errorMessage ?? "Check connection to Home Assistant");
+                            $"Failed to fetch entity states error: {error}");
                         return;
                     }
+
+                    // Initialize LightStateManager using self-contained method
+                    if (this._lightStateManager != null && this._dataService != null && this._dataParser != null)
+                    {
+                        var (success, errorMessage) = this._lightStateManager.InitOrUpdateAsync(this._dataService, this._dataParser, CancellationToken.None).GetAwaiter().GetResult();
+                        if (!success)
+                        {
+                            PluginLog.Warning($"{LogPrefix} LightStateManager.InitOrUpdateAsync failed: {errorMessage}");
+                            this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
+                                $"Failed to load light data: {errorMessage}");
+                            e.AddItem("!init_failed", "Failed to load lights", errorMessage ?? "Check connection to Home Assistant");
+                            return;
+                        }
+                    }
+
+                    // FIXED: Use registry-aware parsing instead of direct JSON parsing
+                    PluginLog.Info($"{LogPrefix} Fetching registry data for registry-aware light parsing");
+                    var (entSuccess, entJson, _) = this._dataService.FetchEntityRegistryAsync(CancellationToken.None).GetAwaiter().GetResult();
+                    var (devSuccess, devJson, _) = this._dataService.FetchDeviceRegistryAsync(CancellationToken.None).GetAwaiter().GetResult();
+                    var (areaSuccess, areaJson, _) = this._dataService.FetchAreaRegistryAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+                    // Parse registry data and light states together (working AreaToggleLights pattern)
+                    var registryData = this._dataParser.ParseRegistries(devJson, entJson, areaJson);
+                    lights = this._dataParser.ParseLightStates(json, registryData);
+
+                    // Cache the results
+                    this._cachedLights = lights;
+                    this._cacheTimestamp = now;
+                    PluginLog.Info($"{LogPrefix} Cached {lights.Count} lights with registry data (TTL: {CacheTtlMinutes}min)");
                 }
 
-                // The loading indicator will be replaced by actual items
+                // Iterate over parsed lights instead of raw JSON elements
                 var count = 0;
-                using var doc = JsonDocument.Parse(json);
-                foreach (var el in doc.RootElement.EnumerateArray())
+                foreach (var light in lights)
                 {
-                    if (!el.TryGetProperty("entity_id", out var idProp))
-                    {
-                        continue;
-                    }
+                    var display = !String.IsNullOrEmpty(light.FriendlyName)
+                        ? $"{light.FriendlyName} ({light.EntityId})"
+                        : light.EntityId;
 
-                    var id = idProp.GetString();
-                    if (String.IsNullOrEmpty(id) || !id.StartsWith("light.", StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    var display = id;
-                    if (el.TryGetProperty("attributes", out var attrs) &&
-                        attrs.ValueKind == JsonValueKind.Object &&
-                        attrs.TryGetProperty("friendly_name", out var fn) &&
-                        fn.ValueKind == JsonValueKind.String)
-                    {
-                        display = $"{fn.GetString()} ({id})";
-                    }
-
-                    e.AddItem(name: id, displayName: display, description: "Home Assistant light");
+                    e.AddItem(name: light.EntityId, displayName: display, description: "Home Assistant light");
                     count++;
                 }
 
