@@ -64,6 +64,12 @@ namespace Loupedeck.HomeAssistantPlugin
         private Boolean _disposed = false;
 
         /// <summary>
+        /// Simple toggle state for all selected lights. Defaults to false (off state).
+        /// This boolean alternates between true/false on each press, and all lights get the same command.
+        /// </summary>
+        private Boolean _advancedLightsState = false;
+
+        /// <summary>
         /// Control name for primary light selection dropdown.
         /// </summary>
         private const String ControlLights = "ha_lights";
@@ -569,6 +575,10 @@ namespace Loupedeck.HomeAssistantPlugin
         private Boolean ProcessLightsIndividually(IEnumerable<String> entityIds, Int32? brightness, Int32? temperature,
             Double? hue, Double? saturation, Int32? whiteLevel, Int32? coldWhiteLevel)
         {
+            // Toggle the advanced lights state before processing lights - all lights get the same command
+            this._advancedLightsState = !this._advancedLightsState;
+            PluginLog.Info($"{LogPrefix} Toggled advanced lights state to: {(this._advancedLightsState ? "ON" : "OFF")}");
+            
             var success = true;
             
             foreach (var entityId in entityIds)
@@ -611,39 +621,13 @@ namespace Loupedeck.HomeAssistantPlugin
                 return false;
             }
 
-            // If no parameters specified, just toggle
-            if (!brightness.HasValue && !temperature.HasValue && !hue.HasValue && !saturation.HasValue && !whiteLevel.HasValue && !coldWhiteLevel.HasValue)
+            // Always use advanced lights state to determine on/off, regardless of parameters
+            PluginLog.Info($"{LogPrefix} Using advanced lights state to determine command: {(this._advancedLightsState ? "ON" : "OFF")}");
+
+            // Use simple advanced lights toggle state - all lights get the same command
+            if (!this._advancedLightsState)
             {
-                PluginLog.Info($"{LogPrefix} No parameters provided, using simple toggle for '{entityId}'");
-                var success = this._lightSvc.ToggleAsync(entityId).GetAwaiter().GetResult();
-                PluginLog.Info($"{LogPrefix} HA SERVICE CALL: toggle entity_id={entityId} -> success={success}");
-
-                if (success && this._lightStateManager != null)
-                {
-                    // Update local state - toggle the current state
-                    var wasOn = this._lightStateManager.IsLightOn(entityId);
-                    this._lightStateManager.UpdateLightState(entityId, !wasOn);
-                    PluginLog.Info($"{LogPrefix} Updated local state: {entityId} toggled from {wasOn} to {!wasOn}");
-                }
-
-                if (!success)
-                {
-                    var friendlyName = entityId; // Could be enhanced to get friendly name
-                    this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
-                        $"Failed to toggle light {friendlyName}");
-                }
-
-                return success;
-            }
-
-            // Check current light state for proper toggle behavior when parameters are provided
-            var isCurrentlyOn = this._lightStateManager?.IsLightOn(entityId) ?? false;
-            PluginLog.Info($"{LogPrefix} Current light state for {entityId}: isOn={isCurrentlyOn}");
-
-            // If light is currently ON and we have parameters, turn it OFF (toggle behavior)
-            if (isCurrentlyOn)
-            {
-                PluginLog.Info($"{LogPrefix} Light {entityId} is ON, turning OFF for toggle behavior");
+                PluginLog.Info($"{LogPrefix} Advanced lights state is OFF, turning OFF light {entityId}");
                 var success = this._lightSvc.TurnOffAsync(entityId).GetAwaiter().GetResult();
                 PluginLog.Info($"{LogPrefix} HA SERVICE CALL: turn_off entity_id={entityId} -> success={success}");
 
@@ -664,8 +648,8 @@ namespace Loupedeck.HomeAssistantPlugin
                 return success;
             }
 
-            // Light is OFF, turn it ON with the specified parameters
-            PluginLog.Info($"{LogPrefix} Light {entityId} is OFF, turning ON with parameters");
+            // Advanced lights state is ON, turn light ON with the specified parameters
+            PluginLog.Info($"{LogPrefix} Advanced lights state is ON, turning ON light {entityId} with parameters");
 
             // Build service call data based on available parameters and capabilities
             var serviceData = new Dictionary<String, Object>();
