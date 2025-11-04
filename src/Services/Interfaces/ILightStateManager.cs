@@ -124,5 +124,37 @@ namespace Loupedeck.HomeAssistantPlugin.Services
         /// </summary>
         /// <returns>Collection of entity IDs</returns>
         IEnumerable<String> GetTrackedEntityIds();
+
+        /// <summary>
+        /// Gets all stored light data objects
+        /// </summary>
+        /// <returns>Collection of all light data</returns>
+        IEnumerable<LightData> GetAllLights();
+
+        /// <summary>
+        /// Gets lights in a specific area
+        /// </summary>
+        /// <param name="areaId">Area ID to filter by</param>
+        /// <returns>Collection of lights in the specified area</returns>
+        IEnumerable<LightData> GetLightsByArea(String areaId);
+
+        /// <summary>
+        /// Gets all unique area IDs from stored lights
+        /// </summary>
+        /// <returns>Collection of distinct area IDs</returns>
+        IEnumerable<String> GetUniqueAreaIds();
+
+        /// <summary>
+        /// Gets specific light's full data
+        /// </summary>
+        /// <param name="entityId">Entity ID of the light</param>
+        /// <returns>Light data if found, null otherwise</returns>
+        LightData? GetLightData(String entityId);
+
+        /// <summary>
+        /// Gets area ID to friendly name mapping from stored lights
+        /// </summary>
+        /// <returns>Dictionary mapping area IDs to friendly names</returns>
+        Dictionary<String, String> GetAreaIdToNameMapping();
     }
 }

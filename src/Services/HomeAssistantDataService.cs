@@ -10,6 +10,12 @@ namespace Loupedeck.HomeAssistantPlugin.Services
     internal class HomeAssistantDataService : IHomeAssistantDataService
     {
         private readonly IHaClient _client;
+        
+        /// <summary>
+        /// Timeout for websocket connection establishment/validation in seconds.
+        /// Uses the same value as HaWebSocketClient.ReconnectionTimeoutSeconds.
+        /// </summary>
+        private const Int32 ConnectionTimeoutSeconds = 8;
 
         public HomeAssistantDataService(IHaClient client) => this._client = client ?? throw new ArgumentNullException(nameof(client));
 
@@ -17,6 +23,16 @@ namespace Loupedeck.HomeAssistantPlugin.Services
         {
             try
             {
+                // Ensure websocket connection is alive before making request
+                var connectionReady = await this._client.EnsureConnectedAsync(TimeSpan.FromSeconds(ConnectionTimeoutSeconds), token).ConfigureAwait(false);
+                if (!connectionReady)
+                {
+                    const String error = "Could not establish connection to Home Assistant";
+                    PluginLog.Warning(() => $"FetchStatesAsync failed: {error}");
+                    HealthBus.Error("Connection lost");
+                    return (false, null, error);
+                }
+
                 var (ok, resultJson, errorMessage) = await this._client.RequestAsync("get_states", token).ConfigureAwait(false);
                 if (!ok)
                 {
@@ -36,6 +52,16 @@ namespace Loupedeck.HomeAssistantPlugin.Services
         {
             try
             {
+                // Ensure websocket connection is alive before making request
+                var connectionReady = await this._client.EnsureConnectedAsync(TimeSpan.FromSeconds(ConnectionTimeoutSeconds), token).ConfigureAwait(false);
+                if (!connectionReady)
+                {
+                    const String error = "Could not establish connection to Home Assistant";
+                    PluginLog.Warning(() => $"FetchServicesAsync failed: {error}");
+                    HealthBus.Error("Connection lost");
+                    return (false, null, error);
+                }
+
                 var (ok, resultJson, errorMessage) = await this._client.RequestAsync("get_services", token).ConfigureAwait(false);
                 if (!ok)
                 {
@@ -55,6 +81,16 @@ namespace Loupedeck.HomeAssistantPlugin.Services
         {
             try
             {
+                // Ensure websocket connection is alive before making request
+                var connectionReady = await this._client.EnsureConnectedAsync(TimeSpan.FromSeconds(ConnectionTimeoutSeconds), token).ConfigureAwait(false);
+                if (!connectionReady)
+                {
+                    const String error = "Could not establish connection to Home Assistant";
+                    PluginLog.Warning(() => $"FetchEntityRegistryAsync failed: {error}");
+                    HealthBus.Error("Connection lost");
+                    return (false, null, error);
+                }
+
                 var (ok, resultJson, errorMessage) = await this._client.RequestAsync("config/entity_registry/list", token).ConfigureAwait(false);
                 if (!ok)
                 {
@@ -74,6 +110,16 @@ namespace Loupedeck.HomeAssistantPlugin.Services
         {
             try
             {
+                // Ensure websocket connection is alive before making request
+                var connectionReady = await this._client.EnsureConnectedAsync(TimeSpan.FromSeconds(ConnectionTimeoutSeconds), token).ConfigureAwait(false);
+                if (!connectionReady)
+                {
+                    const String error = "Could not establish connection to Home Assistant";
+                    PluginLog.Warning(() => $"FetchDeviceRegistryAsync failed: {error}");
+                    HealthBus.Error("Connection lost");
+                    return (false, null, error);
+                }
+
                 var (ok, resultJson, errorMessage) = await this._client.RequestAsync("config/device_registry/list", token).ConfigureAwait(false);
                 if (!ok)
                 {
@@ -92,6 +138,16 @@ namespace Loupedeck.HomeAssistantPlugin.Services
         {
             try
             {
+                // Ensure websocket connection is alive before making request
+                var connectionReady = await this._client.EnsureConnectedAsync(TimeSpan.FromSeconds(ConnectionTimeoutSeconds), token).ConfigureAwait(false);
+                if (!connectionReady)
+                {
+                    const String error = "Could not establish connection to Home Assistant";
+                    PluginLog.Warning(() => $"FetchAreaRegistryAsync failed: {error}");
+                    HealthBus.Error("Connection lost");
+                    return (false, null, error);
+                }
+
                 var (ok, resultJson, errorMessage) = await this._client.RequestAsync("config/area_registry/list", token).ConfigureAwait(false);
                 if (!ok)
                 {

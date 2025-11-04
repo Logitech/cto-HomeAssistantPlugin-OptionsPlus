@@ -38,6 +38,10 @@ namespace Loupedeck.HomeAssistantPlugin.Services
         private readonly Dictionary<String, (Int32 Min, Int32 Max, Int32 Cur)> _tempMiredByEntity =
             new(StringComparer.OrdinalIgnoreCase);
 
+        // Full LightData storage for enhanced functionality
+        private readonly Dictionary<String, LightData> _lightData =
+            new(StringComparer.OrdinalIgnoreCase);
+
         /// <summary>
         /// Updates the on/off state and optionally brightness for a light.
         /// </summary>
@@ -205,11 +209,15 @@ namespace Loupedeck.HomeAssistantPlugin.Services
             var preservedHsb = new Dictionary<String, (Double H, Double S, Int32 B)>(this._hsbByEntity, StringComparer.OrdinalIgnoreCase);
             var preservedTemp = new Dictionary<String, (Int32 Min, Int32 Max, Int32 Cur)>(this._tempMiredByEntity, StringComparer.OrdinalIgnoreCase);
 
-            // Only clear capabilities - we'll preserve user state and update base state selectively
+            // Only clear capabilities and light data - we'll preserve user state and update base state selectively
             this._capsByEntity.Clear();
+            this._lightData.Clear();
 
             foreach (var light in lights)
             {
+                // Store full LightData object (NEW ENHANCEMENT)
+                this._lightData[light.EntityId] = light;
+
                 // Always update on/off state from Home Assistant (this is current truth)
                 this._isOnByEntity[light.EntityId] = light.IsOn;
 
@@ -283,7 +291,8 @@ namespace Loupedeck.HomeAssistantPlugin.Services
             this._isOnByEntity.Remove(entityId);
             this._capsByEntity.Remove(entityId);
             this._tempMiredByEntity.Remove(entityId);
-            PluginLog.Verbose(() => $"[LightStateManager] Removed entity {entityId} from all caches");
+            this._lightData.Remove(entityId);
+            PluginLog.Verbose(() => $"[LightStateManager] Removed entity {entityId} from all caches including light data");
         }
 
         /// <summary>
@@ -291,6 +300,89 @@ namespace Loupedeck.HomeAssistantPlugin.Services
         /// </summary>
         /// <returns>Collection of entity IDs</returns>
         public IEnumerable<String> GetTrackedEntityIds() => this._hsbByEntity.Keys.ToList();
+
+        /// <summary>
+        /// Gets all stored light data objects
+        /// </summary>
+        /// <returns>Collection of all light data</returns>
+        public IEnumerable<LightData> GetAllLights()
+        {
+            return this._lightData.Values.ToList();
+        }
+
+        /// <summary>
+        /// Gets lights in a specific area
+        /// </summary>
+        /// <param name="areaId">Area ID to filter by</param>
+        /// <returns>Collection of lights in the specified area</returns>
+        public IEnumerable<LightData> GetLightsByArea(String areaId)
+        {
+            if (String.IsNullOrWhiteSpace(areaId))
+            {
+                return Enumerable.Empty<LightData>();
+            }
+
+            return this._lightData.Values
+                .Where(light => String.Equals(light.AreaId, areaId, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        /// <summary>
+        /// Gets all unique area IDs from stored lights
+        /// </summary>
+        /// <returns>Collection of distinct area IDs</returns>
+        public IEnumerable<String> GetUniqueAreaIds()
+        {
+            return this._lightData.Values
+                .Where(light => !String.IsNullOrWhiteSpace(light.AreaId))
+                .Select(light => light.AreaId)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        /// <summary>
+        /// Gets specific light's full data
+        /// </summary>
+        /// <param name="entityId">Entity ID of the light</param>
+        /// <returns>Light data if found, null otherwise</returns>
+        public LightData? GetLightData(String entityId)
+        {
+            if (String.IsNullOrWhiteSpace(entityId))
+            {
+                return null;
+            }
+
+            return this._lightData.TryGetValue(entityId, out var lightData) ? lightData : null;
+        }
+
+        /// <summary>
+        /// Gets area ID to friendly name mapping from stored lights
+        /// </summary>
+        /// <returns>Dictionary mapping area IDs to friendly names</returns>
+        public Dictionary<String, String> GetAreaIdToNameMapping()
+        {
+            var areaMapping = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
+
+            // Extract unique areas and their names from stored light data
+            var areaGroups = this._lightData.Values
+                .Where(light => !String.IsNullOrWhiteSpace(light.AreaId))
+                .GroupBy(light => light.AreaId, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var group in areaGroups)
+            {
+                var areaId = group.Key;
+                // Use the area name from any light in the area (they should all have the same area name)
+                var firstLight = group.FirstOrDefault();
+                if (firstLight != null)
+                {
+                    // Extract area name from device name or use area ID as fallback
+                    var areaName = firstLight.AreaId; // This could be enhanced to get actual friendly names from registry
+                    areaMapping[areaId] = areaName;
+                }
+            }
+
+            return areaMapping;
+        }
 
         /// <summary>
         /// Initializes or updates light states by fetching data from Home Assistant
