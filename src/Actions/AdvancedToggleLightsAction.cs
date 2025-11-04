@@ -424,7 +424,16 @@ namespace Loupedeck.HomeAssistantPlugin
         /// </summary>
         /// <param name="attrs">JSON element containing light attributes from Home Assistant.</param>
         /// <returns>Light capabilities indicating supported features.</returns>
-        private LightCaps GetLightCapabilities(JsonElement attrs) => this._capSvc.ForLight(attrs);
+        /// <summary>
+        /// Gets the capabilities for a single light from its attributes with defensive null checking.
+        /// </summary>
+        /// <param name="attrs">JSON element containing light attributes from Home Assistant.</param>
+        /// <returns>Light capabilities indicating supported features, or basic capabilities if service unavailable.</returns>
+        private LightCaps GetLightCapabilities(JsonElement attrs)
+        {
+            // _capSvc is readonly and initialized in constructor, but add defensive check for completeness
+            return this._capSvc?.ForLight(attrs) ?? new LightCaps(true, false, false, false, null);
+        }
 
 
         /// <summary>
@@ -1047,9 +1056,28 @@ namespace Loupedeck.HomeAssistantPlugin
 
                     // FIXED: Use registry-aware parsing instead of direct JSON parsing
                     PluginLog.Info($"{LogPrefix} Fetching registry data for registry-aware light parsing");
+                    
+                    // Ensure _dataService is not null before using it
+                    if (this._dataService == null)
+                    {
+                        PluginLog.Error($"{LogPrefix} DataService is null when trying to fetch registry data");
+                        e.AddItem("!no_service", "Data service not available", "Plugin initialization error");
+                        this.Plugin.OnPluginStatusChanged(PluginStatus.Error, "Data service not available");
+                        return;
+                    }
+                    
                     var (entSuccess, entJson, _) = this._dataService.FetchEntityRegistryAsync(CancellationToken.None).GetAwaiter().GetResult();
                     var (devSuccess, devJson, _) = this._dataService.FetchDeviceRegistryAsync(CancellationToken.None).GetAwaiter().GetResult();
                     var (areaSuccess, areaJson, _) = this._dataService.FetchAreaRegistryAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+                    // Ensure _dataParser is not null before using it
+                    if (this._dataParser == null)
+                    {
+                        PluginLog.Error($"{LogPrefix} DataParser is null when trying to parse registry data");
+                        e.AddItem("!no_parser", "Data parser not available", "Plugin initialization error");
+                        this.Plugin.OnPluginStatusChanged(PluginStatus.Error, "Data parser not available");
+                        return;
+                    }
 
                     // Parse registry data and light states together (working AreaToggleLights pattern)
                     var registryData = this._dataParser.ParseRegistries(devJson, entJson, areaJson);
