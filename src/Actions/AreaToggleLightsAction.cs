@@ -60,6 +60,12 @@ namespace Loupedeck.HomeAssistantPlugin
         private Boolean _disposed = false;
 
         /// <summary>
+        /// Simple toggle state for all lights in the area. Defaults to false (off state).
+        /// This boolean alternates between true/false on each press, and all lights get the same command.
+        /// </summary>
+        private Boolean _areaLightsState = false;
+
+        /// <summary>
         /// Control name for area selection dropdown.
         /// </summary>
         private const String ControlArea = "ha_area";
@@ -387,6 +393,75 @@ namespace Loupedeck.HomeAssistantPlugin
         }
 
         /// <summary>
+        /// Ensures that area and entity data is initialized for action execution.
+        /// This method handles the case where the action is executed immediately after plugin startup
+        /// before the dropdown has been opened (which would normally populate the caches).
+        /// </summary>
+        /// <returns><c>true</c> if data initialization succeeded; otherwise, <c>false</c>.</returns>
+        private async Task<Boolean> EnsureDataInitializedAsync()
+        {
+            // Check if caches are already populated
+            if (this._areaIdToName.Any() && this._entityToAreaId.Any())
+            {
+                PluginLog.Info($"{LogPrefix} Data caches already populated ({this._areaIdToName.Count} areas, {this._entityToAreaId.Count} entity mappings)");
+                return true;
+            }
+
+            PluginLog.Info($"{LogPrefix} Data caches empty - initializing for action execution");
+
+            try
+            {
+                // Ensure Home Assistant connection
+                if (!await this.EnsureHaReadyAsync())
+                {
+                    PluginLog.Warning($"{LogPrefix} EnsureDataInitialized: EnsureHaReady failed");
+                    return false;
+                }
+
+                // Check DataService availability
+                if (this._dataService == null)
+                {
+                    PluginLog.Error($"{LogPrefix} EnsureDataInitialized: DataService not available");
+                    return false;
+                }
+
+                // Initialize LightStateManager first (this loads basic light data)
+                if (this._lightStateManager != null && this._dataService != null && this._dataParser != null)
+                {
+                    var (success, errorMessage) = await this._lightStateManager.InitOrUpdateAsync(this._dataService, this._dataParser, CancellationToken.None);
+                    if (!success)
+                    {
+                        PluginLog.Warning($"{LogPrefix} EnsureDataInitialized: LightStateManager.InitOrUpdateAsync failed: {errorMessage}");
+                        return false;
+                    }
+                }
+
+                // Fetch registry data for area information
+                PluginLog.Info($"{LogPrefix} Fetching registry data for area mapping");
+                var (okEnt, entJson, errEnt) = await this._dataService.FetchEntityRegistryAsync(CancellationToken.None);
+                var (okDev, devJson, errDev) = await this._dataService.FetchDeviceRegistryAsync(CancellationToken.None);
+                var (okArea, areaJson, errArea) = await this._dataService.FetchAreaRegistryAsync(CancellationToken.None);
+
+                // Parse registry data
+                var registryData = this._dataParser.ParseRegistries(devJson, entJson, areaJson);
+                
+                // Get light data from LightStateManager (already initialized above)
+                var lights = this._lightStateManager?.GetAllLights() ?? Enumerable.Empty<LightData>();
+
+                // Update internal caches using the same logic as the dropdown loading
+                this.UpdateInternalCaches(lights, registryData);
+
+                PluginLog.Info($"{LogPrefix} Data initialization completed: {this._areaIdToName.Count} areas, {this._entityToAreaId.Count} entity mappings");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Error(ex, $"{LogPrefix} EnsureDataInitialized failed");
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Executes the area toggle lights command with comprehensive light control.
         /// Processes all lights in the selected area with brightness, color temperature, hue/saturation, and white level parameters.
         /// Uses individual light capability filtering to send maximum possible settings to each light.
@@ -406,6 +481,14 @@ namespace Loupedeck.HomeAssistantPlugin
                     return false;
                 }
 
+                // Ensure data is initialized (handles first execution after plugin startup)
+                if (!this.EnsureDataInitializedAsync().GetAwaiter().GetResult())
+                {
+                    PluginLog.Warning($"{LogPrefix} RunCommand: EnsureDataInitialized failed");
+                    this.Plugin.OnPluginStatusChanged(PluginStatus.Error, "Failed to load area data");
+                    return false;
+                }
+
                 // Get selected area
                 if (!ps.TryGetString(ControlArea, out var selectedArea) || String.IsNullOrWhiteSpace(selectedArea))
                 {
@@ -414,10 +497,10 @@ namespace Loupedeck.HomeAssistantPlugin
                     return false;
                 }
 
-                // Validate area exists using internal cache
+                // Validate area exists using internal cache (now guaranteed to be populated)
                 if (!this._areaIdToName.ContainsKey(selectedArea))
                 {
-                    PluginLog.Warning($"{LogPrefix} Selected area '{selectedArea}' does not exist in cache");
+                    PluginLog.Warning($"{LogPrefix} Selected area '{selectedArea}' does not exist in available areas");
                     this.Plugin.OnPluginStatusChanged(PluginStatus.Error, $"Area '{selectedArea}' not found");
                     return false;
                 }
@@ -481,6 +564,10 @@ namespace Loupedeck.HomeAssistantPlugin
         private Boolean ProcessAreaLights(IEnumerable<String> areaLights, Int32? brightness, Int32? temperature,
             Double? hue, Double? saturation, Int32? whiteLevel, Int32? coldWhiteLevel)
         {
+            // Toggle the area state before processing lights - all lights get the same command
+            this._areaLightsState = !this._areaLightsState;
+            PluginLog.Info($"{LogPrefix} Toggled area lights state to: {(this._areaLightsState ? "ON" : "OFF")}");
+            
             var success = true;
             
             foreach (var entityId in areaLights)
@@ -592,39 +679,13 @@ namespace Loupedeck.HomeAssistantPlugin
                 return false;
             }
 
-            // If no parameters specified, just toggle
-            if (!brightness.HasValue && !temperature.HasValue && !hue.HasValue && !saturation.HasValue && !whiteLevel.HasValue && !coldWhiteLevel.HasValue)
+            // Always use area state to determine on/off, regardless of parameters
+            PluginLog.Info($"{LogPrefix} Using area state to determine command: {(this._areaLightsState ? "ON" : "OFF")}");
+
+            // Use simple area toggle state - all lights get the same command
+            if (!this._areaLightsState)
             {
-                PluginLog.Info($"{LogPrefix} No parameters provided, using simple toggle for '{entityId}'");
-                var success = this._lightSvc.ToggleAsync(entityId).GetAwaiter().GetResult();
-                PluginLog.Info($"{LogPrefix} HA SERVICE CALL: toggle entity_id={entityId} -> success={success}");
-
-                if (success && this._lightStateManager != null)
-                {
-                    // Update local state - toggle the current state
-                    var wasOn = this._lightStateManager.IsLightOn(entityId);
-                    this._lightStateManager.UpdateLightState(entityId, !wasOn);
-                    PluginLog.Info($"{LogPrefix} Updated local state: {entityId} toggled from {wasOn} to {!wasOn}");
-                }
-
-                if (!success)
-                {
-                    var friendlyName = entityId; // Could be enhanced to get friendly name
-                    this.Plugin.OnPluginStatusChanged(PluginStatus.Error,
-                        $"Failed to toggle light {friendlyName}");
-                }
-
-                return success;
-            }
-
-            // Check current light state for proper toggle behavior when parameters are provided
-            var isCurrentlyOn = this._lightStateManager?.IsLightOn(entityId) ?? false;
-            PluginLog.Info($"{LogPrefix} Current light state for {entityId}: isOn={isCurrentlyOn}");
-
-            // If light is currently ON and we have parameters, turn it OFF (toggle behavior)
-            if (isCurrentlyOn)
-            {
-                PluginLog.Info($"{LogPrefix} Light {entityId} is ON, turning OFF for toggle behavior");
+                PluginLog.Info($"{LogPrefix} Area state is OFF, turning OFF light {entityId}");
                 var success = this._lightSvc.TurnOffAsync(entityId).GetAwaiter().GetResult();
                 PluginLog.Info($"{LogPrefix} HA SERVICE CALL: turn_off entity_id={entityId} -> success={success}");
 
@@ -645,8 +706,8 @@ namespace Loupedeck.HomeAssistantPlugin
                 return success;
             }
 
-            // Light is OFF, turn it ON with the specified parameters
-            PluginLog.Info($"{LogPrefix} Light {entityId} is OFF, turning ON with parameters");
+            // Area state is ON, turn light ON with the specified parameters
+            PluginLog.Info($"{LogPrefix} Area state is ON, turning ON light {entityId} with parameters");
 
             // Build service call data based on INDIVIDUAL capabilities
             var serviceData = new Dictionary<String, Object>();

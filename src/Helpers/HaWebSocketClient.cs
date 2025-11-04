@@ -72,7 +72,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     this._ws = new ClientWebSocket();
                     // Reset message ID counter for new WebSocket session
                     // Home Assistant expects IDs to start from 1 for each new connection
-                    this._nextId = InitialMessageId;
+                    this._nextId = InitialMessageId + 2000000;
                     PluginLog.Verbose($"[WS] Reset message ID counter to {InitialMessageId} for new connection");
                 }
 
@@ -369,7 +369,6 @@ namespace Loupedeck.HomeAssistantPlugin
                 // Log the complete command being sent to Home Assistant
                 PluginLog.Info($"[HA-CMD] Sending command to Home Assistant: {json}");
                 
-                await this.SendTextAsync(json, ct).ConfigureAwait(false);
 
                 var sendStart = DateTime.UtcNow;
                 await this.SendTextAsync(json, ct).ConfigureAwait(false);
