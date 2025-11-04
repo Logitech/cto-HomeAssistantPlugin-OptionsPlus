@@ -939,7 +939,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
         /// <summary>
         /// Populates the area dropdown with areas that contain lights.
-        /// FIXED: Now follows HomeAssistantLightsDynamicFolder pattern - fetches lights first, then extracts areas from lights data.
+        /// PERFORMANCE FIX: Cache-first approach - populate immediately from cache if available, then refresh in background.
         /// </summary>
         /// <param name="sender">Event sender.</param>
         /// <param name="e">Event arguments containing dropdown information.</param>
@@ -950,14 +950,157 @@ namespace Loupedeck.HomeAssistantPlugin
                 return;
             }
 
-            PluginLog.Info($"{LogPrefix} ListboxItemsRequested for areas using AdvancedToggleLights pattern");
+            PluginLog.Info($"{LogPrefix} ListboxItemsRequested for areas - using CACHE-FIRST approach for instant population");
             
             try
             {
-                // STEP 1: Ensure HA connection (same as AdvancedToggleLights)
+                // PERFORMANCE FIX: Check cache FIRST and populate immediately if available
+                if (this._areaIdToName.Any() && this._entityToAreaId.Any())
+                {
+                    PluginLog.Info($"{LogPrefix} Cache available - populating list IMMEDIATELY from {this._areaIdToName.Count} cached areas");
+                    this.PopulateAreaListFromCache(e);
+                    
+                    // Trigger background refresh to update cache (fire and forget)
+                    PluginLog.Info($"{LogPrefix} Starting background refresh to update cache");
+                    _ = Task.Run(async () => await this.RefreshAreaCacheAsync(e));
+                    return;
+                }
+
+                // No cache available - must do full load (first time or after error)
+                PluginLog.Info($"{LogPrefix} No cache available - performing full load for initial population");
+                this.PerformFullAreaLoad(e);
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Error(ex, $"{LogPrefix} Area list population failed with cache-first approach");
+                e.AddItem("!error", "Error loading areas", ex.Message);
+                this.Plugin.OnPluginStatusChanged(PluginStatus.Error, $"Error loading areas: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Populates the area list immediately from cached data for instant UI response.
+        /// </summary>
+        /// <param name="e">Event arguments containing dropdown information.</param>
+        private void PopulateAreaListFromCache(ActionEditorListboxItemsRequestedEventArgs e)
+        {
+            try
+            {
+                // Get areas that have lights (from entity->area cache)
+                var areasWithLights = this._entityToAreaId.Values
+                    .Where(areaId => !String.IsNullOrEmpty(areaId))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                // Order by area name
+                var orderedAreas = areasWithLights
+                    .Select(aid => (aid, name: this._areaIdToName.TryGetValue(aid, out var n) ? n : aid))
+                    .OrderBy(t => t.name, StringComparer.CurrentCultureIgnoreCase);
+
+                var count = 0;
+                foreach (var (areaId, areaName) in orderedAreas)
+                {
+                    // Count lights in this area from cache
+                    var lightCount = this._entityToAreaId.Values.Count(aid =>
+                        String.Equals(aid, areaId, StringComparison.OrdinalIgnoreCase));
+                    
+                    var displayName = $"{areaName} ({lightCount} light{(lightCount == 1 ? "" : "s")})";
+                    e.AddItem(name: areaId, displayName: displayName, description: $"Area with {lightCount} lights");
+                    count++;
+                }
+
+                PluginLog.Info($"{LogPrefix} INSTANT population from cache: {count} area(s)");
+                
+                // Keep current selection
+                var current = e.ActionEditorState?.GetControlValue(ControlArea) as String;
+                if (!String.IsNullOrEmpty(current))
+                {
+                    PluginLog.Info($"{LogPrefix} Keeping current selection from cache: '{current}'");
+                    e.SetSelectedItemName(current);
+                }
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Error(ex, $"{LogPrefix} Failed to populate from cache");
+                // Fall back to full load if cache population fails
+                this.PerformFullAreaLoad(e);
+            }
+        }
+
+        /// <summary>
+        /// Performs background refresh of area cache and updates the UI when complete.
+        /// </summary>
+        /// <param name="e">Event arguments for updating the list when refresh completes.</param>
+        private async Task RefreshAreaCacheAsync(ActionEditorListboxItemsRequestedEventArgs e)
+        {
+            try
+            {
+                PluginLog.Info($"{LogPrefix} Background refresh: Starting cache update");
+                
+                // Perform full data fetch in background
+                if (!await this.EnsureHaReadyAsync())
+                {
+                    PluginLog.Warning($"{LogPrefix} Background refresh: EnsureHaReady failed");
+                    return;
+                }
+
+                if (this._dataService == null)
+                {
+                    PluginLog.Error($"{LogPrefix} Background refresh: DataService not available");
+                    return;
+                }
+
+                // Fetch all required data
+                var (ok, json, error) = await this._dataService.FetchStatesAsync(CancellationToken.None);
+                if (!ok || String.IsNullOrEmpty(json))
+                {
+                    PluginLog.Warning($"{LogPrefix} Background refresh: Failed to fetch states - {error}");
+                    return;
+                }
+
+                // Initialize LightStateManager
+                if (this._lightStateManager != null && this._dataParser != null)
+                {
+                    var (success, errorMessage) = await this._lightStateManager.InitOrUpdateAsync(this._dataService, this._dataParser, CancellationToken.None);
+                    if (!success)
+                    {
+                        PluginLog.Warning($"{LogPrefix} Background refresh: LightStateManager update failed - {errorMessage}");
+                        return;
+                    }
+                }
+
+                // Fetch registry data
+                var (okEnt, entJson, errEnt) = await this._dataService.FetchEntityRegistryAsync(CancellationToken.None);
+                var (okDev, devJson, errDev) = await this._dataService.FetchDeviceRegistryAsync(CancellationToken.None);
+                var (okArea, areaJson, errArea) = await this._dataService.FetchAreaRegistryAsync(CancellationToken.None);
+
+                // Parse data
+                var registryData = this._dataParser.ParseRegistries(devJson, entJson, areaJson);
+                var lights = this._dataParser.ParseLightStates(json, registryData);
+
+                // Update caches
+                this.UpdateInternalCaches(lights, registryData);
+
+                PluginLog.Info($"{LogPrefix} Background refresh: Cache updated with {lights.Count()} lights in {this._areaIdToName.Count} areas - ready for next dropdown open");
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Error(ex, $"{LogPrefix} Background refresh failed");
+            }
+        }
+
+        /// <summary>
+        /// Performs full area load when no cache is available (initial load or after errors).
+        /// </summary>
+        /// <param name="e">Event arguments containing dropdown information.</param>
+        private void PerformFullAreaLoad(ActionEditorListboxItemsRequestedEventArgs e)
+        {
+            try
+            {
+                // STEP 1: Ensure HA connection
                 if (!this.EnsureHaReadyAsync().GetAwaiter().GetResult())
                 {
-                    PluginLog.Warning($"{LogPrefix} List: EnsureHaReady failed (not connected/authenticated)");
+                    PluginLog.Warning($"{LogPrefix} Full load: EnsureHaReady failed (not connected/authenticated)");
                     if (!this.Plugin.TryGetPluginSetting(HomeAssistantPlugin.SettingBaseUrl, out var _) ||
                         !this.Plugin.TryGetPluginSetting(HomeAssistantPlugin.SettingToken, out var _))
                     {
@@ -972,19 +1115,19 @@ namespace Loupedeck.HomeAssistantPlugin
                     return;
                 }
 
-                // STEP 2: Check DataService availability (same as AdvancedToggleLights)
+                // STEP 2: Check DataService availability
                 if (this._dataService == null)
                 {
-                    PluginLog.Error($"{LogPrefix} ListboxItemsRequested: DataService not available");
+                    PluginLog.Error($"{LogPrefix} Full load: DataService not available");
                     e.AddItem("!no_service", "Data service not available", "Plugin initialization error");
                     this.Plugin.OnPluginStatusChanged(PluginStatus.Error, "Plugin initialization error");
                     return;
                 }
 
-                // STEP 3: Fetch states FIRST (same as AdvancedToggleLights)
-                PluginLog.Info($"{LogPrefix} Fetching states using modern service architecture");
+                // STEP 3: Fetch states
+                PluginLog.Info($"{LogPrefix} Full load: Fetching states using modern service architecture");
                 var (ok, json, error) = this._dataService.FetchStatesAsync(CancellationToken.None).GetAwaiter().GetResult();
-                PluginLog.Info($"{LogPrefix} FetchStatesAsync ok={ok} error='{error}' bytes={json?.Length ?? 0}");
+                PluginLog.Info($"{LogPrefix} Full load: FetchStatesAsync ok={ok} error='{error}' bytes={json?.Length ?? 0}");
 
                 if (!ok || String.IsNullOrEmpty(json))
                 {
@@ -993,35 +1136,33 @@ namespace Loupedeck.HomeAssistantPlugin
                     return;
                 }
 
-                // STEP 4: Initialize LightStateManager AFTER fetching data (same as AdvancedToggleLights)
+                // STEP 4: Initialize LightStateManager
                 if (this._lightStateManager != null && this._dataService != null && this._dataParser != null)
                 {
                     var (success, errorMessage) = this._lightStateManager.InitOrUpdateAsync(this._dataService, this._dataParser, CancellationToken.None).GetAwaiter().GetResult();
                     if (!success)
                     {
-                        PluginLog.Warning($"{LogPrefix} LightStateManager.InitOrUpdateAsync failed: {errorMessage}");
+                        PluginLog.Warning($"{LogPrefix} Full load: LightStateManager.InitOrUpdateAsync failed: {errorMessage}");
                         this.Plugin.OnPluginStatusChanged(PluginStatus.Error, $"Failed to load light data: {errorMessage}");
                         e.AddItem("!init_failed", "Failed to load lights", errorMessage ?? "Check connection to Home Assistant");
                         return;
                     }
                 }
 
-                // STEP 5: Fetch additional registry data for area information
-                PluginLog.Info($"{LogPrefix} Fetching registry data for area information");
+                // STEP 5: Fetch registry data
+                PluginLog.Info($"{LogPrefix} Full load: Fetching registry data for area information");
                 var (okEnt, entJson, errEnt) = this._dataService.FetchEntityRegistryAsync(CancellationToken.None).GetAwaiter().GetResult();
                 var (okDev, devJson, errDev) = this._dataService.FetchDeviceRegistryAsync(CancellationToken.None).GetAwaiter().GetResult();
                 var (okArea, areaJson, errArea) = this._dataService.FetchAreaRegistryAsync(CancellationToken.None).GetAwaiter().GetResult();
 
-                // STEP 6: Parse registry data for area names
+                // STEP 6: Parse data
                 var registryData = this._dataParser.ParseRegistries(devJson, entJson, areaJson);
-
-                // STEP 7: Parse light states with registry data
                 var lights = this._dataParser.ParseLightStates(json, registryData);
 
-                // STEP 8: Update internal caches
+                // STEP 7: Update caches
                 this.UpdateInternalCaches(lights, registryData);
 
-                // STEP 9: Extract areas with lights and populate dropdown
+                // STEP 8: Populate list from fresh data
                 var areaIds = new HashSet<String>(StringComparer.OrdinalIgnoreCase);
                 foreach (var light in lights)
                 {
@@ -1031,7 +1172,6 @@ namespace Loupedeck.HomeAssistantPlugin
                     }
                 }
 
-                // Order by area name
                 var orderedAreas = areaIds
                     .Select(aid => (aid, name: this._areaIdToName.TryGetValue(aid, out var n) ? n : aid))
                     .OrderBy(t => t.name, StringComparer.CurrentCultureIgnoreCase);
@@ -1039,7 +1179,6 @@ namespace Loupedeck.HomeAssistantPlugin
                 var count = 0;
                 foreach (var (areaId, areaName) in orderedAreas)
                 {
-                    // Count lights in this area
                     var lightsInArea = lights.Where(l => String.Equals(l.AreaId, areaId, StringComparison.OrdinalIgnoreCase));
                     var lightCount = lightsInArea.Count();
                     
@@ -1048,9 +1187,8 @@ namespace Loupedeck.HomeAssistantPlugin
                     count++;
                 }
 
-                PluginLog.Info($"{LogPrefix} List populated with {count} area(s) using AdvancedToggleLights pattern");
+                PluginLog.Info($"{LogPrefix} Full load: List populated with {count} area(s)");
                 
-                // Clear any previous error status since we successfully loaded areas
                 if (count > 0)
                 {
                     this.Plugin.OnPluginStatusChanged(PluginStatus.Normal, $"Successfully loaded {count} areas with lights");
@@ -1065,13 +1203,13 @@ namespace Loupedeck.HomeAssistantPlugin
                 var current = e.ActionEditorState?.GetControlValue(ControlArea) as String;
                 if (!String.IsNullOrEmpty(current))
                 {
-                    PluginLog.Info($"{LogPrefix} Keeping current selection: '{current}'");
+                    PluginLog.Info($"{LogPrefix} Full load: Keeping current selection: '{current}'");
                     e.SetSelectedItemName(current);
                 }
             }
             catch (Exception ex)
             {
-                PluginLog.Error(ex, $"{LogPrefix} Area list population failed using corrected pattern");
+                PluginLog.Error(ex, $"{LogPrefix} Full load failed");
                 e.AddItem("!error", "Error loading areas", ex.Message);
                 this.Plugin.OnPluginStatusChanged(PluginStatus.Error, $"Error loading areas: {ex.Message}");
             }

@@ -70,6 +70,10 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     this._ws?.Dispose();
                     this._ws = new ClientWebSocket();
+                    // Reset message ID counter for new WebSocket session
+                    // Home Assistant expects IDs to start from 1 for each new connection
+                    this._nextId = InitialMessageId;
+                    PluginLog.Verbose($"[WS] Reset message ID counter to {InitialMessageId} for new connection");
                 }
 
                 PluginLog.Debug(() => $"[WS] Initiating WebSocket connection to {wsUri}...");
@@ -485,6 +489,10 @@ namespace Loupedeck.HomeAssistantPlugin
                     this._ws?.Dispose();
                     this._ws = null;
                     this.IsAuthenticated = false;
+                    // Reset message ID counter when closing connection
+                    // This ensures fresh ID sequence for next connection
+                    this._nextId = InitialMessageId;
+                    PluginLog.Verbose($"[WS] Reset message ID counter to {InitialMessageId} for next connection");
                 }
                 PluginLog.Info("[WS] WebSocket client disposed and reset");
             }
