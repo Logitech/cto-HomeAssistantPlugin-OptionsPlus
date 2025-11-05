@@ -847,6 +847,13 @@ namespace Loupedeck.HomeAssistantPlugin
         private Boolean SendLightServiceCalls(String entityId, Dictionary<String, Object> serviceData,
             Int32? brightness, Int32? temperature, Double? hue, Double? saturation, Int32? whiteLevel)
         {
+            // Add null check for _lightSvc to prevent null reference exception
+            if (this._lightSvc == null)
+            {
+                PluginLog.Error($"{LogPrefix} SendLightServiceCalls: LightControlService not available for entity {entityId}");
+                return false;
+            }
+
             var overallSuccess = true;
 
             if (serviceData.Any())
