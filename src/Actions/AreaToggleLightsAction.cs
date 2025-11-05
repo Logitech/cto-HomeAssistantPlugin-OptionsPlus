@@ -425,10 +425,21 @@ namespace Loupedeck.HomeAssistantPlugin
                     return false;
                 }
 
-                // Initialize LightStateManager first (this loads basic light data)
-                if (this._lightStateManager != null && this._dataService != null && this._dataParser != null)
+                // Assign to local variable to help compiler flow analysis and prevent race conditions
+                var dataService = this._dataService;
+                var dataParser = this._dataParser;
+
+                // Ensure both dataService and dataParser are available
+                if (dataService == null || dataParser == null)
                 {
-                    var (success, errorMessage) = await this._lightStateManager.InitOrUpdateAsync(this._dataService, this._dataParser, CancellationToken.None);
+                    PluginLog.Error($"{LogPrefix} EnsureDataInitialized: DataService or DataParser not available");
+                    return false;
+                }
+
+                // Initialize LightStateManager first (this loads basic light data)
+                if (this._lightStateManager != null)
+                {
+                    var (success, errorMessage) = await this._lightStateManager.InitOrUpdateAsync(dataService, dataParser, CancellationToken.None);
                     if (!success)
                     {
                         PluginLog.Warning($"{LogPrefix} EnsureDataInitialized: LightStateManager.InitOrUpdateAsync failed: {errorMessage}");
@@ -438,12 +449,12 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 // Fetch registry data for area information
                 PluginLog.Info($"{LogPrefix} Fetching registry data for area mapping");
-                var (okEnt, entJson, errEnt) = await this._dataService.FetchEntityRegistryAsync(CancellationToken.None);
-                var (okDev, devJson, errDev) = await this._dataService.FetchDeviceRegistryAsync(CancellationToken.None);
-                var (okArea, areaJson, errArea) = await this._dataService.FetchAreaRegistryAsync(CancellationToken.None);
+                var (okEnt, entJson, errEnt) = await dataService.FetchEntityRegistryAsync(CancellationToken.None);
+                var (okDev, devJson, errDev) = await dataService.FetchDeviceRegistryAsync(CancellationToken.None);
+                var (okArea, areaJson, errArea) = await dataService.FetchAreaRegistryAsync(CancellationToken.None);
 
-                // Parse registry data
-                var registryData = this._dataParser.ParseRegistries(devJson, entJson, areaJson);
+                // Parse registry data (dataParser is now guaranteed to be non-null)
+                var registryData = dataParser.ParseRegistries(devJson, entJson, areaJson);
                 
                 // Get light data from LightStateManager (already initialized above)
                 var lights = this._lightStateManager?.GetAllLights() ?? Enumerable.Empty<LightData>();
@@ -1118,18 +1129,29 @@ namespace Loupedeck.HomeAssistantPlugin
                     return;
                 }
 
+                // Assign to local variable to help compiler flow analysis and prevent race conditions
+                var dataService = this._dataService;
+                var dataParser = this._dataParser;
+
+                // Ensure both services are available
+                if (dataService == null || dataParser == null)
+                {
+                    PluginLog.Error($"{LogPrefix} Background refresh: DataService or DataParser not available");
+                    return;
+                }
+
                 // Fetch all required data
-                var (ok, json, error) = await this._dataService.FetchStatesAsync(CancellationToken.None);
+                var (ok, json, error) = await dataService.FetchStatesAsync(CancellationToken.None);
                 if (!ok || String.IsNullOrEmpty(json))
                 {
                     PluginLog.Warning($"{LogPrefix} Background refresh: Failed to fetch states - {error}");
                     return;
                 }
 
-                // Initialize LightStateManager
-                if (this._lightStateManager != null && this._dataParser != null)
+                // Initialize LightStateManager (dataParser is now guaranteed to be non-null)
+                if (this._lightStateManager != null)
                 {
-                    var (success, errorMessage) = await this._lightStateManager.InitOrUpdateAsync(this._dataService, this._dataParser, CancellationToken.None);
+                    var (success, errorMessage) = await this._lightStateManager.InitOrUpdateAsync(dataService, dataParser, CancellationToken.None);
                     if (!success)
                     {
                         PluginLog.Warning($"{LogPrefix} Background refresh: LightStateManager update failed - {errorMessage}");
@@ -1138,13 +1160,13 @@ namespace Loupedeck.HomeAssistantPlugin
                 }
 
                 // Fetch registry data
-                var (okEnt, entJson, errEnt) = await this._dataService.FetchEntityRegistryAsync(CancellationToken.None);
-                var (okDev, devJson, errDev) = await this._dataService.FetchDeviceRegistryAsync(CancellationToken.None);
-                var (okArea, areaJson, errArea) = await this._dataService.FetchAreaRegistryAsync(CancellationToken.None);
+                var (okEnt, entJson, errEnt) = await dataService.FetchEntityRegistryAsync(CancellationToken.None);
+                var (okDev, devJson, errDev) = await dataService.FetchDeviceRegistryAsync(CancellationToken.None);
+                var (okArea, areaJson, errArea) = await dataService.FetchAreaRegistryAsync(CancellationToken.None);
 
-                // Parse data
-                var registryData = this._dataParser.ParseRegistries(devJson, entJson, areaJson);
-                var lights = this._dataParser.ParseLightStates(json, registryData);
+                // Parse data (both dataService and dataParser are now guaranteed to be non-null)
+                var registryData = dataParser.ParseRegistries(devJson, entJson, areaJson);
+                var lights = dataParser.ParseLightStates(json, registryData);
 
                 // Update caches
                 this.UpdateInternalCaches(lights, registryData);
@@ -1192,9 +1214,22 @@ namespace Loupedeck.HomeAssistantPlugin
                     return;
                 }
 
+                // Assign to local variable to help compiler flow analysis and prevent race conditions
+                var dataService = this._dataService;
+                var dataParser = this._dataParser;
+
+                // Ensure both services are available
+                if (dataService == null || dataParser == null)
+                {
+                    PluginLog.Error($"{LogPrefix} Full load: DataService or DataParser not available");
+                    e.AddItem("!no_service", "Data service or parser not available", "Plugin initialization error");
+                    this.Plugin.OnPluginStatusChanged(PluginStatus.Error, "Plugin initialization error");
+                    return;
+                }
+
                 // STEP 3: Fetch states
                 PluginLog.Info($"{LogPrefix} Full load: Fetching states using modern service architecture");
-                var (ok, json, error) = this._dataService.FetchStatesAsync(CancellationToken.None).GetAwaiter().GetResult();
+                var (ok, json, error) = dataService.FetchStatesAsync(CancellationToken.None).GetAwaiter().GetResult();
                 PluginLog.Info($"{LogPrefix} Full load: FetchStatesAsync ok={ok} error='{error}' bytes={json?.Length ?? 0}");
 
                 if (!ok || String.IsNullOrEmpty(json))
@@ -1204,10 +1239,10 @@ namespace Loupedeck.HomeAssistantPlugin
                     return;
                 }
 
-                // STEP 4: Initialize LightStateManager
-                if (this._lightStateManager != null && this._dataService != null && this._dataParser != null)
+                // STEP 4: Initialize LightStateManager (dataService and dataParser are now guaranteed to be non-null)
+                if (this._lightStateManager != null)
                 {
-                    var (success, errorMessage) = this._lightStateManager.InitOrUpdateAsync(this._dataService, this._dataParser, CancellationToken.None).GetAwaiter().GetResult();
+                    var (success, errorMessage) = this._lightStateManager.InitOrUpdateAsync(dataService, dataParser, CancellationToken.None).GetAwaiter().GetResult();
                     if (!success)
                     {
                         PluginLog.Warning($"{LogPrefix} Full load: LightStateManager.InitOrUpdateAsync failed: {errorMessage}");
@@ -1219,13 +1254,13 @@ namespace Loupedeck.HomeAssistantPlugin
 
                 // STEP 5: Fetch registry data
                 PluginLog.Info($"{LogPrefix} Full load: Fetching registry data for area information");
-                var (okEnt, entJson, errEnt) = this._dataService.FetchEntityRegistryAsync(CancellationToken.None).GetAwaiter().GetResult();
-                var (okDev, devJson, errDev) = this._dataService.FetchDeviceRegistryAsync(CancellationToken.None).GetAwaiter().GetResult();
-                var (okArea, areaJson, errArea) = this._dataService.FetchAreaRegistryAsync(CancellationToken.None).GetAwaiter().GetResult();
+                var (okEnt, entJson, errEnt) = dataService.FetchEntityRegistryAsync(CancellationToken.None).GetAwaiter().GetResult();
+                var (okDev, devJson, errDev) = dataService.FetchDeviceRegistryAsync(CancellationToken.None).GetAwaiter().GetResult();
+                var (okArea, areaJson, errArea) = dataService.FetchAreaRegistryAsync(CancellationToken.None).GetAwaiter().GetResult();
 
-                // STEP 6: Parse data
-                var registryData = this._dataParser.ParseRegistries(devJson, entJson, areaJson);
-                var lights = this._dataParser.ParseLightStates(json, registryData);
+                // STEP 6: Parse data (both dataService and dataParser are now guaranteed to be non-null)
+                var registryData = dataParser.ParseRegistries(devJson, entJson, areaJson);
+                var lights = dataParser.ParseLightStates(json, registryData);
 
                 // STEP 7: Update caches
                 this.UpdateInternalCaches(lights, registryData);
