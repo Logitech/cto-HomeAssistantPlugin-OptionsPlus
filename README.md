@@ -1,8 +1,8 @@
 # Loupedeck × Home Assistant Plugin
 
-Control your Home Assistant lights (and soon, any entity) from your Creative Console with a fast, optimistic UI, debounced actions, and capability-aware controls. Open the **All Light Controls** dynamic folder to browse **Areas → Lights → Commands** and use the dial for brightness, color temperature, hue, and saturation.
+Control your Home Assistant lights (and soon, any entity) from your Creative Console with a fast, optimistic UI, debounced actions, and capability-aware controls. Open the **All Light Controls** dynamic folder(only on creative console) to browse **Areas → Lights → Commands** and use the dial for brightness, color temperature, hue, and saturation.
 
-> **Status**: pre-release. For now there is only support for lights. OSS-ready and actively refactoring for general entities. The plugin was only tested on the Creative Console.
+> **Status**: Beta. For now there is only support for lights. OSS-ready and actively monitoring and fixing issues. The plugin was only tested on the Creative Console with Phillips Wiz lights.
 
 ---
 
@@ -142,8 +142,7 @@ Area-based light control that automatically discovers and controls all lights in
 
 * **Individual Capability Filtering**: Each light gets maximum possible parameters it supports (not limited by other lights in area)
 * **Automatic Light Discovery**: Finds all lights in selected area automatically
-* **Mixed Capability Support**: Perfect for areas with different light types (smart bulbs + dimmers + switches)
-* **Smart Per-Light Toggle**: Each light toggles individually based on its own current state
+* **Mixed Capability Support**: Perfect for areas with different light types
 * **Area-Centric Control**: No need to select individual lights - just pick the area
 
 **Best for**: Controlling entire areas/rooms where lights have different capabilities, maximizing each light's potential.
@@ -152,7 +151,7 @@ Area-based light control that automatically discovers and controls all lights in
 
 ### All Light Controls (Areas → Lights → Commands)
 
-Browse all lights and control them with capability-aware dials.
+Browse all lights and control them with capability-aware dials. Only available for the Creative Console or equivalents.
 
 1. Add **All Light Controls** to your layout and press it to enter.
 
@@ -238,7 +237,7 @@ The Long-Lived Token must allow:
 
 ## Requirements
 
-* **Loupedeck** software + a compatible Loupedeck device (Creative Console, Live/Live S/CT, etc.).
+* **Loupedeck** software + a compatible Loupedeck device (Creative Console, Live/Live S/CT, etc.) Some simple actions can be used with the actions ring.
 * **Home Assistant** with WebSocket API enabled (standard).
 * **Home Assistant Long-Lived Access Token** (Profile → Security).
 * **.NET SDK** 8.0 (recommended) to build from source.
@@ -248,11 +247,10 @@ The Long-Lived Token must allow:
 
 ## Install
 
-### Marketplace (soon)
+### Marketplace
 
 * Search for **“Home Assistant”** in the Loupedeck Marketplace and install.
 
-Awesome—here’s the revised **Manual (from source)** section for your README, aligned with Logitech’s docs:
 
 ---
 
@@ -377,7 +375,6 @@ dotnet build
 
   ```xml
   <Nullable>enable</Nullable>
-  <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   ```
 * Run `dotnet format` before committing.
 
