@@ -1,0 +1,95 @@
+name: "🐞 Bug report"
+description: "Something isn’t working right with the plugin"
+title: "[Bug]: <short summary>"
+labels: ["bug", "triage"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please answer the required questions so we can help quickly.
+        *(Tip: You can drag the `.log` file into this box.)*
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Quick checks
+      options:
+        - label: I restarted LogiPluginService(options+ -> settings -> RESTART LOGI PLUGIN SERVICE) and the issue persists
+          required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Operating system
+      options:
+        - Windows 10
+        - Windows 11
+        - macOS (Intel)
+        - macOS (Apple Silicon)
+      multiple: false
+    validations:
+      required: true
+
+  - type: input
+    id: plugin_version
+    attributes:
+      label: Plugin version (in the screen of the action selection of the plugin, thee dots next to HomeAssistant Actions -> Plugin Settings)
+      placeholder: "e.g., 1.0.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device / hardware
+      description: Select what you’re using
+      options:
+        - Creative Console
+        - Actions Ring
+        - Loupedeck Live
+        - Loupedeck CT
+        - Loupedeck Live S
+        - Other / Not sure
+      multiple: false
+    validations:
+      required: true
+
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened?
+      description: Tell us what you saw. If there’s an error message, copy it here.
+      placeholder: "It crashes when I press X… Actual result vs expected result"
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro_steps
+    attributes:
+      label: Steps to reproduce (simple and exact)
+      description: "Example: 1) Open app 2) Click Y 3) Press the Z button 4) App freezes"
+      placeholder: "1) … 2) … 3) …"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "Paste the relevant lines or attach the file. See 'Where to find logs' below."
+      placeholder: "Attach or paste logs here…"
+
+  - type: textarea
+    id: extras
+    attributes:
+      label: Anything else?
+      description: "Other plugins installed? Special configuration? Happens only on Wi-Fi?"
+      placeholder: "Details…"
+
+  - type: markdown
+    attributes:
+      value: |
+        **Where to find logs**
+        - Windows: `C:\Users\<You>\AppData\Local\Logi\LogiPluginService\Logs\plugin_logs\HomeAssistant.log` *(example; adjust to your plugin’s real path)*
+        - macOS: `~/Library/Logs/LogiPluginService/plugin_logs/HomeAssistant.log`

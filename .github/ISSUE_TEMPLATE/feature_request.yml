@@ -1,0 +1,22 @@
+name: "💡 Feature request"
+description: "Suggest an idea or improvement"
+title: "[Feature]: <short summary>"
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: Problem to solve
+      description: "What’s the use-case or pain point?"
+      placeholder: "When I…, I wish I could…"
+    validations: { required: true }
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Your idea
+      placeholder: "Describe the feature or flow"
+  - type: textarea
+    id: alt
+    attributes:
+      label: Alternatives considered
+      placeholder: "Other ways you tried?"
