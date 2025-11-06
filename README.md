@@ -5,7 +5,12 @@ Control your Home Assistant lights (and soon, any entity) from your Creative Con
 > **Status**: Beta. For now there is only support for lights. OSS-ready and actively monitoring and fixing issues. The plugin was only tested on the Creative Console with Phillips Wiz lights.
 
 ## Need help?
-Check the [Troubleshooting guide](./TROUBLESHOOTING.md) or open a [New bug report](../../issues/new?template=bug_report.yml).
+
+[🧰 Troubleshooting guide](./TROUBLESHOOTING.md) ·
+[🐞 Report a bug](https://github.com/Logitech/cto-HomeAssistantPlugin-OptionsPlus/issues/new?template=bug_report.yml) ·
+[💡 Request a feature](https://github.com/Logitech/cto-HomeAssistantPlugin-OptionsPlus/issues/new?template=feature_request.yml) ·
+[❓ Ask a question](https://github.com/Logitech/cto-HomeAssistantPlugin-OptionsPlus/discussions/new)
+
 
 
 ---
