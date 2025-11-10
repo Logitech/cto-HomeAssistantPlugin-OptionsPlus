@@ -4,10 +4,6 @@ contact_links:
     url: https://github.com/Logitech/cto-HomeAssistantPlugin-OptionsPlus/discussions/new?category=q-a
     about: Ask for help in Discussions rather than filing an issue.
 
-  - name: 🔐 Security vulnerability
-    url: https://github.com/Logitech/cto-HomeAssistantPlugin-OptionsPlus/security/policy
-    about: Please report security issues privately (do not open a public issue).
-
   - name: 🧰 Troubleshooting guide
     url: https://github.com/Logitech/cto-HomeAssistantPlugin-OptionsPlus/blob/main/TROUBLESHOOTING.md
     about: Common fixes and how to enable debug logs
