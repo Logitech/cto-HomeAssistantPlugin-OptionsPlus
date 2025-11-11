@@ -10,7 +10,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
     internal class HomeAssistantDataService : IHomeAssistantDataService
     {
         private readonly IHaClient _client;
-        
+
         /// <summary>
         /// Timeout for websocket connection establishment/validation in seconds.
         /// Uses the same value as HaWebSocketClient.ReconnectionTimeoutSeconds.

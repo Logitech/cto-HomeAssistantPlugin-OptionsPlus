@@ -51,11 +51,26 @@ namespace Loupedeck.HomeAssistantPlugin
                     color = modes.Contains(HS) || modes.Contains(RGB) || modes.Contains(XY) || modes.Contains(RGBW) || modes.Contains(RGBWW);
 
                     // Determine preferred color mode in priority order
-                    if (modes.Contains(RGBWW)) preferredMode = RGBWW;
-                    else if (modes.Contains(RGBW)) preferredMode = RGBW;
-                    else if (modes.Contains(RGB)) preferredMode = RGB;
-                    else if (modes.Contains(HS)) preferredMode = HS;
-                    else if (modes.Contains(XY)) preferredMode = XY;
+                    if (modes.Contains(RGBWW))
+                    {
+                        preferredMode = RGBWW;
+                    }
+                    else if (modes.Contains(RGBW))
+                    {
+                        preferredMode = RGBW;
+                    }
+                    else if (modes.Contains(RGB))
+                    {
+                        preferredMode = RGB;
+                    }
+                    else if (modes.Contains(HS))
+                    {
+                        preferredMode = HS;
+                    }
+                    else if (modes.Contains(XY))
+                    {
+                        preferredMode = XY;
+                    }
 
                     // Brightness is implied by many color modes in HA; be liberal:
                     bri = modes.Contains(BR) || modes.Contains(WHITE) || color || ctemp;

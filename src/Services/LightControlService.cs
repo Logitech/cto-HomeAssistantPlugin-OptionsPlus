@@ -110,9 +110,9 @@ namespace Loupedeck.HomeAssistantPlugin
             {
                 var dataStr = data?.ToString() ?? "null";
                 PluginLog.Info($"[light] Sending turn_on command to {entityId} with data: {dataStr}");
-                
+
                 var (ok, err) = await this._ha.CallServiceAsync("light", "turn_on", entityId, data, ct).ConfigureAwait(false);
-                
+
                 if (ok)
                 {
                     PluginLog.Info($"[light] turn_on -> {entityId} OK");
@@ -121,7 +121,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     PluginLog.Warning($"[light] turn_on failed for {entityId}: {err}");
                 }
-                
+
                 return ok;
             }
             catch (Exception ex)
@@ -136,9 +136,9 @@ namespace Loupedeck.HomeAssistantPlugin
             try
             {
                 PluginLog.Info($"[light] Sending turn_off command to {entityId}");
-                
+
                 var (ok, err) = await this._ha.CallServiceAsync("light", "turn_off", entityId, null, ct).ConfigureAwait(false);
-                
+
                 if (ok)
                 {
                     PluginLog.Info($"[light] turn_off -> {entityId} OK");
@@ -147,7 +147,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     PluginLog.Warning($"[light] turn_off failed for {entityId}: {err}");
                 }
-                
+
                 return ok;
             }
             catch (Exception ex)
@@ -162,9 +162,9 @@ namespace Loupedeck.HomeAssistantPlugin
             try
             {
                 PluginLog.Info($"[light] Sending toggle command to {entityId}");
-                
+
                 var (ok, err) = await this._ha.CallServiceAsync("light", "toggle", entityId, null, ct).ConfigureAwait(false);
-                
+
                 if (ok)
                 {
                     PluginLog.Info($"[light] toggle -> {entityId} OK");
@@ -173,7 +173,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 {
                     PluginLog.Warning($"[light] toggle failed for {entityId}: {err}");
                 }
-                
+
                 return ok;
             }
             catch (Exception ex)
@@ -191,9 +191,9 @@ namespace Loupedeck.HomeAssistantPlugin
                 { HealthBus.Error("Connection lost"); return; }
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(ServiceCallTimeoutSeconds));
                 var data = JsonSerializer.SerializeToElement(new { brightness = target });
-                
+
                 PluginLog.Info($"[light] Sending brightness command to {entityId} with data: {data}");
-                
+
                 var (ok, err) = await this._ha.CallServiceAsync("light", "turn_on", entityId, data, cts.Token).ConfigureAwait(false);
                 if (ok)
                 {
@@ -225,14 +225,14 @@ namespace Loupedeck.HomeAssistantPlugin
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(ServiceCallTimeoutSeconds));
 
                 var data = JsonSerializer.SerializeToElement(new { hs_color = new Object[] { hs.H, hs.S } });
-                
+
                 PluginLog.Info($"[light] Sending hue/saturation command to {entityId} with data: {data}");
-                
+
                 // DEBUG: Log detailed format information
                 var dataJson = JsonSerializer.Serialize(data);
                 PluginLog.Info($"[light] DEBUG - Working HS format JSON: {dataJson}");
                 PluginLog.Info($"[light] DEBUG - hs_color array type: {typeof(Object[])}, values: [{hs.H:F1}, {hs.S:F1}]");
-                
+
                 var (ok, err) = await this._ha.CallServiceAsync("light", "turn_on", entityId, data, cts.Token).ConfigureAwait(false);
                 if (ok)
                 {

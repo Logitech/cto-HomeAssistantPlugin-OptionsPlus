@@ -365,10 +365,10 @@ namespace Loupedeck.HomeAssistantPlugin
                 }
 
                 var json = JsonSerializer.Serialize(obj);
-                
+
                 // Log the complete command being sent to Home Assistant
                 PluginLog.Info($"[HA-CMD] Sending command to Home Assistant: {json}");
-                
+
 
                 var sendStart = DateTime.UtcNow;
                 await this.SendTextAsync(json, ct).ConfigureAwait(false);

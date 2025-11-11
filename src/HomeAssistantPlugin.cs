@@ -15,7 +15,7 @@ namespace Loupedeck.HomeAssistantPlugin
         /// Setting key for Home Assistant base URL configuration.
         /// </summary>
         public const String SettingBaseUrl = "ha.baseUrl";
-        
+
         /// <summary>
         /// Setting key for Home Assistant access token configuration.
         /// </summary>
@@ -26,25 +26,25 @@ namespace Loupedeck.HomeAssistantPlugin
         /// </summary>
         /// <returns>Always <c>true</c> as this plugin operates independently.</returns>
         public override Boolean HasNoApplication => true;
-        
+
         /// <summary>
         /// Gets a value indicating whether this plugin uses only the application API.
         /// </summary>
         /// <returns>Always <c>true</c> for Home Assistant integration.</returns>
         public override Boolean UsesApplicationApiOnly => true;
-        
+
         /// <summary>
         /// Gets the WebSocket client for communicating with Home Assistant.
         /// Exposed internally for actions to access the singleton instance.
         /// </summary>
         internal HaWebSocketClient HaClient { get; } = new();
-        
+
         /// <summary>
         /// Gets the event listener for Home Assistant state changes.
         /// Exposed internally for actions to access the singleton instance.
         /// </summary>
         internal HaEventListener HaEvents { get; } = new();
-        
+
         /// <summary>
         /// Gets the light state manager for tracking and caching light properties.
         /// Exposed internally for actions to access the singleton instance.

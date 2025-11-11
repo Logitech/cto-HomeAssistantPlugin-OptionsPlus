@@ -24,7 +24,7 @@ namespace Loupedeck.HomeAssistantPlugin
         /// Logging prefix for this action's log messages.
         /// </summary>
         private const String LogPrefix = "[ToggleLight]";
-        
+
         /// <summary>
         /// Home Assistant WebSocket client for communication.
         /// </summary>
@@ -34,7 +34,7 @@ namespace Loupedeck.HomeAssistantPlugin
         /// Control name for the light selection dropdown.
         /// </summary>
         private const String ControlLight = "ha_light";
-        
+
         /// <summary>
         /// Icon service for rendering action button graphics.
         /// </summary>

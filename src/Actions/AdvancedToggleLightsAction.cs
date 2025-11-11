@@ -27,27 +27,27 @@ namespace Loupedeck.HomeAssistantPlugin
         /// Home Assistant client interface for WebSocket communication.
         /// </summary>
         private IHaClient? _ha;
-        
+
         /// <summary>
         /// Light control service with debounced adjustments.
         /// </summary>
         private ILightControlService? _lightSvc;
-        
+
         /// <summary>
         /// Light state manager for tracking light properties and capabilities.
         /// </summary>
         private ILightStateManager? _lightStateManager;
-        
+
         /// <summary>
         /// Data service for fetching Home Assistant entity states.
         /// </summary>
         private IHomeAssistantDataService? _dataService;
-        
+
         /// <summary>
         /// Data parser for processing Home Assistant JSON responses.
         /// </summary>
         private IHomeAssistantDataParser? _dataParser;
-        
+
         /// <summary>
         /// Registry service for device, entity, and area management.
         /// </summary>
@@ -57,7 +57,7 @@ namespace Loupedeck.HomeAssistantPlugin
         /// Capability service for analyzing light feature support.
         /// </summary>
         private readonly CapabilityService _capSvc = new();
-        
+
         /// <summary>
         /// Indicates whether this instance has been disposed.
         /// </summary>
@@ -73,37 +73,37 @@ namespace Loupedeck.HomeAssistantPlugin
         /// Control name for primary light selection dropdown.
         /// </summary>
         private const String ControlLights = "ha_lights";
-        
+
         /// <summary>
         /// Control name for additional lights text input (comma-separated entity IDs).
         /// </summary>
         private const String ControlAdditionalLights = "ha_additional_lights";
-        
+
         /// <summary>
         /// Control name for brightness adjustment (0-255).
         /// </summary>
         private const String ControlBrightness = "ha_brightness";
-        
+
         /// <summary>
         /// Control name for color temperature adjustment (2000K-6500K).
         /// </summary>
         private const String ControlTemperature = "ha_temperature";
-        
+
         /// <summary>
         /// Control name for hue adjustment (0-360 degrees).
         /// </summary>
         private const String ControlHue = "ha_hue";
-        
+
         /// <summary>
         /// Control name for saturation adjustment (0-100%).
         /// </summary>
         private const String ControlSaturation = "ha_saturation";
-        
+
         /// <summary>
         /// Control name for white level adjustment (0-255) for RGBW lights or warm white in RGBWW.
         /// </summary>
         private const String ControlWhiteLevel = "ha_white_level";
-        
+
         /// <summary>
         /// Control name for cold white level adjustment (0-255) for RGBWW lights.
         /// </summary>
@@ -113,52 +113,52 @@ namespace Loupedeck.HomeAssistantPlugin
         /// Minimum brightness value supported by Home Assistant (1-255 range).
         /// </summary>
         private const Int32 MinBrightness = 1;
-        
+
         /// <summary>
         /// Maximum brightness value supported by Home Assistant (1-255 range).
         /// </summary>
         private const Int32 MaxBrightness = 255;
-        
+
         /// <summary>
         /// Minimum color temperature in Kelvin (warm white).
         /// </summary>
         private const Int32 MinTemperature = 2000;
-        
+
         /// <summary>
         /// Maximum color temperature in Kelvin (cool white).
         /// </summary>
         private const Int32 MaxTemperature = 6500;
-        
+
         /// <summary>
         /// Minimum hue value in degrees (0-360 range).
         /// </summary>
         private const Double MinHue = 0.0;
-        
+
         /// <summary>
         /// Maximum hue value in degrees (0-360 range).
         /// </summary>
         private const Double MaxHue = 360.0;
-        
+
         /// <summary>
         /// Minimum saturation value as percentage (0-100 range).
         /// </summary>
         private const Double MinSaturation = 0.0;
-        
+
         /// <summary>
         /// Maximum saturation value as percentage (0-100 range).
         /// </summary>
         private const Double MaxSaturation = 100.0;
-        
+
         /// <summary>
         /// Full color value used for HSB to RGB conversion (100%).
         /// </summary>
         private const Double FullColorValue = 100.0;
-        
+
         /// <summary>
         /// Authentication timeout in seconds for Home Assistant connections.
         /// </summary>
         private const Int32 AuthTimeoutSeconds = 8;
-        
+
         /// <summary>
         /// Debounce interval in milliseconds for light control adjustments.
         /// </summary>
@@ -429,11 +429,9 @@ namespace Loupedeck.HomeAssistantPlugin
         /// </summary>
         /// <param name="attrs">JSON element containing light attributes from Home Assistant.</param>
         /// <returns>Light capabilities indicating supported features, or basic capabilities if service unavailable.</returns>
-        private LightCaps GetLightCapabilities(JsonElement attrs)
-        {
+        private LightCaps GetLightCapabilities(JsonElement attrs) =>
             // _capSvc is readonly and initialized in constructor, but add defensive check for completeness
-            return this._capSvc?.ForLight(attrs) ?? new LightCaps(true, false, false, false, null);
-        }
+            this._capSvc?.ForLight(attrs) ?? new LightCaps(true, false, false, false, null);
 
 
         /// <summary>
@@ -587,9 +585,9 @@ namespace Loupedeck.HomeAssistantPlugin
             // Toggle the advanced lights state before processing lights - all lights get the same command
             this._advancedLightsState = !this._advancedLightsState;
             PluginLog.Info($"{LogPrefix} Toggled advanced lights state to: {(this._advancedLightsState ? "ON" : "OFF")}");
-            
+
             var success = true;
-            
+
             foreach (var entityId in entityIds)
             {
                 try
@@ -597,9 +595,9 @@ namespace Loupedeck.HomeAssistantPlugin
                     // Get INDIVIDUAL capabilities for this specific light (key change!)
                     var individualCaps = this._lightStateManager?.GetCapabilities(entityId)
                         ?? new LightCaps(true, false, false, false, null);
-                        
+
                     PluginLog.Info($"{LogPrefix} Processing {entityId} with individual capabilities: OnOff={individualCaps.OnOff}, Brightness={individualCaps.Brightness}, ColorTemp={individualCaps.ColorTemp}, ColorHs={individualCaps.ColorHs}");
-                        
+
                     // Process this light with ITS OWN capabilities (not intersection)
                     success &= this.ProcessSingleLight(entityId, individualCaps, brightness, temperature, hue, saturation, whiteLevel, coldWhiteLevel);
                 }
@@ -609,7 +607,7 @@ namespace Loupedeck.HomeAssistantPlugin
                     success = false;
                 }
             }
-            
+
             return success;
         }
 
@@ -727,11 +725,11 @@ namespace Loupedeck.HomeAssistantPlugin
                     case "rgbww":
                         // Convert HS to RGBWW (R,G,B,ColdWhite,WarmWhite)
                         var (r1, g1, b1) = HSBHelper.HsbToRgb(h, s, FullColorValue);
-                        
+
                         // Use separate cold and warm white levels if specified
                         var coldWhite = 0;
                         var warmWhite = 0;
-                        
+
                         // Priority 1: Use separate cold/warm white levels if specified
                         if (coldWhiteLevel.HasValue || whiteLevel.HasValue)
                         {
@@ -768,7 +766,7 @@ namespace Loupedeck.HomeAssistantPlugin
                             warmWhite = (Int32)(white * (1.0 - tempRatio));
                             PluginLog.Info($"{LogPrefix} Using temperature-based distribution: {kelvin}K -> cold={coldWhite}, warm={warmWhite}");
                         }
-                        
+
                         serviceData["rgbww_color"] = new Object[] { r1, g1, b1, coldWhite, warmWhite };
                         PluginLog.Info($"{LogPrefix} Added rgbww_color: HS({h:F1}°,{s:F1}%) -> RGBWW({r1},{g1},{b1},{coldWhite},{warmWhite})");
                         break;
@@ -776,14 +774,14 @@ namespace Loupedeck.HomeAssistantPlugin
                     case "rgbw":
                         // Convert HS to RGBW (R,G,B,White)
                         var (r2, g2, b2) = HSBHelper.HsbToRgb(h, s, FullColorValue);
-                        
+
                         // Use whiteLevel for white channel if specified
                         var whiteChannel = 0;
                         if (whiteLevel.HasValue)
                         {
                             whiteChannel = HSBHelper.Clamp(whiteLevel.Value, 0, MaxBrightness);
                         }
-                        
+
                         serviceData["rgbw_color"] = new Object[] { r2, g2, b2, whiteChannel };
                         PluginLog.Info($"{LogPrefix} Added rgbw_color: HS({h:F1}°,{s:F1}%) + white({whiteLevel}) -> RGBW({r2},{g2},{b2},{whiteChannel})");
                         break;
@@ -979,7 +977,7 @@ namespace Loupedeck.HomeAssistantPlugin
             PluginLog.Info($"{LogPrefix} ListboxItemsRequested({e.ControlName}) using modern service architecture");
             try
             {
-                
+
 
                 // Ensure we're connected before asking HA for states
                 if (!this.EnsureHaReadyAsync().GetAwaiter().GetResult())
@@ -1016,7 +1014,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 // Check cache first to avoid refetching registry data on every dropdown open
                 var now = DateTime.Now;
                 var cacheExpired = (now - this._cacheTimestamp).TotalMinutes > CacheTtlMinutes;
-                
+
                 List<LightData> lights;
                 if (this._cachedLights != null && !cacheExpired)
                 {
@@ -1026,7 +1024,7 @@ namespace Loupedeck.HomeAssistantPlugin
                 else
                 {
                     PluginLog.Info($"{LogPrefix} Cache expired or empty, fetching fresh registry-aware data");
-                    
+
                     // Fetch states using modern data service
                     var (ok, json, error) = this._dataService.FetchStatesAsync(CancellationToken.None)
                         .GetAwaiter().GetResult();
@@ -1056,7 +1054,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
                     // FIXED: Use registry-aware parsing instead of direct JSON parsing
                     PluginLog.Info($"{LogPrefix} Fetching registry data for registry-aware light parsing");
-                    
+
                     // Ensure _dataService is not null before using it
                     if (this._dataService == null)
                     {
@@ -1065,7 +1063,7 @@ namespace Loupedeck.HomeAssistantPlugin
                         this.Plugin.OnPluginStatusChanged(PluginStatus.Error, "Data service not available");
                         return;
                     }
-                    
+
                     var (entSuccess, entJson, _) = this._dataService.FetchEntityRegistryAsync(CancellationToken.None).GetAwaiter().GetResult();
                     var (devSuccess, devJson, _) = this._dataService.FetchDeviceRegistryAsync(CancellationToken.None).GetAwaiter().GetResult();
                     var (areaSuccess, areaJson, _) = this._dataService.FetchAreaRegistryAsync(CancellationToken.None).GetAwaiter().GetResult();

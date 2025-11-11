@@ -1153,7 +1153,7 @@ namespace Loupedeck.HomeAssistantPlugin
 
                     // Parse light states for internal cache updates (unique to DynamicFolder)
                     var lights = this._dataParser.ParseLightStates(statesJson, registryData);
-                    
+
                     // Update internal caches for compatibility with existing code (unique to DynamicFolder)
                     // TODO: Eventually remove these and use services directly
                     this.UpdateInternalCachesFromServices(lights, registryData);

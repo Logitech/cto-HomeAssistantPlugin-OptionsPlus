@@ -17,7 +17,7 @@ namespace Loupedeck.HomeAssistantPlugin
         /// Default port number for Home Assistant installations.
         /// </summary>
         private const Int32 DefaultHomeAssistantPort = 8123;
-        
+
         /// <summary>
         /// Timeout in seconds for connection testing operations.
         /// </summary>
@@ -27,12 +27,12 @@ namespace Loupedeck.HomeAssistantPlugin
         /// Control name for the base URL input field.
         /// </summary>
         private const String CtlBaseUrl = "BaseUrl";
-        
+
         /// <summary>
         /// Control name for the access token input field.
         /// </summary>
         private const String CtlToken = "Token";
-        
+
         /// <summary>
         /// Control name for the connection test button.
         /// </summary>

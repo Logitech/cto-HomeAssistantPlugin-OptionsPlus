@@ -166,7 +166,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
             var result = this._capsByEntity.TryGetValue(entityId, out var caps)
                 ? caps
                 : new LightCaps(true, false, false, false); // Safe default: on/off only
-            
+
             return result;
         }
 
@@ -305,10 +305,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
         /// Gets all stored light data objects
         /// </summary>
         /// <returns>Collection of all light data</returns>
-        public IEnumerable<LightData> GetAllLights()
-        {
-            return this._lightData.Values.ToList();
-        }
+        public IEnumerable<LightData> GetAllLights() => this._lightData.Values.ToList();
 
         /// <summary>
         /// Gets lights in a specific area
@@ -317,12 +314,9 @@ namespace Loupedeck.HomeAssistantPlugin.Services
         /// <returns>Collection of lights in the specified area</returns>
         public IEnumerable<LightData> GetLightsByArea(String areaId)
         {
-            if (String.IsNullOrWhiteSpace(areaId))
-            {
-                return Enumerable.Empty<LightData>();
-            }
-
-            return this._lightData.Values
+            return String.IsNullOrWhiteSpace(areaId)
+                ? Enumerable.Empty<LightData>()
+                : this._lightData.Values
                 .Where(light => String.Equals(light.AreaId, areaId, StringComparison.OrdinalIgnoreCase))
                 .ToList();
         }
@@ -347,12 +341,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
         /// <returns>Light data if found, null otherwise</returns>
         public LightData? GetLightData(String entityId)
         {
-            if (String.IsNullOrWhiteSpace(entityId))
-            {
-                return null;
-            }
-
-            return this._lightData.TryGetValue(entityId, out var lightData) ? lightData : null;
+            return String.IsNullOrWhiteSpace(entityId) ? null : this._lightData.TryGetValue(entityId, out var lightData) ? lightData : null;
         }
 
         /// <summary>
@@ -401,7 +390,7 @@ namespace Loupedeck.HomeAssistantPlugin.Services
             {
                 PluginLog.Info("[LightStateManager] InitOrUpdateAsync: Starting self-contained initialization");
 
-                
+
 
                 // Fetch all required data from Home Assistant APIs
                 var (okStates, statesJson, errStates) = await dataService.FetchStatesAsync(cancellationToken).ConfigureAwait(false);
