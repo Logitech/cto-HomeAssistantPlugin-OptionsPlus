@@ -420,21 +420,6 @@ namespace Loupedeck.HomeAssistantPlugin
         }
 
         /// <summary>
-        /// Gets the capabilities for a single light from its attributes.
-        /// </summary>
-        /// <param name="attrs">JSON element containing light attributes from Home Assistant.</param>
-        /// <returns>Light capabilities indicating supported features.</returns>
-        /// <summary>
-        /// Gets the capabilities for a single light from its attributes with defensive null checking.
-        /// </summary>
-        /// <param name="attrs">JSON element containing light attributes from Home Assistant.</param>
-        /// <returns>Light capabilities indicating supported features, or basic capabilities if service unavailable.</returns>
-        private LightCaps GetLightCapabilities(JsonElement attrs) =>
-            // _capSvc is readonly and initialized in constructor, but add defensive check for completeness
-            this._capSvc?.ForLight(attrs) ?? new LightCaps(true, false, false, false, null);
-
-
-        /// <summary>
         /// Executes the advanced toggle lights command with comprehensive light control.
         /// Processes multiple lights with brightness, color temperature, hue/saturation, and white level parameters.
         /// Implements toggle behavior - if lights are on with parameters, turns them off; if off, turns on with parameters.
