@@ -9,7 +9,7 @@ type: plugin4
 name: HomeAssistant
 
 # Plugin name that is shown to the user.
-displayName: HomeAssistant
+displayName: HomeAssistant (Beta)
 
 # Short description of the plugin.
 description: A plugin to control a smart home through Home Assistant.
@@ -24,7 +24,7 @@ version: 1.0.0
 author: Cristian Safta
 
 # Copyright information.
-copyright: Copyright © 2025 Cristian Safta. All rights reserved.
+copyright: Copyright © 2025 Logitech Europe SA. All rights reserved.
 
 
 # ==================================================================================================
@@ -74,7 +74,7 @@ licenseUrl: https://opensource.org/licenses/MIT
 # URL of the support page where the users can send improvement suggestions and report bugs.
 # The URL is shown in Loupedeck Marketplace. The page can be for example a GitHub issues page.
 # NOTE: This setting is recommended when publishing the plugin in Loupedeck Marketplace.
-#supportPageUrl: https://github.com/myusername/myplugin/issues
+supportPageUrl: https://github.com/Logitech/cto-HomeAssistantPlugin-OptionsPlus?tab=readme-ov-file#need-help
 
 # URL of the plugin homepage. The URL is shown in Loupedeck Marketplace.
-#homePageUrl: https://github.com/myusername/myplugin
+homePageUrl: https://github.com/Logitech/cto-HomeAssistantPlugin-OptionsPlus
