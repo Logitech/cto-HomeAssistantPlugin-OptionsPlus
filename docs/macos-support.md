@@ -51,7 +51,7 @@ dotnet test HomeAssistantPlugin.sln -p:DeployPlugin=false
 dotnet clean src/HomeAssistantPlugin.csproj
 ```
 
-Debug and Release plugin roots are `bin/Debug/` and `bin/Release/`; each contains `bin/`, `metadata/`, and action symbols. Tests have separate output/intermediate directories. Direct-project builds and solution builds use the same paths.
+Debug and Release plugin roots are `bin/Debug/` and `bin/Release/`; each contains `bin/`, `metadata/`, and action symbols. Tests have separate output/intermediate directories. Direct-project builds and solution builds use the same paths. Solution builds disable deployment by default so the test and solution references share one plugin build instance; use a direct plugin-project build for automatic local deployment.
 
 Use `-p:ReloadPlugin=false` to create a development link without opening the reload URL. `-p:DeployPlugin=false` disables both link creation/removal and reload. Clean leaves links pointing at another checkout or configuration intact. Installed plugin folders and settings are never deleted.
 

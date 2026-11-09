@@ -37,7 +37,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\HomeAssistantPlugin.csproj" AdditionalProperties="DeployPlugin=false" />
+    <ProjectReference Include="..\..\src\HomeAssistantPlugin.csproj">
+      <AdditionalProperties Condition="'$(DeployPlugin)' != 'false'">DeployPlugin=false</AdditionalProperties>
+    </ProjectReference>
   </ItemGroup>
 
   <ItemGroup>

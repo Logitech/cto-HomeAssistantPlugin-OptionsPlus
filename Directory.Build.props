@@ -10,6 +10,7 @@
     <IsWindows>$([MSBuild]::IsOSPlatform('Windows'))</IsWindows>
     <IsMacOS>$([MSBuild]::IsOSPlatform('OSX'))</IsMacOS>
     <LogiPluginToolVersion>6.1.4.22672</LogiPluginToolVersion>
+    <DeployPlugin Condition="'$(DeployPlugin)' == '' and ('$(BuildingSolutionFile)' == 'true' or '$(CI)' == 'true' or '$(ContinuousIntegrationBuild)' == 'true' or '$(UseToolPluginApi)' == 'true')">false</DeployPlugin>
     <PluginApiDir Condition="'$(PluginApiDir)' == '' and '$(UseToolPluginApi)' != 'true' and '$(IsWindows)' == 'true'">$(ProgramW6432)/Logi/LogiPluginService/</PluginApiDir>
     <PluginApiDir Condition="'$(PluginApiDir)' == '' and '$(UseToolPluginApi)' != 'true' and '$(IsMacOS)' == 'true'">/Applications/Utilities/LogiPluginService.app/Contents/MonoBundle/</PluginApiDir>
     <PluginDir Condition="'$(PluginDir)' == '' and '$(IsWindows)' == 'true'">$(LocalAppData)/Logi/LogiPluginService/Plugins/</PluginDir>

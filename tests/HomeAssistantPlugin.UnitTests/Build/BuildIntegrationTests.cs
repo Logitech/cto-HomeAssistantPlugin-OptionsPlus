@@ -109,6 +109,16 @@ public sealed class BuildIntegrationTests : IDisposable
         Assert.Contains("pluginFolderMac: bin", manifest);
     }
 
+    [Fact]
+    public async Task SolutionGraph_DoesNotBuildDuplicatePluginInstances()
+    {
+        var result = await this.RunMsBuildProject("HomeAssistantPlugin.sln", "-graphBuild", "-t:ValidatePluginApi",
+            $"-p:PluginApiDir={Path.GetDirectoryName(typeof(Plugin).Assembly.Location)}");
+
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Contains("2 nodes, 1 edges", result.Output);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(this._temporaryDirectory))
@@ -117,7 +127,10 @@ public sealed class BuildIntegrationTests : IDisposable
         }
     }
 
-    private async Task<(Int32 ExitCode, String Output)> RunMsBuild(params String[] arguments)
+    private Task<(Int32 ExitCode, String Output)> RunMsBuild(params String[] arguments) =>
+        this.RunMsBuildProject("src/HomeAssistantPlugin.csproj", arguments);
+
+    private async Task<(Int32 ExitCode, String Output)> RunMsBuildProject(String project, params String[] arguments)
     {
         var startInfo = new ProcessStartInfo("dotnet")
         {
@@ -126,7 +139,7 @@ public sealed class BuildIntegrationTests : IDisposable
             RedirectStandardError = true,
             UseShellExecute = false
         };
-        foreach (var argument in new[] { "msbuild", "src/HomeAssistantPlugin.csproj", "-nologo" })
+        foreach (var argument in new[] { "msbuild", project, "-nologo" })
         {
             startInfo.ArgumentList.Add(argument);
         }

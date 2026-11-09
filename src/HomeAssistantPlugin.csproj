@@ -41,7 +41,6 @@
     <PluginLinkFile Condition="'$(PluginDir)' != ''">$([MSBuild]::NormalizePath('$(PluginDir)', '$(MSBuildProjectName).link'))</PluginLinkFile>
 
     <PluginShortName>HomeAssistant</PluginShortName>
-    <DeployPlugin Condition="'$(DeployPlugin)' == '' and ('$(CI)' == 'true' or '$(ContinuousIntegrationBuild)' == 'true' or '$(UseToolPluginApi)' == 'true')">false</DeployPlugin>
     <DeployPlugin Condition="'$(DeployPlugin)' == ''">true</DeployPlugin>
     <ReloadPlugin Condition="'$(ReloadPlugin)' == ''">true</ReloadPlugin>
   </PropertyGroup>
