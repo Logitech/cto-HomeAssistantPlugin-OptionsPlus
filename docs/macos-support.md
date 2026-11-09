@@ -57,7 +57,7 @@ Use `-p:ReloadPlugin=false` to create a development link without opening the rel
 
 A development link takes precedence over a packaged installation. Before testing an installed package, clean the configuration that owns the link or remove that specific `.link` file after checking its contents.
 
-### SDK-only builds and CI
+### SDK-only builds and validation
 
 ```bash
 dotnet tool restore
@@ -67,7 +67,7 @@ dotnet test HomeAssistantPlugin.sln -p:UseToolPluginApi=true -p:DeployPlugin=fal
 
 `UseToolPluginApi=true` downloads the exact official LogiPluginTool NuGet package through `PackageDownload` and resolves `PluginApi.dll` from its `tools/net8.0/any` directory. NuGet verifies package integrity during restore. Explicit `PluginApiDir` overrides remain authoritative. SDK-only builds disable deployment by default. Vendor binaries stay in the local NuGet cache and are not committed or included in plugin packages; use is subject to the [Logitech developer agreement](https://www.logitech.com/en-us/software/marketplace/developer-agreement.html).
 
-The Windows x64 and macOS arm64 CI matrix restores the same SDK fixture, asserts native architecture, builds, runs build-integration tests and the full regression suite, checks formatting, and packs/verifies diagnostic artifacts. Native graphics testing runs separately on the arm64 Mac runner:
+Run builds, build-integration tests, the full regression suite, formatting checks, and package verification manually on Windows x64 and macOS arm64. No GitHub Actions workflows are configured. Run native graphics testing separately on an Apple Silicon Mac with an arm64 .NET SDK:
 
 ```bash
 RUN_NATIVE_SMOKE=1 dotnet test tests/HomeAssistantPlugin.UnitTests -c Release \
@@ -85,7 +85,7 @@ UseToolPluginApi=true DeployPlugin=false dotnet format HomeAssistantPlugin.sln -
 
 On PowerShell set `$env:UseToolPluginApi = "true"` and `$env:DeployPlugin = "false"` before running the formatter.
 
-**Existing validation debt:** the original 1.2.0 source, compiled with only its Windows test API hint redirected to the official API, has 19 failing cases out of 1,132 tests in this Linux environment (1,094 pass, 19 skip). They concern null/fallback handling, extreme adjustment values, registry ordering, a color expectation, and debounce timing. Existing repository-wide formatting also needs attention. These are not silently skipped or treated as passing: CI uploads diagnostic packages/results but fails its final regression/formatting gate, blocking release automation until the baseline is resolved. New build-contract tests are a separate required check.
+**Existing validation debt:** the original 1.2.0 source, compiled with only its Windows test API hint redirected to the official API, has 19 failing cases out of 1,132 tests in this Linux environment (1,094 pass, 19 skip). They concern null/fallback handling, extreme adjustment values, registry ordering, a color expectation, and debounce timing. Existing repository-wide formatting also needs attention. Resolve these failures before publishing; diagnostic packages are not approved releases. New build-contract tests are a separate required check.
 
 ## Packaging and releases
 
@@ -97,7 +97,7 @@ dotnet build src/HomeAssistantPlugin.csproj -c Release -t:PackPlugin \
 
 `StagePlugin` first rejects enabled deployment, builds, and recreates only `artifacts/package/` from source package assets and the plugin's own runtime payload. `PackPlugin` creates `artifacts/HomeAssistant.lplug4` and verifies it with the pinned local tool. Stale build outputs, test assemblies, development links, host DLLs, and native graphics libraries are not taken from an arbitrary output-directory copy.
 
-The tag/manual release workflow reruns both OS jobs against the selected tag and requires `vMAJOR.MINOR.PATCH` to match the packaged manifest. Identical payloads share `bin`; differing Windows/Mac binaries are isolated in `bin/win` and `bin/mac` with the corresponding manifest paths. Shared metadata/assets must match. The combined package is packed and verified again, never assembled by mixing native dependencies in one folder. A successful run creates a **draft only**, with a SHA256 checksum. Publishing requires a maintainer to review the hardware record; Marketplace submission is a separate manual vendor process.
+Build and verify release candidates on both Windows and Apple Silicon macOS using the commands above. Packaging and publication are manual; version tags do not trigger a release. Publishing requires a maintainer to resolve validation failures and review the hardware record. Marketplace submission is a separate manual vendor process.
 
 ## Physical host acceptance (required before publishing)
 

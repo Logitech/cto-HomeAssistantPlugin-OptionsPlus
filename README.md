@@ -470,7 +470,7 @@ src/
 dotnet build src/HomeAssistantPlugin.csproj
 ```
 
-For SDK-only builds/tests without an installed Logi host, use `-p:UseToolPluginApi=true -p:DeployPlugin=false`. See [cross-platform tooling and CI](docs/macos-support.md#sdk-only-builds-and-ci).
+For SDK-only builds/tests without an installed Logi host, use `-p:UseToolPluginApi=true -p:DeployPlugin=false`. See [cross-platform tooling and validation](docs/macos-support.md#sdk-only-builds-and-validation).
 
 ### Run / Debug
 
@@ -582,8 +582,8 @@ Validates external integration points and data processing:
 
 ## Packaging & Release
 
-* **CI**: Windows x64 and macOS arm64 build/test/format jobs produce verified diagnostic `.lplug4` artifacts. Failing regression/format checks block releases, not artifact collection.
-* **Releases**: version tags or a manual dispatch run both OS checks, assemble the package, and create a draft only. Physical Mac/Windows acceptance is required before publication; see [release requirements](docs/macos-support.md#packaging-and-releases).
+* **Validation**: run build, test, format, and package verification manually on Windows x64 and macOS arm64; no GitHub Actions workflows are configured.
+* **Releases**: package and publish manually after resolving validation failures and completing physical Mac/Windows acceptance; see [release requirements](docs/macos-support.md#packaging-and-releases).
 * **Versioning**: semantic (`MAJOR.MINOR.PATCH`).
 * **License file** and **attributions** required (see below).
 
