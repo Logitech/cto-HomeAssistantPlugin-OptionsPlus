@@ -1,0 +1,23 @@
+<Project>
+  <PropertyGroup>
+    <PluginApiDir Condition="'$(PluginApiDir)' == '' and '$(UseToolPluginApi)' == 'true'">$(NuGetPackageRoot)logiplugintool/$(LogiPluginToolVersion)/tools/net8.0/any/</PluginApiDir>
+    <PluginApiPath Condition="'$(PluginApiDir)' != ''">$([MSBuild]::NormalizePath('$(PluginApiDir)', 'PluginApi.dll'))</PluginApiPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="PluginApi">
+      <HintPath>$(PluginApiPath)</HintPath>
+      <Private>false</Private>
+      <Private Condition="'$(IsTestProject)' == 'true'">true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(IsTestProject)' == 'true' and '$(EnableNativeSmokeTests)' == 'true'">
+    <None Include="$(PluginApiDir)/runtimes/osx/native/*.dylib;$(PluginApiDir)/*.dylib" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="ValidatePluginApi" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="'$(PluginApiPath)' == '' or !Exists('$(PluginApiPath)')"
+           Text="PluginApi.dll was not found. Install Logi Options+ on Windows/macOS, set -p:PluginApiDir=&quot;/absolute/path/to/API&quot;, or use -p:UseToolPluginApi=true -p:DeployPlugin=false for SDK-only builds." />
+  </Target>
+</Project>

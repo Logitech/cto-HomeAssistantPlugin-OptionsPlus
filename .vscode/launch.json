@@ -12,6 +12,13 @@
         "processName": "LogiPluginService"
       },
       "justMyCode": true
+    },
+    {
+      "name": "Attach to selected Logi process",
+      "type": "coreclr",
+      "request": "attach",
+      "processId": "${command:pickProcess}",
+      "justMyCode": true
     }
   ]
 }

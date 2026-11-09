@@ -37,10 +37,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\HomeAssistantPlugin.csproj" />
-    <Reference Include="PluginApi">
-      <HintPath>C:\Program Files\Logi\LogiPluginService\PluginApi.dll</HintPath>
-    </Reference>
+    <ProjectReference Include="..\..\src\HomeAssistantPlugin.csproj">
+      <AdditionalProperties Condition="'$(DeployPlugin)' != 'false'">DeployPlugin=false</AdditionalProperties>
+    </ProjectReference>
   </ItemGroup>
 
   <ItemGroup>

@@ -4,37 +4,44 @@
     {
       "label": "Build (Debug)",
       "type": "shell",
-      "command": "dotnet build -c Debug",
+      "command": "dotnet build src/HomeAssistantPlugin.csproj -c Debug",
       "group": "build",
       "problemMatcher": "$msCompile"
     },
     {
       "label": "Build (Release)",
       "type": "shell",
-      "command": "dotnet build -c Release",
+      "command": "dotnet build src/HomeAssistantPlugin.csproj -c Release -p:DeployPlugin=false",
       "group": "build",
       "problemMatcher": "$msCompile"
     },
     {
       "label": "Package Plugin",
       "type": "shell",
-      "command": "logiplugintool pack ./bin/Release ./HomeAssistant.lplug4",
+      "command": "dotnet tool restore && dotnet build src/HomeAssistantPlugin.csproj -c Release -t:PackPlugin -p:DeployPlugin=false",
       "group": "none",
       "problemMatcher": []
     },
     {
       "label": "Install Plugin",
       "type": "shell",
-      "command": "logiplugintool install ./HomeAssistant.lplug4",
+      "command": "dotnet tool run logiplugintool install ./artifacts/HomeAssistant.lplug4",
       "group": "none",
       "problemMatcher": []
     },
     {
       "label": "Uninstall Plugin",
       "type": "shell",
-      "command": "logiplugintool uninstall HomeAssistant",
+      "command": "dotnet tool run logiplugintool uninstall HomeAssistant",
       "group": "none",
       "problemMatcher": []
+    },
+    {
+      "label": "Test (SDK-only)",
+      "type": "shell",
+      "command": "dotnet test HomeAssistantPlugin.sln -p:UseToolPluginApi=true -p:DeployPlugin=false",
+      "group": "test",
+      "problemMatcher": "$msCompile"
     }
   ]
 }
