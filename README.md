@@ -336,8 +336,9 @@ The Long-Lived Token must allow:
 * **Loupedeck** software + a compatible Loupedeck device (Creative Console, Live/Live S/CT, etc.) Some simple actions can be used with the actions ring.
 * **Home Assistant** with WebSocket API enabled (standard).
 * **Home Assistant Long-Lived Access Token** (Profile → Security).
-* **.NET SDK** 8.0 (recommended) to build from source.
-* Windows 10/11 (for building and running the Loupedeck plugin locally).
+* Windows 10/11, or macOS 14+ on Apple Silicon with Logi Options+.
+* macOS support is a release candidate pending native host/hardware certification. See [macOS setup and acceptance requirements](docs/macos-support.md).
+* To build from source only: the **.NET 8 SDK** matching `global.json` (arm64 on Mac). End users do not need the SDK.
 
 ---
 
@@ -355,19 +356,20 @@ The Long-Lived Token must allow:
 1. **Build the plugin (Release)**
 
 ```bash
-dotnet build -c Release
+dotnet tool restore
+dotnet build src/HomeAssistantPlugin.csproj -c Release -t:StagePlugin -p:DeployPlugin=false
 ```
 
 2. **Package to a `.lplug4`** using the Logi Plugin Tool
 
 ```bash
-logiplugintool pack ./bin/Release/ ./HomeAssistant.lplug4
+dotnet tool run logiplugintool pack ./artifacts/package/ ./artifacts/HomeAssistant.lplug4
 ```
 
 (Optional) **Verify** the package:
 
 ```bash
-logiplugintool verify ./HomeAssistant.lplug4
+dotnet tool run logiplugintool verify ./artifacts/HomeAssistant.lplug4
 ```
 
 The `.lplug4` format is a zip-like package with metadata; it’s registered with Logi Plugin Service.
@@ -381,7 +383,7 @@ The `.lplug4` format is a zip-like package with metadata; it’s registered with
 > * Ensure `metadata/LoupedeckPackage.yaml` is present and OS targets match your claims.
 
 
-> Tip: If you’re developing, you can run in Debug and let Loupedeck discover your dev plugin folder. See Logi Actions SDK: [text](https://logitech.github.io/actions-sdk-docs/Getting-started/)
+> Tip: Debug builds of the plugin project create a development link automatically. Use `-p:DeployPlugin=false` to avoid changing/reloading your local host. See [Mac and cross-platform development](docs/macos-support.md) and [Logi Actions SDK](https://logitech.github.io/actions-sdk-docs/getting-started/).
 
 ---
 
@@ -465,8 +467,10 @@ src/
 ### Build
 
 ```bash
-dotnet build
+dotnet build src/HomeAssistantPlugin.csproj
 ```
+
+For SDK-only builds/tests without an installed Logi host, use `-p:UseToolPluginApi=true -p:DeployPlugin=false`. See [cross-platform tooling and CI](docs/macos-support.md#sdk-only-builds-and-ci).
 
 ### Run / Debug
 
@@ -578,7 +582,8 @@ Validates external integration points and data processing:
 
 ## Packaging & Release
 
-* **CI** (recommended): build, test, `dotnet format`, then produce plugin artifact.
+* **CI**: Windows x64 and macOS arm64 build/test/format jobs produce verified diagnostic `.lplug4` artifacts. Failing regression/format checks block releases, not artifact collection.
+* **Releases**: version tags or a manual dispatch run both OS checks, assemble the package, and create a draft only. Physical Mac/Windows acceptance is required before publication; see [release requirements](docs/macos-support.md#packaging-and-releases).
 * **Versioning**: semantic (`MAJOR.MINOR.PATCH`).
 * **License file** and **attributions** required (see below).
 

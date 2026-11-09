@@ -33,16 +33,17 @@
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 
-    <PluginApiDir Condition="$(OS) == 'Windows_NT'">C:\Program Files\Logi\LogiPluginService\</PluginApiDir>
-    <PluginApiDir Condition="$(OS) != 'Windows_NT'">/Applications/Utilities/LogiPluginService.app/Contents/MonoBundle/</PluginApiDir>
-
-    <PluginDir Condition="$(OS) == 'Windows_NT'">$(LocalAppData)\Logi\LogiPluginService\Plugins\</PluginDir>
-    <PluginDir Condition="$(OS) != 'Windows_NT'">~/Library/Application\ Support/Logi/LogiPluginService/Plugins/</PluginDir>
-
-    <BaseOutputPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\bin\'))</BaseOutputPath>
-    <OutputPath>$(BaseOutputPath)$(Configuration)\bin\</OutputPath>
+    <BaseOutputPath>$(RepositoryRoot)bin/</BaseOutputPath>
+    <PluginPackageRoot>$([MSBuild]::NormalizeDirectory('$(BaseOutputPath)', '$(Configuration)'))</PluginPackageRoot>
+    <OutputPath>$(PluginPackageRoot)bin/</OutputPath>
+    <PluginStagingDir>$(RepositoryRoot)artifacts/package/</PluginStagingDir>
+    <PluginPackageFile>$(RepositoryRoot)artifacts/HomeAssistant.lplug4</PluginPackageFile>
+    <PluginLinkFile Condition="'$(PluginDir)' != ''">$([MSBuild]::NormalizePath('$(PluginDir)', '$(MSBuildProjectName).link'))</PluginLinkFile>
 
     <PluginShortName>HomeAssistant</PluginShortName>
+    <DeployPlugin Condition="'$(DeployPlugin)' == '' and ('$(CI)' == 'true' or '$(ContinuousIntegrationBuild)' == 'true' or '$(UseToolPluginApi)' == 'true')">false</DeployPlugin>
+    <DeployPlugin Condition="'$(DeployPlugin)' == ''">true</DeployPlugin>
+    <ReloadPlugin Condition="'$(ReloadPlugin)' == ''">true</ReloadPlugin>
   </PropertyGroup>
 
   <ItemGroup>
@@ -119,43 +120,52 @@
       <LogicalName>multiple_covers_icon.svg</LogicalName>
     </EmbeddedResource>
     
-    <Reference Include="PluginApi">
-      <HintPath>$(PluginApiDir)PluginApi.dll</HintPath>
-    </Reference>
   </ItemGroup>
 
-
-
-
-  <Target Name="CopyPackage" AfterTargets="PostBuildEvent">
-    <Message Text="📦 Copying package files..." Importance="High" />
+  <Target Name="CopyPackage" AfterTargets="CopyFilesToOutputDirectory">
     <ItemGroup>
       <PackageFiles Include="package\**\*" />
+      <FileWrites Include="@(PackageFiles->'$(PluginPackageRoot)%(RecursiveDir)%(Filename)%(Extension)')" />
     </ItemGroup>
-    <Copy SourceFiles="@(PackageFiles)" DestinationFolder="$(OutputPath)..\%(RecursiveDir)" />
-    <Message Text="✅ Package files copied to $(OutputPath)..\" Importance="High" />
+    <Copy SourceFiles="@(PackageFiles)" DestinationFolder="$(PluginPackageRoot)%(RecursiveDir)" />
   </Target>
 
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Exec Condition="$(OS) == 'Windows_NT'" Command="echo $(BaseOutputPath)$(Configuration)\ &gt; &quot;$(PluginDir)$(ProjectName).link&quot;" />
-    <Exec Condition="$(OS) != 'Windows_NT'" Command="echo $(BaseOutputPath)$(Configuration)\ &gt; $(PluginDir)$(ProjectName).link" />
-    <Message Text="🔨 Created plugin link at: $(PluginDir)$(ProjectName).link" Importance="High" />
-
-    <Message Text="🔄 Sending plugin reload command for $(PluginShortName) to Logi Plugin Service" Importance="High" />
-    <Exec Condition="$(OS) == 'Windows_NT'" Command="start loupedeck:plugin/$(PluginShortName)/reload" ContinueOnError="true" />
-    <Exec Condition="$(OS) != 'Windows_NT'" Command="open loupedeck:plugin/$(PluginShortName)/reload" ContinueOnError="true" />
-    <Message Condition="'$(MSBuildLastTaskResult)' == 'false'" Text="❌ Couldn't reload the plugin, please restart the Logi Plugin Service manually" Importance="High" />
+  <Target Name="WritePluginLink" AfterTargets="CopyPackage" Condition="'$(DeployPlugin)' == 'true'">
+    <Error Condition="'$(PluginDir)' == ''" Text="Local deployment requires Windows/macOS or an explicit PluginDir. Use -p:DeployPlugin=false for SDK-only builds." />
+    <MakeDir Directories="$(PluginDir)" />
+    <WriteLinesToFile File="$(PluginLinkFile)"
+                      Lines="$(PluginPackageRoot)" Overwrite="true" Encoding="UTF-8" />
+    <Message Text="Created development link in $(PluginDir)" Importance="High" />
   </Target>
 
-  <Target Name="PluginClean" AfterTargets="CoreClean">
-    <Message Text="🧹 Cleaning up plugin link file and output directories..." Importance="High" />
-
-    <Delete Condition="$(OS) == 'Windows_NT'" Files="$(PluginDir)$(ProjectName).link" />
-    <Exec Condition="$(OS) != 'Windows_NT'" Command="rm -f $(PluginDir)$(ProjectName).link" />
-
-    <RemoveDir Directories="$(OutputPath)..\" />
-
-    <Message Text="🧼 Plugin link file and output directories have been cleaned!" Importance="High" />
+  <Target Name="ReloadLocalPlugin" AfterTargets="WritePluginLink" Condition="'$(DeployPlugin)' == 'true' and '$(ReloadPlugin)' == 'true'">
+    <Exec Condition="'$(IsWindows)' == 'true'" Command="start &quot;&quot; &quot;loupedeck://plugin/$(PluginShortName)/reload&quot;" ContinueOnError="WarnAndContinue" />
+    <Exec Condition="'$(IsMacOS)' == 'true'" Command="open &quot;loupedeck://plugin/$(PluginShortName)/reload&quot;" ContinueOnError="WarnAndContinue" />
   </Target>
 
+  <Target Name="PluginClean" AfterTargets="CoreClean" Condition="'$(DeployPlugin)' == 'true' and '$(PluginDir)' != ''">
+    <ReadLinesFromFile File="$(PluginLinkFile)" Condition="Exists('$(PluginLinkFile)')">
+      <Output TaskParameter="Lines" ItemName="_CurrentPluginLink" />
+    </ReadLinesFromFile>
+    <Delete Files="$(PluginLinkFile)" Condition="'@(_CurrentPluginLink)' == '$(PluginPackageRoot)'" />
+  </Target>
+
+  <Target Name="ValidatePackaging">
+    <Error Condition="'$(DeployPlugin)' != 'false'" Text="Packaging requires -p:DeployPlugin=false to avoid changing the local host." />
+  </Target>
+
+  <Target Name="StagePlugin" DependsOnTargets="ValidatePackaging;Build">
+    <RemoveDir Directories="$(PluginStagingDir)" />
+    <ItemGroup>
+      <_PackageAssets Include="$(MSBuildProjectDirectory)/package/**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_PackageAssets)" DestinationFolder="$(PluginStagingDir)%(RecursiveDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PluginStagingDir)bin/" />
+    <Copy SourceFiles="@(ReferenceCopyLocalPaths)" DestinationFiles="@(ReferenceCopyLocalPaths->'$(PluginStagingDir)bin/%(DestinationSubPath)')" />
+  </Target>
+
+  <Target Name="PackPlugin" DependsOnTargets="StagePlugin">
+    <Exec Command="dotnet tool run logiplugintool pack &quot;$(PluginStagingDir)&quot; &quot;$(PluginPackageFile)&quot;" WorkingDirectory="$(RepositoryRoot)" />
+    <Exec Command="dotnet tool run logiplugintool verify &quot;$(PluginPackageFile)&quot;" WorkingDirectory="$(RepositoryRoot)" />
+  </Target>
 </Project>

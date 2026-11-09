@@ -1,4 +1,4 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.8.34408.163
@@ -11,6 +11,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		.vscode\tasks.json = .vscode\tasks.json
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{D30E59E6-4634-48E9-A15F-99BFDD7CF88E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HomeAssistantPlugin.UnitTests", "tests\HomeAssistantPlugin.UnitTests\HomeAssistantPlugin.UnitTests.csproj", "{81C90C2B-DB4D-4AEC-9D19-2919703FD79D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,11 +25,18 @@ Global
 		{AD9047FA-FD48-4672-98EE-A99C1865BCB5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AD9047FA-FD48-4672-98EE-A99C1865BCB5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AD9047FA-FD48-4672-98EE-A99C1865BCB5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{81C90C2B-DB4D-4AEC-9D19-2919703FD79D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{81C90C2B-DB4D-4AEC-9D19-2919703FD79D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{81C90C2B-DB4D-4AEC-9D19-2919703FD79D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{81C90C2B-DB4D-4AEC-9D19-2919703FD79D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {98EA9160-DCD2-4BB5-854C-957B85AE2A46}
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{81C90C2B-DB4D-4AEC-9D19-2919703FD79D} = {D30E59E6-4634-48E9-A15F-99BFDD7CF88E}
 	EndGlobalSection
 EndGlobal

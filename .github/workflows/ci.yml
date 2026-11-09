@@ -1,0 +1,105 @@
+name: Build, test, and package
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to validate
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            architecture: X64
+          - os: macos-15
+            architecture: Arm64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      UseToolPluginApi: "true"
+      DeployPlugin: "false"
+      ContinuousIntegrationBuild: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Verify native runner and SDK architecture
+        env:
+          EXPECTED_ARCHITECTURE: ${{ matrix.architecture }}
+        run: |
+          if ([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString() -ne $env:EXPECTED_ARCHITECTURE) {
+            throw "Unexpected runner process architecture"
+          }
+          dotnet --info
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $rid = dotnet --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not $rid.StartsWith("8.0.")) { throw "Expected the .NET 8 SDK" }
+          $info = dotnet --info | Out-String
+          if ($IsMacOS -and $info -notmatch 'RID:\s+osx-arm64') { throw "The SDK must run as arm64 without Rosetta" }
+      - name: Restore tools and API references
+        run: |
+          dotnet tool restore
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet restore HomeAssistantPlugin.sln
+          exit $LASTEXITCODE
+      - name: Build
+        run: dotnet build HomeAssistantPlugin.sln -c Release --no-restore
+      - name: Build integration tests
+        run: dotnet test tests/HomeAssistantPlugin.UnitTests -c Release --no-build --filter "FullyQualifiedName~BuildIntegrationTests" --logger "trx;LogFileName=build.trx" --results-directory artifacts/test-results
+      - name: Native arm64 SDK rendering
+        if: runner.os == 'macOS'
+        env:
+          RUN_NATIVE_SMOKE: "1"
+        run: dotnet test tests/HomeAssistantPlugin.UnitTests -c Release --no-restore -p:EnableNativeSmokeTests=true --filter "Category=Native" --logger "trx;LogFileName=native.trx" --results-directory artifacts/test-results
+      - name: Full regression suite
+        id: regression
+        continue-on-error: true
+        run: dotnet test tests/HomeAssistantPlugin.UnitTests -c Release --no-build --filter "Category!=Native" --logger "trx;LogFileName=regression.trx" --results-directory artifacts/test-results
+      - name: Format
+        id: format
+        continue-on-error: true
+        run: dotnet format HomeAssistantPlugin.sln --verify-no-changes --no-restore
+      - name: Pack and verify clean payload
+        run: |
+          dotnet build src/HomeAssistantPlugin.csproj -c Release --no-restore -t:PackPlugin
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $hash = (Get-FileHash artifacts/HomeAssistant.lplug4 -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  HomeAssistant.lplug4" | Set-Content artifacts/SHA256SUMS -Encoding utf8NoBOM
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-${{ matrix.os }}
+          path: |
+            artifacts/HomeAssistant.lplug4
+            artifacts/SHA256SUMS
+          if-no-files-found: error
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tests-${{ matrix.os }}
+          path: artifacts/test-results
+          if-no-files-found: warn
+      - name: Enforce regression and formatting gates
+        if: always() && (steps.regression.outcome == 'failure' || steps.format.outcome == 'failure')
+        run: throw "Regression or formatting checks failed. Artifacts are diagnostic candidates, not approved releases; see the full logs and docs/macos-support.md."

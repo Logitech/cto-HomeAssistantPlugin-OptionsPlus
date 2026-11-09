@@ -1,0 +1,22 @@
+<Project>
+  <PropertyGroup>
+    <RepositoryRoot>$(MSBuildThisFileDirectory)</RepositoryRoot>
+    <LangVersion>latest</LangVersion>
+    <BaseIntermediateOutputPath>$(RepositoryRoot)obj/$(MSBuildProjectName)/</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(RepositoryRoot)bin/$(MSBuildProjectName)/</BaseOutputPath>
+    <DefaultItemExcludes>$(DefaultItemExcludes);**/obj/**;**/bin/**</DefaultItemExcludes>
+    <PathMap Condition="'$(ContinuousIntegrationBuild)' == 'true'">$(RepositoryRoot)=/_/</PathMap>
+
+    <IsWindows>$([MSBuild]::IsOSPlatform('Windows'))</IsWindows>
+    <IsMacOS>$([MSBuild]::IsOSPlatform('OSX'))</IsMacOS>
+    <LogiPluginToolVersion>6.1.4.22672</LogiPluginToolVersion>
+    <PluginApiDir Condition="'$(PluginApiDir)' == '' and '$(UseToolPluginApi)' != 'true' and '$(IsWindows)' == 'true'">$(ProgramW6432)/Logi/LogiPluginService/</PluginApiDir>
+    <PluginApiDir Condition="'$(PluginApiDir)' == '' and '$(UseToolPluginApi)' != 'true' and '$(IsMacOS)' == 'true'">/Applications/Utilities/LogiPluginService.app/Contents/MonoBundle/</PluginApiDir>
+    <PluginDir Condition="'$(PluginDir)' == '' and '$(IsWindows)' == 'true'">$(LocalAppData)/Logi/LogiPluginService/Plugins/</PluginDir>
+    <PluginDir Condition="'$(PluginDir)' == '' and '$(IsMacOS)' == 'true'">$([System.Environment]::GetFolderPath(SpecialFolder.UserProfile))/Library/Application Support/Logi/LogiPluginService/Plugins/</PluginDir>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(UseToolPluginApi)' == 'true'">
+    <PackageDownload Include="LogiPluginTool" Version="[$(LogiPluginToolVersion)]" />
+  </ItemGroup>
+</Project>
